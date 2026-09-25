@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+websockets
+pydantic
+pydantic-settings
+python-dotenv
+paho-mqtt
+scikit-learn
+pandas
+numpy
+scipy
+joblib
+sqlalchemy
+aiosqlite
