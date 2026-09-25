@@ -16,16 +16,16 @@ IoT-based physiological parameter monitoring and unsupervised multivariate anoma
 
 ---
 
-## System Overview
+## Project Overview
 
-Wearable vital signs monitoring systems often suffer from high false alarm rates caused by motion artifacts, sensor displacement, and rigid single-parameter thresholding. This project implements an integrated edge-to-server architecture that addresses these limitations through:
+Wearable physiological monitoring systems frequently experience false alarms due to motion artifacts, sensor displacement, and rigid single-parameter threshold limits. This project implements an integrated edge-to-server IoT architecture designed to provide robust, non-clinical early warning monitoring:
 
 1. **Multi-Sensor Acquisition**: Real-time optical PPG, estimated Heart Rate (HR), and SpO2 via the MAX30102 sensor, paired with digital skin surface temperature measurement via DS18B20.
-2. **Rule-Based Signal Quality Assessment (SQA)**: Real-time validation of raw sensor data (valid physiological boundaries, sudden jump limits, PPG pulsatile amplitude, and flatline detection) before feature extraction.
+2. **Signal Quality Assessment (SQA)**: Real-time validation of raw sensor data (valid physiological boundaries, sudden jump limits, PPG pulsatile amplitude, and flatline detection) before feature extraction.
 3. **Temporal Feature Fusion (14-Dimensional Vector)**: Rolling window extraction combining instantaneous readings, first-order temporal differences (Delta), moving averages, variance, and composite rate of change.
-4. **Unsupervised Anomaly Detection**: Isolation Forest model trained on normal physiological distributions, evaluating multivariate deviations without requiring labeled pathology training data.
-5. **Persistent Anomaly Debouncing**: Local acoustic alert (active buzzer) triggers only after consecutive anomaly detections over a configurable debounce window ($N = 3$), eliminating transient spikes.
-6. **Edge Autonomy & Dual Feedback**: Local 0.96-inch OLED displays live readings and system states (`NORMAL`, `CHECK SENSOR`, `ANOMALY`). If network connectivity fails, the ESP32 node continues local monitoring and display updates.
+4. **Unsupervised Anomaly Detection**: Isolation Forest model trained on normal physiological distributions, evaluating multivariate deviations without requiring labeled pathology data.
+5. **Persistent Anomaly Debouncing**: Local acoustic alert (active buzzer) triggers only after consecutive anomaly detections over a configurable debounce window ($N = 3$), eliminating transient false alarms.
+6. **Edge Autonomy and Dual Feedback**: Local 0.96-inch OLED displays live readings and operational states (`NORMAL`, `CHECK SENSOR`, `ANOMALY`). In the event of network disruption, the ESP32 node continues local sensor acquisition and display updates.
 
 ---
 
@@ -35,8 +35,8 @@ The prototype consists of an ESP32 edge microcontroller interfaced with dedicate
 
 | Component | Interface / Protocol | ESP32 GPIO Pin | Description |
 | :--- | :--- | :---: | :--- |
-| **MAX30102 SDA** | I2C Data | GPIO 21 | PPG, Heart Rate, and SpO2 sensor data |
-| **MAX30102 SCL** | I2C Clock | GPIO 22 | PPG, Heart Rate, and SpO2 sensor clock |
+| **MAX30102 SDA** | I2C Data | GPIO 21 | PPG, Heart Rate, and SpO2 sensor data line |
+| **MAX30102 SCL** | I2C Clock | GPIO 22 | PPG, Heart Rate, and SpO2 sensor clock line |
 | **SSD1306 OLED SDA** | I2C Data | GPIO 21 | Shared I2C bus (Address: 0x3C) |
 | **SSD1306 OLED SCL** | I2C Clock | GPIO 22 | Shared I2C bus (Address: 0x3C) |
 | **DS18B20 Data** | 1-Wire Digital | GPIO 4 | Skin surface temperature probe (4.7k Ohm pull-up to 3.3V) |
@@ -88,7 +88,7 @@ flowchart TD
 
 ## 14-Dimensional Feature Vector Specification
 
-For each sliding window ($W = 15$ samples), the Feature Fusion engine computes a 14-dimensional feature vector:
+For each sliding window ($W = 15$ samples), the Feature Fusion engine extracts a 14-dimensional feature vector:
 
 $$\mathbf{X} = [x_1, x_2, \dots, x_{14}]$$
 
@@ -104,40 +104,10 @@ $$\mathbf{X} = [x_1, x_2, \dots, x_{14}]$$
 | $x_8$ | `MA_SpO2` | $\frac{1}{W} \sum_{i=0}^{W-1} SpO2_{t-i}$ | Rolling baseline oxygen saturation |
 | $x_9$ | `MA_Temperature` | $\frac{1}{W} \sum_{i=0}^{W-1} Temp_{t-i}$ | Rolling baseline skin temperature |
 | $x_{10}$ | `Var_Heart_Rate` | $\sigma^2_{HR}(W)$ | Heart rate stability / short-term variability |
-| $x_{11}$ | `Var_SpO2` | $\sigma^2_{SpO2}(W)$ | Oxygen stability |
+| $x_{11}$ | `Var_SpO2` | $\sigma^2_{SpO2}(W)$ | Oxygenation stability |
 | $x_{12}$ | `Var_Temperature` | $\sigma^2_{Temp}(W)$ | Thermal stability |
 | $x_{13}$ | `Rate_of_Change` | $\frac{\|\Delta HR\|}{\bar{HR}} + \frac{\|\Delta SpO2\|}{\bar{SpO2}} + \frac{\|\Delta Temp\|}{\bar{Temp}}$ | Normalized composite rate of physiological change |
 | $x_{14}$ | `Signal_Quality_Score` | $SQA \in [0.0, 1.0]$ | SQA confidence coefficient |
-
----
-
-## Machine Learning Model and Evaluation (Phase 1)
-
-### Dataset Harmonization
-The model was trained on 4 harmonized physiological datasets totaling **291,543 clean records**:
-- `engrarri21` (Human Vital Signs): Benchmark clinical dataset with binary ground-truth labels.
-- `nasirayub2` (Human Vital Signs 2024): Continuous time-series baseline volume.
-- `rishanmascarenhas` (COVID-19 Vitals): Normalized with Fahrenheit-to-Celsius conversion.
-- `gourangomandal` (IoMT Synthetic Dataset): Multi-parameter alert ground-truth with disease condition metadata.
-
-### Model Hyperparameters
-- **Algorithm**: `sklearn.ensemble.IsolationForest`
-- **Number of Estimators**: 150
-- **Contamination Factor**: 0.08
-- **Normalization**: `RobustScaler` (quantile-based, outlier-resistant)
-- **Training Population**: 129,113 normal physiological samples (unsupervised)
-
-### Detection Performance across Health Conditions (Gourango Mandal Dataset)
-
-| Health Category | Total Samples | Detected Normal | Detected Anomaly | Anomaly Detection Rate | Clinical / Physiological Interpretation |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **Healthy** | 11,973 | 11,971 | 2 | **0.02%** | Ultra-low False Alarm rate during normal rest |
-| **Asthma** | 11,885 | 8,597 | 3,288 | **27.67%** | Sensitive to oxygen desaturation (Mean SpO2: 88.98%) |
-| **Heart Disease** | 12,038 | 9,642 | 2,396 | **19.90%** | Sensitive to tachycardia (Mean HR: 119.59 BPM) |
-| **Diabetes Mellitus** | 12,164 | 11,822 | 342 | **2.81%** | Optical vitals remain largely within normal limits |
-| **Hypertension** | 11,926 | 11,696 | 230 | **1.93%** | HR and SpO2 normal (pathology is in blood pressure) |
-
-*Full evaluation metrics and confusion matrices are documented in [FASE_1_REPORT.md](FASE_1_REPORT.md).*
 
 ---
 
@@ -146,12 +116,12 @@ The model was trained on 4 harmonized physiological datasets totaling **291,543 
 ```text
 .
 ├── ARCHITECTURE.md              # Technical architecture and payload contracts
-├── FASE_1_REPORT.md             # Detailed Phase 1 execution and evaluation report
-├── PROPOSAL.md                  # Complete proposal transcript
-├── README.md                    # Project documentation and user guide
-├── REQUIREMENTS.md              # Functional and non-functional requirements
+├── FASE_1_REPORT.md             # Comprehensive Phase 1 experimental and evaluation report
+├── PROPOSAL.md                  # Complete project proposal transcript
+├── README.md                    # Project overview and system documentation
+├── REQUIREMENTS.md              # Functional, non-functional, and boundary requirements
 ├── ROADMAP.md                   # Six-phase implementation roadmap
-├── SECURITY.md                  # Security, privacy, and hardware safety policies
+├── SECURITY.md                  # Security, data privacy, and hardware safety policies
 │
 ├── backend/                     # FastAPI backend and inference service
 │   ├── app/
@@ -197,7 +167,7 @@ git clone https://github.com/Rnvz/IoT-based-Physiological-Parameter-Monitoring-a
 cd IoT-based-Physiological-Parameter-Monitoring-and-Anomaly-Detection
 ```
 
-### 3. Run the Machine Learning Pipeline (Phase 1)
+### 3. Run the Machine Learning Pipeline
 ```bash
 cd ml_pipeline
 pip install -r requirements.txt
@@ -243,7 +213,7 @@ pio device monitor
 ## Technical Documentation Links
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture and JSON contract specifications.
-- [FASE_1_REPORT.md](FASE_1_REPORT.md) - Comprehensive Phase 1 experimental report.
+- [FASE_1_REPORT.md](FASE_1_REPORT.md) - Comprehensive Phase 1 experimental and evaluation report.
 - [REQUIREMENTS.md](REQUIREMENTS.md) - Functional, non-functional, and boundary requirements.
 - [ROADMAP.md](ROADMAP.md) - Implementation roadmap across six project phases.
 - [SECURITY.md](SECURITY.md) - Authentication, data privacy, and buzzer safety limits.
