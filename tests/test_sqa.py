@@ -22,11 +22,11 @@ def test_out_of_range_spo2_returns_poor_quality(sample_normal_telemetry):
 
 def test_sudden_hr_jump_returns_poor_quality(sample_normal_telemetry):
     assessor = SignalQualityAssessor()
-    prev = sample_normal_telemetry.copy()
+    prev = sample_normal_telemetry.model_copy(deep=True)
     prev.timestamp = 0
     prev.raw_sensors.heart_rate = 75.0
     
-    current = sample_normal_telemetry.copy()
+    current = sample_normal_telemetry.model_copy(deep=True)
     current.timestamp = 1000
     current.raw_sensors.heart_rate = 120.0
     
