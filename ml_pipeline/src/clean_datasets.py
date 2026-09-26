@@ -53,6 +53,7 @@ def process_engrarri21(file_path: str) -> Optional[pd.DataFrame]:
         output_binary = np.where(output_series == 'normal', 0, 1)
         
         result = pd.DataFrame({
+            'Patient_ID': 'engrarri21_stream',
             'Heart_Rate': pd.to_numeric(df['Heart_Rate'], errors='coerce'),
             'SpO2': pd.to_numeric(df['SpO2'], errors='coerce'),
             'Temperature': pd.to_numeric(df['Temperature'], errors='coerce'),
@@ -81,7 +82,9 @@ def process_nasirayub2(file_path: str) -> Optional[pd.DataFrame]:
         risk = df['Risk Category'].astype(str).str.strip().str.lower()
         output_binary = np.where(risk == 'low risk', 0, 1)
         
+        patient_id = df['Patient ID'].astype(str) if 'Patient ID' in df.columns else df.index.astype(str)
         result = pd.DataFrame({
+            'Patient_ID': 'nasirayub2_' + patient_id,
             'Heart_Rate': hr,
             'SpO2': spo2,
             'Temperature': temp,
@@ -110,7 +113,9 @@ def process_rishanmascarenhas(file_path: str) -> Optional[pd.DataFrame]:
         # Nilai mentah di dataset sekitar 95 - 105 °F
         temp_c = (temp_f - 32.0) * (5.0 / 9.0)
         
+        p_id = df['ID'].astype(str) if 'ID' in df.columns else df.index.astype(str)
         result = pd.DataFrame({
+            'Patient_ID': 'rishan_' + p_id,
             'Heart_Rate': hr,
             'SpO2': spo2,
             'Temperature': temp_c,
@@ -153,7 +158,9 @@ def process_gourangomandal(file_path: str) -> Optional[pd.DataFrame]:
         is_normal = (hr_alert == 'NORMAL') & (spo2_alert == 'NORMAL') & (temp_alert == 'NORMAL')
         output_binary = np.where(is_normal, 0, 1)
         
+        p_id = df['Patient Number'].astype(str) if 'Patient Number' in df.columns else df.index.astype(str)
         result = pd.DataFrame({
+            'Patient_ID': 'gourango_' + p_id,
             'Heart_Rate': hr,
             'SpO2': spo2,
             'Temperature': temp,
@@ -188,8 +195,8 @@ def main(input_dir: str, output_path: str):
             logging.info(f"Mendeteksi nasirayub2: {file}")
             df = process_nasirayub2(file)
         elif 'qt_dataset' in fname_lower or 'rishan' in fname_lower:
-            logging.info(f"Mendeteksi rishanmascarenhas: {file}")
-            df = process_rishanmascarenhas(file)
+            logging.warning(f"EXCLUDED rishanmascarenhas ({file}): Dataset ini resmi dikeluarkan dari pipeline karena label Result merupakan status diagnosis RT-PCR COVID-19 dan 96.1% sampel memiliki vital abnormal klinis yang keliru dipaksa berlabel normal, mencemari training dan evaluasi.")
+            continue
         elif 'synthetic' in fname_lower or 'healthcare-monitoring' in fname_lower or 'gourango' in fname_lower:
             logging.info(f"Mendeteksi gourangomandal / synthetic: {file}")
             df = process_gourangomandal(file)
