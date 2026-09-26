@@ -1,5 +1,19 @@
 # IoT Physiological Parameter Monitoring & Anomaly Detection
 
+---
+⚠️ **CATATAN PENTING — CAKUPAN VALIDASI FASE 1**
+
+Seluruh metrik performa (Precision, Recall, F1-Score, FPR) yang dilaporkan di dokumen ini berasal dari **EVALUASI OFFLINE pada dataset publik Kaggle** (`gourangomandal`, `engrarri21`, `nasirayub2`). Ini **BUKAN** hasil pengujian dengan perangkat keras fisik (ESP32 + MAX30102 + DS18B20).
+
+Keterbatasan yang perlu diketahui:
+1. Data training/evaluasi berasal dari alat ukur klinis standar, **BUKAN** dari sinyal PPG optik wearable seperti MAX30102. Ada domain gap yang belum terukur antara kedua sumber sinyal ini.
+2. Model belum diuji terhadap noise sensor nyata: pergeseran strap, gerakan tangan, variasi tekanan kontak kulit -- faktor-faktor yang menjadi fokus 7 skenario pengujian fisik di proposal.
+3. Threshold operasional (FPR 13% / 0.2535) adalah **TITIK AWAL (starting point)**, BUKAN nilai final. Threshold ini **WAJIB dikalibrasi ulang** menggunakan data riil dari device setelah Fase 2/3.
+4. Angka Recall/Precision/F1 pada dokumen ini **TIDAK BOLEH dikutip sebagai "performa sistem IoT"** di laporan akhir tanpa embel-embel *"berdasarkan evaluasi dataset publik (offline)"*.
+
+Validasi performa sesungguhnya dari sistem end-to-end akan dilaporkan terpisah setelah Fase 2 (integrasi firmware-backend) dan Fase 3 (pengujian 7 skenario fisik), sesuai `ROADMAP.md`.
+---
+
 ## Ringkasan Proyek
 Sistem pemantauan parameter fisiologis (Heart Rate, SpO2, Suhu Tubuh) berbasis IoT (ESP32 + MAX30102 + DS18B20) dengan deteksi anomali real-time menggunakan model Machine Learning (Isolation Forest) dan pemrosesan edge-cloud.
 
