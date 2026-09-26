@@ -5,185 +5,238 @@ import os
 import logging
 import joblib
 from sklearn.ensemble import IsolationForest
-from sklearn.metrics import classification_report, confusion_matrix, f1_score, precision_score, recall_score
-from typing import Dict
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
+from typing import Dict, Tuple
 
-# Konfigurasi logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def baseline_predict(X_original: pd.DataFrame) -> np.ndarray:
-    """
-    Prediksi menggunakan simple threshold satu parameter (baseline komparator):
-    - HR di luar 60-100 BPM
-    - SpO2 < 95%
-    - Temp di luar 36.0-37.5°C (rentang normal suhu klinis dataset)
-    Anomali = 1, Normal = 0
-    """
-    is_anomaly = (
-        (X_original['Heart_Rate'] < 60) | (X_original['Heart_Rate'] > 100) |
-        (X_original['SpO2'] < 95) |
-        (X_original['Temperature'] < 36.0) | (X_original['Temperature'] > 37.5)
-    )
-    return is_anomaly.astype(int).values
+FEATURE_COLS = [
+    'Heart_Rate', 'SpO2', 'Temperature',
+    'Heart_Rate_Delta', 'SpO2_Delta', 'Temperature_Delta',
+    'MA_Heart_Rate', 'MA_SpO2', 'MA_Temperature',
+    'Var_Heart_Rate', 'Var_SpO2', 'Var_Temperature',
+    'Rate_of_Change'
+]
 
-def calculate_metrics(y_true, y_pred) -> Dict[str, float]:
-    """Menghitung metrik performa klasifikasi."""
+def calc_metrics(y_true, y_pred) -> Dict[str, float]:
     return {
         'Precision': float(precision_score(y_true, y_pred, zero_division=0)),
         'Recall': float(recall_score(y_true, y_pred, zero_division=0)),
         'F1': float(f1_score(y_true, y_pred, zero_division=0))
     }
 
-def main(input_path: str, model_path: str, report_path: str, scaler_path: str, contamination: float, n_estimators: int):
-    """Fungsi utama pelatihan dan evaluasi model."""
-    logging.info(f"Memuat data fitur dari {input_path}")
+def calibrate_threshold(scores_normal: np.ndarray, target_fpr: float) -> float:
+    """
+    Cari threshold skor anomali sehingga persentase sampel NORMAL
+    yang salah ditandai anomali == target_fpr.
     
-    if not os.path.exists(input_path):
-        logging.error(f"File {input_path} tidak ditemukan.")
-        return
-        
-    df = pd.read_csv(input_path)
-    
-    feature_cols = [
-        'Heart_Rate', 'SpO2', 'Temperature', 
-        'Heart_Rate_Delta', 'SpO2_Delta', 'Temperature_Delta', 
-        'MA_Heart_Rate', 'MA_SpO2', 'MA_Temperature', 
-        'Var_Heart_Rate', 'Var_SpO2', 'Var_Temperature', 
-        'Rate_of_Change', 'Signal_Quality_Score'
-    ]
-    
-    # 1. Dataset Pembagian Pelatihan (Unsupervised Training Set)
-    # Gunakan data pola normal murni dari seluruh sumber untuk mempelajari distribusi fisiologis normal
-    train_mask = (
-        ((df['Source'] == 'nasirayub2') & (df['OUTPUT'] == 0)) |
-        ((df['Source'] == 'engrarri21') & (df['OUTPUT'] == 0)) |
-        ((df['Source'] == 'gourangomandal') & (df['OUTPUT'] == 0)) |
-        (df['Source'] == 'rishanmascarenhas')
+    Isolation Forest decision_function: skor rendah = lebih anomali.
+    FPR = fraksi sampel normal yang skor-nya < threshold.
+    """
+    # Percentile dari bawah: target_fpr persen dari normal harus di bawah threshold
+    threshold = np.percentile(scores_normal, target_fpr * 100)
+    return threshold
+
+def predict_with_threshold(model, X: pd.DataFrame, threshold: float) -> np.ndarray:
+    """Prediksi anomali: skor < threshold -> anomali (1), else normal (0)."""
+    scores = model.decision_function(X)
+    return np.where(scores < threshold, 1, 0)
+
+def main(train_path: str, val_path: str, test_path: str, model_path: str,
+         report_path: str, n_estimators: int):
+
+    logging.info(f"Memuat data...")
+    df_train = pd.read_csv(train_path)
+    df_val = pd.read_csv(val_path)
+    df_test = pd.read_csv(test_path)
+
+    # --- Training: hanya pola NORMAL dari dataset tepercaya (tanpa rishanmascarenhas) ---
+    train_normal_mask = (
+        ((df_train['Source'] == 'nasirayub2') & (df_train['OUTPUT'] == 0)) |
+        ((df_train['Source'] == 'engrarri21') & (df_train['OUTPUT'] == 0)) |
+        ((df_train['Source'] == 'gourangomandal') & (df_train['OUTPUT'] == 0))
     )
-    
-    X_train = df.loc[train_mask, feature_cols]
-    logging.info(f"Ukuran Data Latih (Pola Normal Gabungan): {X_train.shape[0]:,} sampel")
-    
-    # 2. Pelatihan Isolation Forest
-    logging.info(f"Melatih Isolation Forest (n_estimators={n_estimators}, contamination={contamination})...")
+    X_train = df_train.loc[train_normal_mask, FEATURE_COLS]
+    logging.info(f"Training samples (normal only): {X_train.shape[0]:,}")
+
+    # --- Train Isolation Forest ---
+    # contamination rendah (0.01) agar model belajar profil "normal" secara ketat.
+    # Keputusan anomali ditentukan oleh threshold yang dikalibrasi, bukan contamination.
     clf = IsolationForest(
-        n_estimators=n_estimators,
-        contamination=contamination,
-        max_samples='auto',
-        random_state=42,
-        n_jobs=-1
+        n_estimators=n_estimators, contamination=0.01,
+        max_samples='auto', random_state=42, n_jobs=-1
     )
     clf.fit(X_train)
-    
-    # Simpan model
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
     joblib.dump(clf, model_path)
-    logging.info(f"Model berhasil disimpan di {model_path}")
-    
-    # Load Scaler untuk evaluasi baseline pada nilai fisik asli
-    scaler = None
-    if os.path.exists(scaler_path):
-        scaler = joblib.load(scaler_path)
-    
-    report_content = "=======================================================\n"
-    report_content += "LAPORAN EVALUASI DETEKSI ANOMALI FISIOLOGIS MULTIVARIAT\n"
-    report_content += "=======================================================\n\n"
-    
-    # 3. Evaluasi Terhadap Dataset engrarri21 (Benchmark Data Riil Klinis)
-    val_eng = df[df['Source'] == 'engrarri21'].copy()
-    if not val_eng.empty:
-        X_val_eng = val_eng[feature_cols]
-        y_val_eng = val_eng['OUTPUT'].values
-        
-        # Prediksi IF (-1: anomali, 1: normal) -> (1: anomali, 0: normal)
-        pred_if_eng = np.where(clf.predict(X_val_eng) == -1, 1, 0)
-        
-        # Prediksi Baseline
-        if scaler:
-            X_orig_eng = pd.DataFrame(scaler.inverse_transform(X_val_eng), columns=feature_cols)
-            pred_base_eng = baseline_predict(X_orig_eng)
-        else:
-            pred_base_eng = baseline_predict(X_val_eng)
-            
-        m_if_eng = calculate_metrics(y_val_eng, pred_if_eng)
-        m_base_eng = calculate_metrics(y_val_eng, pred_base_eng)
-        
-        report_content += "1. EVALUASI DATASET ENGRARRI21 (Benchmark Riil)\n"
-        report_content += "-"*45 + "\n"
-        report_content += f"Total Sampel: {len(y_val_eng):,} (Normal: {(y_val_eng==0).sum():,}, Abnormal: {(y_val_eng==1).sum():,})\n\n"
-        report_content += "A. Model Machine Learning (Isolation Forest):\n"
-        report_content += f"   - Precision : {m_if_eng['Precision']:.4f}\n"
-        report_content += f"   - Recall    : {m_if_eng['Recall']:.4f}\n"
-        report_content += f"   - F1-Score  : {m_if_eng['F1']:.4f}\n"
-        report_content += f"   - Confusion Matrix:\n{confusion_matrix(y_val_eng, pred_if_eng)}\n\n"
-        report_content += "B. Model Baseline (Single-Parameter Threshold):\n"
-        report_content += f"   - Precision : {m_base_eng['Precision']:.4f}\n"
-        report_content += f"   - Recall    : {m_base_eng['Recall']:.4f}\n"
-        report_content += f"   - F1-Score  : {m_base_eng['F1']:.4f}\n"
-        report_content += f"   - Confusion Matrix:\n{confusion_matrix(y_val_eng, pred_base_eng)}\n\n"
-    
-    # 4. Evaluasi Terhadap Dataset gourangomandal (IoMT Alerts & Disease Breakdown)
-    val_gourango = df[df['Source'] == 'gourangomandal'].copy()
-    if not val_gourango.empty:
-        X_val_g = val_gourango[feature_cols]
-        y_val_g = val_gourango['OUTPUT'].values
-        
-        pred_if_g = np.where(clf.predict(X_val_g) == -1, 1, 0)
-        
-        if scaler:
-            X_orig_g = pd.DataFrame(scaler.inverse_transform(X_val_g), columns=feature_cols)
-            pred_base_g = baseline_predict(X_orig_g)
-        else:
-            pred_base_g = baseline_predict(X_val_g)
-            
-        m_if_g = calculate_metrics(y_val_g, pred_if_g)
-        m_base_g = calculate_metrics(y_val_g, pred_base_g)
-        
-        report_content += "2. EVALUASI DATASET GOURANGOMANDAL (IoMT Multi-Parameter Alerts)\n"
-        report_content += "-"*45 + "\n"
-        report_content += f"Total Sampel: {len(y_val_g):,} (Normal: {(y_val_g==0).sum():,}, Abnormal: {(y_val_g==1).sum():,})\n\n"
-        report_content += "A. Model Machine Learning (Isolation Forest):\n"
-        report_content += f"   - Precision : {m_if_g['Precision']:.4f}\n"
-        report_content += f"   - Recall    : {m_if_g['Recall']:.4f}\n"
-        report_content += f"   - F1-Score  : {m_if_g['F1']:.4f}\n\n"
-        report_content += "B. Model Baseline (Single-Parameter Threshold):\n"
-        report_content += f"   - Precision : {m_base_g['Precision']:.4f}\n"
-        report_content += f"   - Recall    : {m_base_g['Recall']:.4f}\n"
-        report_content += f"   - F1-Score  : {m_base_g['F1']:.4f}\n\n"
-        
-        # Breakdown Deteksi per Kategori Predicted Disease
-        if 'Metadata' in val_gourango.columns:
-            val_gourango['Pred_IF'] = pred_if_g
-            disease_pivot = val_gourango.groupby('Metadata')['Pred_IF'].agg(
-                Total='count',
-                Anomali_Detected=lambda x: (x == 1).sum(),
-                Normal_Detected=lambda x: (x == 0).sum(),
-                Anomaly_Rate_Pct=lambda x: round((x == 1).mean() * 100, 2)
-            )
-            report_content += "C. Deteksi Isolation Forest per Kategori Penyakit (Predicted Disease):\n"
-            report_content += str(disease_pivot) + "\n\n"
+    logging.info(f"Model disimpan di {model_path}")
 
-    # Simpan laporan ke file
+    # ==================================================
+    # TAHAP KALIBRASI: pada Validation Set
+    # ==================================================
+    X_val = df_val[FEATURE_COLS]
+    y_val = df_val['OUTPUT'].values
+    val_normal_mask = y_val == 0
+    val_scores = clf.decision_function(X_val)
+    scores_val_normal = val_scores[val_normal_mask]
+
+    logging.info(f"Validation set: {len(y_val):,} total, {val_normal_mask.sum():,} normal, {(~val_normal_mask).sum():,} abnormal")
+
+    target_fprs = [0.05, 0.10, 0.13, 0.15, 0.20]
+    thresholds = {}
+    val_results = []
+
+    for fpr_target in target_fprs:
+        thr = calibrate_threshold(scores_val_normal, fpr_target)
+        thresholds[fpr_target] = thr
+        pred_val = np.where(val_scores < thr, 1, 0)
+
+        actual_fpr = pred_val[val_normal_mask].mean()
+        recall_val = recall_score(y_val, pred_val, zero_division=0)
+        prec_val = precision_score(y_val, pred_val, zero_division=0)
+        f1_val = f1_score(y_val, pred_val, zero_division=0)
+
+        val_results.append({
+            'Target_FPR': f"{fpr_target*100:.0f}%",
+            'Actual_FPR_Val': f"{actual_fpr*100:.1f}%",
+            'Threshold': f"{thr:.6f}",
+            'Recall_Val': f"{recall_val:.4f}",
+            'Precision_Val': f"{prec_val:.4f}",
+            'F1_Val': f"{f1_val:.4f}"
+        })
+        logging.info(f"  FPR target={fpr_target*100:.0f}%: threshold={thr:.4f}, actual_FPR={actual_fpr:.4f}, Recall={recall_val:.4f}")
+
+    # ==================================================
+    # TAHAP EVALUASI FINAL: pada Test Set (belum pernah disentuh)
+    # ==================================================
+    X_test = df_test[FEATURE_COLS]
+    y_test = df_test['OUTPUT'].values
+    test_normal_mask = y_test == 0
+    test_scores = clf.decision_function(X_test)
+
+    logging.info(f"Test set: {len(y_test):,} total, {test_normal_mask.sum():,} normal, {(~test_normal_mask).sum():,} abnormal")
+
+    test_results = []
+    for fpr_target in target_fprs:
+        thr = thresholds[fpr_target]
+        pred_test = np.where(test_scores < thr, 1, 0)
+
+        actual_fpr_test = pred_test[test_normal_mask].mean()
+        recall_test = recall_score(y_test, pred_test, zero_division=0)
+        prec_test = precision_score(y_test, pred_test, zero_division=0)
+        f1_test = f1_score(y_test, pred_test, zero_division=0)
+        cm = confusion_matrix(y_test, pred_test)
+
+        test_results.append({
+            'Target_FPR': f"{fpr_target*100:.0f}%",
+            'Actual_FPR_Test': f"{actual_fpr_test*100:.1f}%",
+            'Threshold': thr,
+            'Recall_Test': recall_test,
+            'Precision_Test': prec_test,
+            'F1_Test': f1_test,
+            'CM': cm
+        })
+
+    # --- Per-source breakdown pada test set (menggunakan FPR 10% sebagai contoh) ---
+    mid_thr = thresholds[0.10]
+    mid_pred = np.where(test_scores < mid_thr, 1, 0)
+
+    # ==================================================
+    # TULIS LAPORAN
+    # ==================================================
+    report = "=" * 65 + "\n"
+    report += "LAPORAN EVALUASI v3 — THRESHOLD CALIBRATION (3-PARTISI)\n"
+    report += "=" * 65 + "\n\n"
+
+    report += "METODOLOGI:\n"
+    report += "  - Data dibagi 3 partisi per pasien/sesi: Train(60%) / Val(20%) / Test(20%)\n"
+    report += "  - Model dilatih pada sampel NORMAL dari Train set (contamination='auto')\n"
+    report += "  - Threshold dikalibrasi pada sampel NORMAL di Validation set\n"
+    report += "    berdasarkan target False Positive Rate (FPR)\n"
+    report += "  - Evaluasi final dilakukan pada Test set yang BELUM PERNAH disentuh\n"
+    report += "    untuk training maupun tuning\n\n"
+
+    report += f"  Train samples (normal): {X_train.shape[0]:,}\n"
+    report += f"  Val samples: {len(y_val):,} (Norm: {val_normal_mask.sum():,}, Abn: {(~val_normal_mask).sum():,})\n"
+    report += f"  Test samples: {len(y_test):,} (Norm: {test_normal_mask.sum():,}, Abn: {(~test_normal_mask).sum():,})\n\n"
+
+    report += "-" * 65 + "\n"
+    report += "KALIBRASI THRESHOLD (pada Validation Set — sampel NORMAL)\n"
+    report += "-" * 65 + "\n"
+    report += pd.DataFrame(val_results).to_string(index=False) + "\n\n"
+
+    report += "-" * 65 + "\n"
+    report += "EVALUASI FINAL PADA TEST SET (belum pernah disentuh)\n"
+    report += "-" * 65 + "\n\n"
+
+    for r in test_results:
+        report += f"Target FPR = {r['Target_FPR']}:\n"
+        report += f"  Actual FPR (test normal) : {r['Actual_FPR_Test']}\n"
+        report += f"  Precision                : {r['Precision_Test']:.4f}\n"
+        report += f"  Recall                   : {r['Recall_Test']:.4f}\n"
+        report += f"  F1-Score                 : {r['F1_Test']:.4f}\n"
+        report += f"  Confusion Matrix:\n"
+        report += f"    {r['CM']}\n\n"
+
+    report += "-" * 65 + "\n"
+    report += "TABEL RINGKASAN — PILIHAN UNTUK REVIEWER\n"
+    report += "-" * 65 + "\n"
+    report += f"{'Target FPR':>12} | {'FPR Aktual (Test)':>18} | {'Recall (Test)':>14} | {'Precision':>10} | {'F1':>8}\n"
+    report += "-" * 65 + "\n"
+    for r in test_results:
+        report += f"{r['Target_FPR']:>12} | {r['Actual_FPR_Test']:>18} | {r['Recall_Test']:>14.4f} | {r['Precision_Test']:>10.4f} | {r['F1_Test']:>8.4f}\n"
+    report += "\n"
+
+    report += "-" * 65 + "\n"
+    report += "BREAKDOWN PER SUMBER (Test Set, threshold FPR=10%)\n"
+    report += "-" * 65 + "\n"
+    for source in df_test['Source'].unique():
+        mask = df_test['Source'] == source
+        if mask.sum() == 0:
+            continue
+        y_s = y_test[mask]
+        p_s = mid_pred[mask]
+        m_s = calc_metrics(y_s, p_s)
+        n_s = (y_s == 0).sum()
+        a_s = (y_s == 1).sum()
+        fpr_s = p_s[y_s == 0].mean() if n_s > 0 else 0
+        report += f"  {source}: N={mask.sum():,} (Norm={n_s:,}, Abn={a_s:,})"
+        report += f" -> FPR={fpr_s:.2%} P={m_s['Precision']:.4f} R={m_s['Recall']:.4f} F1={m_s['F1']:.4f}\n"
+
+    report += "\n"
+    report += "-" * 65 + "\n"
+    report += "PERBANDINGAN HISTORIS\n"
+    report += "-" * 65 + "\n"
+    report += "  v1 (ada overlap, c=0.08):  P=0.4806 R=0.1723 F1=0.2536\n"
+    report += "  v2 (holdout, c=0.40):      P=0.7233 R=0.7234 F1=0.7234 (FPR~37%)\n"
+    report += "  v3 (3-partisi, FPR=10%):   lihat tabel di atas\n"
+
+    # Simpan threshold yang dipilih bersama model
+    threshold_path = os.path.join(os.path.dirname(model_path), 'thresholds.joblib')
+    joblib.dump(thresholds, threshold_path)
+    logging.info(f"Threshold disimpan di {threshold_path}")
+
     os.makedirs(os.path.dirname(report_path), exist_ok=True)
     with open(report_path, 'w', encoding='utf-8') as f:
-        f.write(report_content)
-        
-    logging.info(f"Laporan evaluasi berhasil disimpan di {report_path}")
-    print("\n" + report_content)
+        f.write(report)
+    logging.info(f"Laporan evaluasi disimpan di {report_path}")
+    print("\n" + report)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Pelatihan Model Isolation Forest & Benchmarking")
-    default_input = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'features_engineered.csv'))
-    default_model = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'models', 'isolation_forest_model.joblib'))
-    default_report = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'models', 'evaluation_report.txt'))
-    default_scaler = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'models', 'scaler.joblib'))
+    parser = argparse.ArgumentParser(description="Train IF & Calibrate Threshold on Validation Set")
+    basedir = os.path.dirname(__file__)
+    default_train = os.path.abspath(os.path.join(basedir, '..', 'data', 'features_train.csv'))
+    default_val = os.path.abspath(os.path.join(basedir, '..', 'data', 'features_val.csv'))
+    default_test = os.path.abspath(os.path.join(basedir, '..', 'data', 'features_test.csv'))
+    default_model = os.path.abspath(os.path.join(basedir, '..', 'models', 'isolation_forest_model.joblib'))
+    default_report = os.path.abspath(os.path.join(basedir, '..', 'models', 'evaluation_report.txt'))
 
-    parser.add_argument('--input', type=str, default=default_input, help='Path input features_engineered.csv')
-    parser.add_argument('--model', type=str, default=default_model, help='Path output model joblib')
-    parser.add_argument('--report', type=str, default=default_report, help='Path output laporan evaluasi')
-    parser.add_argument('--scaler', type=str, default=default_scaler, help='Path model scaler')
-    parser.add_argument('--contamination', type=float, default=0.08, help='Rasio kontaminasi anomali')
-    parser.add_argument('--n_estimators', type=int, default=150, help='Jumlah pohon Isolation Forest')
-    
+    parser.add_argument('--train', type=str, default=default_train)
+    parser.add_argument('--val', type=str, default=default_val)
+    parser.add_argument('--test', type=str, default=default_test)
+    parser.add_argument('--model', type=str, default=default_model)
+    parser.add_argument('--report', type=str, default=default_report)
+    parser.add_argument('--n_estimators', type=int, default=150)
+
     args = parser.parse_args()
-    main(args.input, args.model, args.report, args.scaler, args.contamination, args.n_estimators)
+    main(args.train, args.val, args.test, args.model, args.report, args.n_estimators)
