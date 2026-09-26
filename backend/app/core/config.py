@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     mqtt_port: int = 1883
     server_host: str = "0.0.0.0"
     server_port: int = 8000
-    model_path: str = "models/isolation_forest.joblib"
-    scaler_path: str = "models/scaler.joblib"
+    model_path: str = "ml_pipeline/models/isolation_forest_model.joblib"
+    scaler_path: str = "ml_pipeline/models/scaler.joblib"
     db_path: str = "sqlite+aiosqlite:///data.db"
     device_token: str = "default_token"
     log_level: str = "INFO"

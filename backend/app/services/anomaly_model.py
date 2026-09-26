@@ -27,15 +27,38 @@ class AnomalyDetector:
         self.load_model()
 
     def load_model(self):
-        if os.path.exists(settings.model_path) and os.path.exists(settings.scaler_path):
+        candidate_model_paths = [
+            settings.model_path,
+            os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/isolation_forest_model.joblib"),
+            "ml_pipeline/models/isolation_forest_model.joblib",
+            "../ml_pipeline/models/isolation_forest_model.joblib",
+            "models/isolation_forest.joblib",
+        ]
+        candidate_scaler_paths = [
+            settings.scaler_path,
+            os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/scaler.joblib"),
+            "ml_pipeline/models/scaler.joblib",
+            "../ml_pipeline/models/scaler.joblib",
+            "models/scaler.joblib",
+        ]
+
+        resolved_model = next((p for p in candidate_model_paths if os.path.exists(p)), None)
+        resolved_scaler = next((p for p in candidate_scaler_paths if os.path.exists(p)), None)
+
+        if resolved_model and resolved_scaler:
             try:
-                self.model = joblib.load(settings.model_path)
-                self.scaler = joblib.load(settings.scaler_path)
-                logger.info("ML Model and Scaler loaded successfully.")
+                self.model = joblib.load(resolved_model)
+                self.scaler = joblib.load(resolved_scaler)
+                logger.info(f"ML Model loaded from {resolved_model} and Scaler from {resolved_scaler}.")
                 
-                thr_path = os.path.join(os.path.dirname(settings.model_path), "thresholds.joblib")
-                if os.path.exists(thr_path):
-                    self.thresholds = joblib.load(thr_path)
+                thr_candidate_paths = [
+                    os.path.join(os.path.dirname(resolved_model), "thresholds.joblib"),
+                    os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/thresholds.joblib"),
+                    "ml_pipeline/models/thresholds.joblib",
+                ]
+                resolved_thr = next((p for p in thr_candidate_paths if os.path.exists(p)), None)
+                if resolved_thr:
+                    self.thresholds = joblib.load(resolved_thr)
                     # Default operating point terkunci: Target FPR 13% (threshold ~0.2535)
                     self.anomaly_threshold = self.thresholds.get(0.13, 0.2535)
                     logger.info(f"Calibrated threshold loaded: {self.anomaly_threshold:.4f} (Target FPR 13%)")
@@ -59,9 +82,18 @@ class AnomalyDetector:
         
         if self.model and self.scaler:
             try:
-                # Reshape for sklearn
-                features_scaled = self.scaler.transform(feature_vector.reshape(1, -1))
-                anomaly_score = float(self.model.decision_function(features_scaled)[0])
+                # Reshape for sklearn with proper column names if fitted with feature names
+                features_2d = feature_vector.reshape(1, -1)
+                if hasattr(self.scaler, "feature_names_in_"):
+                    import pandas as pd
+                    features_input = pd.DataFrame(features_2d, columns=self.scaler.feature_names_in_)
+                    features_scaled = self.scaler.transform(features_input)
+                    features_scaled_input = pd.DataFrame(features_scaled, columns=self.scaler.feature_names_in_)
+                    anomaly_score = float(self.model.decision_function(features_scaled_input)[0])
+                else:
+                    features_scaled = self.scaler.transform(features_2d)
+                    anomaly_score = float(self.model.decision_function(features_scaled)[0])
+
                 # Prediksi menggunakan threshold terkalibrasi
                 threshold = getattr(self, 'anomaly_threshold', 0.0)
                 is_ml_anomaly = anomaly_score < threshold
@@ -97,3 +129,7 @@ class PersistentAnomalyEvaluator:
             is_persistent_anomaly=is_persistent,
             should_buzz=should_buzz
         )
+
+    def reset(self):
+        self.count = 0
+
