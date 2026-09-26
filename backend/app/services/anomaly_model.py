@@ -32,6 +32,15 @@ class AnomalyDetector:
                 self.model = joblib.load(settings.model_path)
                 self.scaler = joblib.load(settings.scaler_path)
                 logger.info("ML Model and Scaler loaded successfully.")
+                
+                thr_path = os.path.join(os.path.dirname(settings.model_path), "thresholds.joblib")
+                if os.path.exists(thr_path):
+                    self.thresholds = joblib.load(thr_path)
+                    # Default operating point terkunci: Target FPR 13% (threshold ~0.2535)
+                    self.anomaly_threshold = self.thresholds.get(0.13, 0.2535)
+                    logger.info(f"Calibrated threshold loaded: {self.anomaly_threshold:.4f} (Target FPR 13%)")
+                else:
+                    self.anomaly_threshold = 0.0
             except Exception as e:
                 logger.error(f"Error loading model: {e}")
         else:
@@ -52,10 +61,11 @@ class AnomalyDetector:
             try:
                 # Reshape for sklearn
                 features_scaled = self.scaler.transform(feature_vector.reshape(1, -1))
-                # Isolation Forest returns -1 for anomaly, 1 for normal
-                pred = self.model.predict(features_scaled)[0]
                 anomaly_score = float(self.model.decision_function(features_scaled)[0])
-                is_anomaly = pred == -1 or baseline_anomaly
+                # Prediksi menggunakan threshold terkalibrasi
+                threshold = getattr(self, 'anomaly_threshold', 0.0)
+                is_ml_anomaly = anomaly_score < threshold
+                is_anomaly = is_ml_anomaly or baseline_anomaly
             except Exception as e:
                 logger.error(f"Prediction error: {e}")
                 
@@ -77,7 +87,7 @@ class PersistentAnomalyEvaluator:
         if is_anomaly:
             self.count += 1
         else:
-            self.count = max(0, self.count - 1)  # gradual decay or reset to 0
+            self.count = 0  # Strict Reset: counter langsung reset ke 0 saat sampel normal terdeteksi
             
         is_persistent = self.count >= self.threshold
         should_buzz = is_persistent

@@ -7,7 +7,7 @@ from app.core.config import settings
 class FeatureFusionEngine:
     """
     Mesin fusi fitur temporal untuk ekstraksi fitur dalam jendela waktu geser (sliding window).
-    Menghasilkan vektor fitur 14 dimensi.
+    Menghasilkan vektor fitur 13 dimensi (tanpa Signal_Quality_Score).
     """
     def __init__(self, window_size: int = settings.sliding_window_size):
         self.window_size = window_size
@@ -26,32 +26,34 @@ class FeatureFusionEngine:
         return self._compute_features()
         
     def _compute_features(self) -> np.ndarray:
-        data = np.array(self.buffer)  # shape: (window_size, 3)
+        data = np.array(self.buffer)  # shape: (window_size, 3) -> [HR, SpO2, Temp]
         
-        # 1-3: Current raw values (mean of the window or just the last)
-        # Using the last point as current value
-        current_values = data[-1]
+        # x1-x3: Current raw values (latest reading)
+        current_values = data[-1]  # [HR, SpO2, Temp]
         
-        # 4-6: Moving average
-        moving_avg = np.mean(data, axis=0)
+        # x4-x6: Delta (difference between last two readings)
+        delta = data[-1] - data[-2]  # [HR_Delta, SpO2_Delta, Temp_Delta]
         
-        # 7-9: Variance
-        variance = np.var(data, axis=0)
+        # x7-x9: Moving average over window
+        moving_avg = np.mean(data, axis=0)  # [MA_HR, MA_SpO2, MA_Temp]
         
-        # 10-12: Delta (max - min in window)
-        delta = np.max(data, axis=0) - np.min(data, axis=0)
+        # x10-x12: Variance over window
+        variance = np.var(data, axis=0, ddof=1)  # [Var_HR, Var_SpO2, Var_Temp]
         
-        # 13-14: Rate of change (slope) for HR and SpO2
-        x = np.arange(self.window_size)
-        hr_slope = np.polyfit(x, data[:, 0], 1)[0]
-        spo2_slope = np.polyfit(x, data[:, 1], 1)[0]
+        # x13: Rate of change (normalized composite)
+        rate_of_change = (
+            abs(delta[0]) / max(moving_avg[0], 1e-6) +
+            abs(delta[1]) / max(moving_avg[1], 1e-6) +
+            abs(delta[2]) / max(moving_avg[2], 1e-6)
+        )
         
+        # 13-dimensional feature vector (Signal_Quality_Score removed)
         feature_vector = np.concatenate([
-            current_values,
-            moving_avg,
-            variance,
-            delta,
-            [hr_slope, spo2_slope]
+            current_values,    # x1-x3
+            delta,             # x4-x6
+            moving_avg,        # x7-x9
+            variance,          # x10-x12
+            [rate_of_change]   # x13
         ])
         
         return feature_vector
