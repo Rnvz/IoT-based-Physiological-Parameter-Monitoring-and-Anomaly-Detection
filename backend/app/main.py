@@ -6,6 +6,7 @@ import logging
 import time
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+import numpy as np
 import paho.mqtt.client as mqtt
 
 from app.core.config import settings
@@ -34,9 +35,10 @@ last_arrival_time: Dict[str, float] = {}
 msg_counter: int = 0
 
 TABLE_HEADER = (
-    f"\n\033[1m\033[96m  WAKTU        INTERVAL   HEART RATE   SpO2    SUHU      KUALITAS SQA       STATUS         HASIL MODEL ML        BUZZER\033[0m\n"
-    f"\033[2m " + "─" * 105 + "\033[0m"
+    f"\n\033[1m\033[96m  WAKTU        INTERVAL   HR INSTAN    ΔHR      MA_HR    VAR_HR   SpO2    SUHU     SQA       STATUS        HASIL MODEL ML      BUZZER\033[0m\n"
+    f"\033[2m " + "─" * 126 + "\033[0m"
 )
+
 
 
 
@@ -241,7 +243,25 @@ def on_mqtt_message(client, userdata, message):
         spo2_val = telemetry.raw_sensors.spo2 if telemetry else 0.0
         temp_val = telemetry.raw_sensors.temperature if telemetry else 0.0
 
-        # HR Formatting
+        # Ekstrak Fitur Temporal Jendela Geser (Debug Temporal Dynamics)
+        if dash.temporal_features is not None:
+            delta_hr = float(dash.temporal_features[3])
+            ma_hr = float(dash.temporal_features[6])
+            var_hr = float(dash.temporal_features[9])
+        elif feature_engine and len(feature_engine.buffer) >= 2:
+            data_buf = np.array(feature_engine.buffer)
+            delta_hr = float(data_buf[-1, 0] - data_buf[-2, 0])
+            ma_hr = float(np.mean(data_buf[:, 0]))
+            var_hr = float(np.var(data_buf[:, 0], ddof=1))
+        elif feature_engine and len(feature_engine.buffer) == 1:
+            data_buf = np.array(feature_engine.buffer)
+            delta_hr = 0.0
+            ma_hr = float(data_buf[0, 0])
+            var_hr = 0.0
+        else:
+            delta_hr, ma_hr, var_hr = 0.0, 0.0, 0.0
+
+        # HR Instan Formatting
         if hr_val <= 0 or feedback.status == "cek_sensor":
             hr_str = f"{CLR_DIM}  -- bpm {CLR_RESET}"
         elif hr_val < 50 or hr_val > 110:
@@ -249,8 +269,30 @@ def on_mqtt_message(client, userdata, message):
         else:
             hr_str = f"{CLR_WHITE}{CLR_BOLD}{hr_val:5.1f} bpm{CLR_RESET}"
 
+        # Debug: ΔHR Formatting
+        if hr_val <= 0 or feedback.status == "cek_sensor":
+            d_hr_str = f"{CLR_DIM}   --  {CLR_RESET}"
+        elif abs(delta_hr) > 15.0:
+            d_hr_str = f"{CLR_RED}{CLR_BOLD}{delta_hr:+6.1f} {CLR_RESET}"
+        else:
+            d_hr_str = f"{CLR_CYAN}{delta_hr:+6.1f} {CLR_RESET}"
+
+        # Debug: MA_HR Formatting
+        if hr_val <= 0 or feedback.status == "cek_sensor":
+            ma_hr_str = f"{CLR_DIM}   --  {CLR_RESET}"
+        else:
+            ma_hr_str = f"{CLR_WHITE}{ma_hr:5.1f} {CLR_RESET}"
+
+        # Debug: VAR_HR Formatting
+        if hr_val <= 0 or feedback.status == "cek_sensor":
+            var_hr_str = f"{CLR_DIM}   --   {CLR_RESET}"
+        elif var_hr > 50.0:
+            var_hr_str = f"{CLR_RED}{CLR_BOLD}{var_hr:6.1f} {CLR_RESET}"
+        else:
+            var_hr_str = f"{CLR_WHITE}{var_hr:6.1f} {CLR_RESET}"
+
         # SpO2 Formatting
-        spo2_str = f"{CLR_WHITE}{spo2_val:5.1f}%{CLR_RESET}"
+        spo2_str = f"{CLR_WHITE}{spo2_val:4.0f}%{CLR_RESET}"
 
         # Suhu Formatting
         if temp_val >= 38.0:
@@ -260,17 +302,17 @@ def on_mqtt_message(client, userdata, message):
 
         # SQA Formatting
         if feedback.sqa_status == "GOOD":
-            sqa_str = f"{CLR_GREEN}GOOD        {CLR_RESET}"
+            sqa_str = f"{CLR_GREEN}GOOD{CLR_RESET}"
         else:
-            sqa_str = f"{CLR_YELLOW}POOR_QUALITY{CLR_RESET}"
+            sqa_str = f"{CLR_YELLOW}POOR{CLR_RESET}"
 
         # Status Fisiologis Formatting
         if feedback.status == "anomaly":
-            stat_str = f"{CLR_BG_RED}   ANOMALI    {CLR_RESET}"
+            stat_str = f"{CLR_BG_RED}  ANOMALI  {CLR_RESET}"
         elif feedback.status == "cek_sensor":
-            stat_str = f"{CLR_BG_YELLOW}  CEK SENSOR  {CLR_RESET}"
+            stat_str = f"{CLR_BG_YELLOW} CEK SENSOR{CLR_RESET}"
         else:
-            stat_str = f"{CLR_BG_GREEN}    NORMAL    {CLR_RESET}"
+            stat_str = f"{CLR_BG_GREEN}  NORMAL   {CLR_RESET}"
 
         # Model ML Result / Buffer Status
         buf_len = len(feature_engine.buffer) if feature_engine else 0
@@ -278,12 +320,12 @@ def on_mqtt_message(client, userdata, message):
         thresh_val = getattr(anomaly_detector, "anomaly_threshold", 0.2535) if anomaly_detector else 0.2535
 
         if buf_len < buf_max:
-            ml_str = f"{CLR_DIM}Buffer ({buf_len:2d}/{buf_max:2d})  {CLR_RESET}"
+            ml_str = f"{CLR_DIM}Buffer ({buf_len:2d}/{buf_max:2d})   {CLR_RESET}"
         else:
             if feedback.anomaly_score < thresh_val:
-                ml_str = f"{CLR_RED}{CLR_BOLD}Skor: {feedback.anomaly_score:+.3f} ⚠ {CLR_RESET}"
+                ml_str = f"{CLR_RED}{CLR_BOLD}Skor: {feedback.anomaly_score:+.3f} ⚠  {CLR_RESET}"
             else:
-                ml_str = f"{CLR_GREEN}Skor: {feedback.anomaly_score:+.3f}   {CLR_RESET}"
+                ml_str = f"{CLR_GREEN}Skor: {feedback.anomaly_score:+.3f}    {CLR_RESET}"
 
         # Buzzer State Formatting
         if feedback.buzzer_active:
@@ -296,8 +338,11 @@ def on_mqtt_message(client, userdata, message):
             print(TABLE_HEADER, flush=True)
         msg_counter += 1
 
-        # Baris Tabular Rapi
-        row = f" {now_str}   {dt_str}  {hr_str}  {spo2_str}  {temp_str}   {sqa_str}   {stat_str}   {ml_str}   {buzz_str}"
+        # Baris Tabular Rapi dengan Kolom Debug Temporal
+        row = (
+            f" {now_str}   {dt_str}  {hr_str}  {d_hr_str}  {ma_hr_str}  {var_hr_str}   "
+            f"{spo2_str}  {temp_str}   {sqa_str}   {stat_str}   {ml_str}   {buzz_str}"
+        )
         print(row, flush=True)
         logger.debug(f"MQTT Rx: dev={device_id} status={feedback.status} hr={hr_val} temp={temp_val} buzz={feedback.buzzer_active}")
 
