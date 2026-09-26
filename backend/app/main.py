@@ -31,6 +31,13 @@ mqtt_client: Optional[mqtt.Client] = None
 main_loop: Optional[asyncio.AbstractEventLoop] = None
 last_telemetry: Dict[str, TelemetryPayload] = {}
 last_arrival_time: Dict[str, float] = {}
+msg_counter: int = 0
+
+TABLE_HEADER = (
+    f"\n\033[1m\033[96m  WAKTU        INTERVAL   HEART RATE   SpO2    SUHU      KUALITAS SQA       STATUS         HASIL MODEL ML        BUZZER\033[0m\n"
+    f"\033[2m " + "─" * 105 + "\033[0m"
+)
+
 
 
 class ConnectionManager:
@@ -184,6 +191,7 @@ def on_mqtt_connect(client, userdata, flags, rc, properties=None):
 
 
 def on_mqtt_message(client, userdata, message):
+    global msg_counter
     try:
         now = time.time()
         now_str = datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -199,16 +207,16 @@ def on_mqtt_message(client, userdata, message):
 
         device_id = payload_dict["device_id"]
 
-        # Hitung interval kedatangan (delta time)
+        # Hitung interval waktu penerimaan (delta time)
         prev_time = last_arrival_time.get(device_id)
         if prev_time is not None:
-            delta_ms = (now - prev_time) * 1000.0
-            if delta_ms > 1000.0:
-                delta_str = f"\033[93mΔt={delta_ms:4.0f}ms (LAG!)\033[0m"
+            delta_s = now - prev_time
+            if delta_s > 2.5:
+                dt_str = f"\033[93m{delta_s:5.2f}s ⚠\033[0m"
             else:
-                delta_str = f"\033[96mΔt={delta_ms:4.0f}ms\033[0m"
+                dt_str = f"\033[96m{delta_s:5.2f}s  \033[0m"
         else:
-            delta_str = "\033[90mΔt=  ---ms\033[0m"
+            dt_str = "\033[2m   --   \033[0m"
         last_arrival_time[device_id] = now
 
         # Jalankan pipeline pemrosesan telemetri
@@ -216,7 +224,7 @@ def on_mqtt_message(client, userdata, message):
         feedback, dash = process_telemetry(payload_dict, publish_mqtt=should_publish_feedback)
         telemetry = last_telemetry.get(device_id)
 
-        # Kode Warna ANSI untuk Tampilan Terminal
+        # ANSI Colors
         CLR_RESET = "\033[0m"
         CLR_BOLD = "\033[1m"
         CLR_DIM = "\033[2m"
@@ -224,56 +232,74 @@ def on_mqtt_message(client, userdata, message):
         CLR_GREEN = "\033[92m"
         CLR_YELLOW = "\033[93m"
         CLR_CYAN = "\033[96m"
-        CLR_BG_RED = "\033[41m\033[37m\033[1m"
+        CLR_WHITE = "\033[97m"
+        CLR_BG_RED = "\033[41m\033[97m\033[1m"
         CLR_BG_GREEN = "\033[42m\033[30m\033[1m"
         CLR_BG_YELLOW = "\033[43m\033[30m\033[1m"
 
-        # Badge SQA
-        if feedback.sqa_status == "GOOD":
-            sqa_badge = f"{CLR_GREEN}GOOD{CLR_RESET}"
-        else:
-            sqa_badge = f"{CLR_YELLOW}{feedback.sqa_status}{CLR_RESET}"
-
-        # Badge Status Fisiologis
-        if feedback.status == "anomaly":
-            status_badge = f"{CLR_BG_RED} ANOMALI {CLR_RESET}"
-        elif feedback.status == "cek_sensor":
-            status_badge = f"{CLR_BG_YELLOW} CEK SENSOR {CLR_RESET}"
-        else:
-            status_badge = f"{CLR_BG_GREEN} NORMAL {CLR_RESET}"
-
-        # Indikator Buzzer Alarm
-        if feedback.buzzer_active:
-            alarm_badge = f"{CLR_RED}{CLR_BOLD}🔊 [ALARM ON!]{CLR_RESET}"
-        else:
-            alarm_badge = f"{CLR_DIM}🔇 [Buzzer Off]{CLR_RESET}"
-
-        # Nilai Sensor
         hr_val = telemetry.raw_sensors.heart_rate if telemetry else 0.0
         spo2_val = telemetry.raw_sensors.spo2 if telemetry else 0.0
         temp_val = telemetry.raw_sensors.temperature if telemetry else 0.0
 
-        # Skor Model & Threshold
-        thresh_val = getattr(anomaly_detector, "anomaly_threshold", 0.0) if anomaly_detector else 0.0
-        score_str = f"Score: {feedback.anomaly_score:+.3f} (T: {thresh_val:.4f})"
+        # HR Formatting
+        if hr_val <= 0 or feedback.status == "cek_sensor":
+            hr_str = f"{CLR_DIM}  -- bpm {CLR_RESET}"
+        elif hr_val < 50 or hr_val > 110:
+            hr_str = f"{CLR_RED}{CLR_BOLD}{hr_val:5.1f} bpm{CLR_RESET}"
+        else:
+            hr_str = f"{CLR_WHITE}{CLR_BOLD}{hr_val:5.1f} bpm{CLR_RESET}"
 
-        # Indikator Buffer saat tahap inisialisasi
-        buffer_info = ""
-        if feature_engine and len(feature_engine.buffer) < feature_engine.window_size:
-            buffer_info = f" {CLR_DIM}(Buffer {len(feature_engine.buffer)}/15){CLR_RESET}"
+        # SpO2 Formatting
+        spo2_str = f"{CLR_WHITE}{spo2_val:5.1f}%{CLR_RESET}"
 
-        # Format Tampilan Baris Log Real-Time yang Rapi dan Mudah Dipantau
-        log_line = (
-            f"\033[90m[\033[0m{now_str} \033[90m|\033[0m {delta_str}\033[90m]\033[0m "
-            f"HR: {CLR_BOLD}{hr_val:5.1f}{CLR_RESET} bpm \033[90m|\033[0m "
-            f"SpO2: {CLR_BOLD}{spo2_val:4.1f}%{CLR_RESET} \033[90m|\033[0m "
-            f"Temp: {CLR_BOLD}{temp_val:4.1f}°C \033[90m│\033[0m "
-            f"SQA: {sqa_badge} \033[90m│\033[0m {status_badge} \033[90m│\033[0m "
-            f"{score_str}{buffer_info} \033[90m│\033[0m {alarm_badge}"
-        )
+        # Suhu Formatting
+        if temp_val >= 38.0:
+            temp_str = f"{CLR_RED}{CLR_BOLD}{temp_val:4.1f}°C{CLR_RESET}"
+        else:
+            temp_str = f"{CLR_WHITE}{temp_val:4.1f}°C{CLR_RESET}"
 
-        print(log_line, flush=True)
-        logger.info(f"MQTT Rx: dev={device_id} status={feedback.status} hr={hr_val} temp={temp_val} buzz={feedback.buzzer_active}")
+        # SQA Formatting
+        if feedback.sqa_status == "GOOD":
+            sqa_str = f"{CLR_GREEN}GOOD        {CLR_RESET}"
+        else:
+            sqa_str = f"{CLR_YELLOW}POOR_QUALITY{CLR_RESET}"
+
+        # Status Fisiologis Formatting
+        if feedback.status == "anomaly":
+            stat_str = f"{CLR_BG_RED}   ANOMALI    {CLR_RESET}"
+        elif feedback.status == "cek_sensor":
+            stat_str = f"{CLR_BG_YELLOW}  CEK SENSOR  {CLR_RESET}"
+        else:
+            stat_str = f"{CLR_BG_GREEN}    NORMAL    {CLR_RESET}"
+
+        # Model ML Result / Buffer Status
+        buf_len = len(feature_engine.buffer) if feature_engine else 0
+        buf_max = feature_engine.window_size if feature_engine else 15
+        thresh_val = getattr(anomaly_detector, "anomaly_threshold", 0.2535) if anomaly_detector else 0.2535
+
+        if buf_len < buf_max:
+            ml_str = f"{CLR_DIM}Buffer ({buf_len:2d}/{buf_max:2d})  {CLR_RESET}"
+        else:
+            if feedback.anomaly_score < thresh_val:
+                ml_str = f"{CLR_RED}{CLR_BOLD}Skor: {feedback.anomaly_score:+.3f} ⚠ {CLR_RESET}"
+            else:
+                ml_str = f"{CLR_GREEN}Skor: {feedback.anomaly_score:+.3f}   {CLR_RESET}"
+
+        # Buzzer State Formatting
+        if feedback.buzzer_active:
+            buzz_str = f"{CLR_BG_RED} 🔊 AKTIF {CLR_RESET}"
+        else:
+            buzz_str = f"{CLR_DIM} 🔇 Mati  {CLR_RESET}"
+
+        # Tampilkan Header setiap 25 baris
+        if msg_counter % 25 == 0:
+            print(TABLE_HEADER, flush=True)
+        msg_counter += 1
+
+        # Baris Tabular Rapi
+        row = f" {now_str}   {dt_str}  {hr_str}  {spo2_str}  {temp_str}   {sqa_str}   {stat_str}   {ml_str}   {buzz_str}"
+        print(row, flush=True)
+        logger.debug(f"MQTT Rx: dev={device_id} status={feedback.status} hr={hr_val} temp={temp_val} buzz={feedback.buzzer_active}")
 
     except Exception as e:
         logger.error(f"Error handling MQTT message on {message.topic}: {e}")
