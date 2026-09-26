@@ -171,20 +171,41 @@ def process_telemetry(payload_dict: dict, publish_mqtt: bool = False) -> Tuple[F
 
 
 def on_mqtt_connect(client, userdata, flags, rc, properties=None):
-    logger.info(f"Connected to MQTT broker with rc={rc}")
-    client.subscribe("physio/+/telemetry")
-    logger.info("Subscribed to topic: physio/+/telemetry")
+    logger.info(f"Connected to MQTT broker ({settings.mqtt_host}:{settings.mqtt_port}) with rc={rc}")
+    topics = [
+        (settings.mqtt_topic, 0),
+        ("physio/+/telemetry", 0),
+    ]
+    client.subscribe(topics)
+    logger.info(f"Subscribed to MQTT topics: {[t[0] for t in topics]}")
 
 
 def on_mqtt_message(client, userdata, message):
     try:
         payload_str = message.payload.decode("utf-8")
         payload_dict = json.loads(payload_str)
-        # Ekstrak device_id dari topik jika tidak ada dalam payload
+
+        # Ekstrak device_id jika ada di topik, atau beri nama default untuk device teman
         topic_parts = message.topic.split("/")
         if len(topic_parts) >= 3 and "device_id" not in payload_dict:
             payload_dict["device_id"] = topic_parts[1]
-        process_telemetry(payload_dict, publish_mqtt=True)
+        elif "device_id" not in payload_dict:
+            payload_dict["device_id"] = "esp32_hardware"
+
+        # Log payload mentah yang diterima dari device
+        logger.info(f"📡 [MQTT DITERIMA] Topik: {message.topic} | Payload: {payload_str}")
+
+        # Jangan kirim feedback MQTT jika device belum subscribe (hanya kirim jika topic physio/)
+        should_publish_feedback = message.topic.startswith("physio/")
+        feedback, dash = process_telemetry(payload_dict, publish_mqtt=should_publish_feedback)
+
+        # Log hasil inferensi ML secara eksplisit
+        thresh_val = getattr(anomaly_detector, "anomaly_threshold", 0.0) if anomaly_detector else 0.0
+        logger.info(
+            f"🔬 [INFERENSI ML] Device: {feedback.device_id} | Status: {feedback.status} | SQA: {feedback.sqa_status} | "
+            f"Anomaly Score: {feedback.anomaly_score:+.4f} (Thresh FPR 13%: {thresh_val:.4f}) | "
+            f"Buzzer Alarm: {feedback.buzzer_active} | [Catatan: SpO2 masih statis 98.0%]"
+        )
     except Exception as e:
         logger.error(f"Error handling MQTT message on {message.topic}: {e}")
 
@@ -192,23 +213,25 @@ def on_mqtt_message(client, userdata, message):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global anomaly_detector, mqtt_client, main_loop
+    import uuid
     logger.info("Starting up FastAPI application...")
     main_loop = asyncio.get_running_loop()
 
     # Inisialisasi model ML Fase 1
     anomaly_detector = AnomalyDetector()
 
-    # Inisialisasi MQTT client background worker
+    # Inisialisasi MQTT client background worker dengan unique Client ID untuk broker HiveMQ publik
+    client_id = f"backend-physio-{uuid.uuid4().hex[:8]}"
     if hasattr(mqtt, "CallbackAPIVersion"):
-        mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
     else:
-        mqtt_client = mqtt.Client()
+        mqtt_client = mqtt.Client(client_id=client_id)
 
     mqtt_client.on_connect = on_mqtt_connect
     mqtt_client.on_message = on_mqtt_message
 
     try:
-        logger.info(f"Connecting to MQTT broker at {settings.mqtt_host}:{settings.mqtt_port}...")
+        logger.info(f"Connecting to MQTT broker at {settings.mqtt_host}:{settings.mqtt_port} (Client ID: {client_id})...")
         mqtt_client.connect(settings.mqtt_host, settings.mqtt_port, keepalive=60)
         mqtt_client.loop_start()
         logger.info("MQTT background loop started successfully.")

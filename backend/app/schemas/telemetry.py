@@ -53,8 +53,46 @@ class TelemetryPayload(BaseModel):
                     seq = int(data["network"].get("sequence_id", 0))
             data.setdefault("sequence_id", seq)
 
-            # Jika data menggunakan format firmware (ada blok 'telemetry')
-            if "telemetry" in data and isinstance(data["telemetry"], dict):
+            # 1. Format Flat dari Arduino_code.ino asli (contoh: {"hr": 75.0, "spo2": 98.0, "temp": 36.5, "status": "NORMAL"})
+            if "hr" in data or ("temp" in data and "raw_sensors" not in data and "telemetry" not in data):
+                import time
+                data.setdefault("device_id", "esp32_hardware")
+                
+                # Timestamp fallback ke epoch milliseconds saat ini
+                if "timestamp" not in data:
+                    data["timestamp"] = int(time.time() * 1000)
+                if "timestamp_ms" not in data:
+                    data["timestamp_ms"] = data["timestamp"]
+
+                hr = float(data.get("hr", 0.0))
+                spo2 = float(data.get("spo2", 98.0))
+                temp = float(data.get("temp", 0.0))
+                status_str = str(data.get("status", "NORMAL"))
+                
+                # Heuristik deteksi jari: jika status "MENUNGGU_SENSOR" atau HR <= 0
+                is_menunggu = (status_str.upper() == "MENUNGGU_SENSOR") or (hr <= 0.0)
+                amp = 0.0 if is_menunggu else 2000.0
+
+                if "raw_sensors" not in data:
+                    data["raw_sensors"] = {
+                        "heart_rate": hr,
+                        "spo2": spo2,
+                        "temperature": temp,
+                    }
+                if "sensor_status" not in data:
+                    data["sensor_status"] = {
+                        "max30102_ok": not is_menunggu,
+                        "ds18b20_ok": temp > 0,
+                        "ppg_amplitude": amp,
+                    }
+                if "network" not in data:
+                    data["network"] = {
+                        "wifi_rssi": int(data.get("wifi_rssi", -50)),
+                        "sequence_id": seq,
+                    }
+
+            # 2. Jika data menggunakan format firmware scaffold (ada blok 'telemetry')
+            elif "telemetry" in data and isinstance(data["telemetry"], dict):
                 t = data["telemetry"]
                 if "raw_sensors" not in data:
                     data["raw_sensors"] = {

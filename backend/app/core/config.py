@@ -7,8 +7,9 @@ class Settings(BaseSettings):
     """
     Konfigurasi aplikasi backend dan parameter SQA & model.
     """
-    mqtt_host: str = "localhost"
+    mqtt_host: str = "broker.hivemq.com"
     mqtt_port: int = 1883
+    mqtt_topic: str = "skripsi/physiomonitor/data"
     server_host: str = "0.0.0.0"
     server_port: int = 8000
     model_path: str = "ml_pipeline/models/isolation_forest_model.joblib"

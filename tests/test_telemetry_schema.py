@@ -60,3 +60,31 @@ def test_feedback_payload_defaults():
     assert data["buzzer_active"] is False
     assert data["display"]["line_status"] == "NORMAL"
     assert data["display"]["oled_mode"] == "STANDARD"
+
+def test_arduino_code_flat_json_normal():
+    # Format persis seperti yang dikirim oleh Esp/Arduino_code.ino
+    flat_data = {
+        "hr": 75.5,
+        "spo2": 98.0,
+        "temp": 36.6,
+        "status": "NORMAL"
+    }
+    payload = TelemetryPayload.model_validate(flat_data)
+    assert payload.device_id == "esp32_hardware"
+    assert payload.raw_sensors.heart_rate == 75.5
+    assert payload.raw_sensors.spo2 == 98.0
+    assert payload.raw_sensors.temperature == 36.6
+    assert payload.sensor_status.max30102_ok is True
+    assert payload.sensor_status.ppg_amplitude == 2000.0
+
+def test_arduino_code_flat_json_menunggu_sensor():
+    flat_data = {
+        "hr": 0.0,
+        "spo2": 98.0,
+        "temp": 36.5,
+        "status": "MENUNGGU_SENSOR"
+    }
+    payload = TelemetryPayload.model_validate(flat_data)
+    assert payload.sensor_status.max30102_ok is False
+    assert payload.sensor_status.ppg_amplitude == 0.0
+
