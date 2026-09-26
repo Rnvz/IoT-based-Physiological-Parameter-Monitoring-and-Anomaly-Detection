@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 import asyncio
 import json
 import logging
+import time
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import paho.mqtt.client as mqtt
 
@@ -28,6 +30,7 @@ persistent_evaluator = PersistentAnomalyEvaluator()
 mqtt_client: Optional[mqtt.Client] = None
 main_loop: Optional[asyncio.AbstractEventLoop] = None
 last_telemetry: Dict[str, TelemetryPayload] = {}
+last_arrival_time: Dict[str, float] = {}
 
 
 class ConnectionManager:
@@ -182,6 +185,8 @@ def on_mqtt_connect(client, userdata, flags, rc, properties=None):
 
 def on_mqtt_message(client, userdata, message):
     try:
+        now = time.time()
+        now_str = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         payload_str = message.payload.decode("utf-8")
         payload_dict = json.loads(payload_str)
 
@@ -192,20 +197,84 @@ def on_mqtt_message(client, userdata, message):
         elif "device_id" not in payload_dict:
             payload_dict["device_id"] = "esp32_hardware"
 
-        # Log payload mentah yang diterima dari device
-        logger.info(f"📡 [MQTT DITERIMA] Topik: {message.topic} | Payload: {payload_str}")
+        device_id = payload_dict["device_id"]
 
-        # Jangan kirim feedback MQTT jika device belum subscribe (hanya kirim jika topic physio/)
+        # Hitung interval kedatangan (delta time)
+        prev_time = last_arrival_time.get(device_id)
+        if prev_time is not None:
+            delta_ms = (now - prev_time) * 1000.0
+            if delta_ms > 1000.0:
+                delta_str = f"\033[93mΔt={delta_ms:4.0f}ms (LAG!)\033[0m"
+            else:
+                delta_str = f"\033[96mΔt={delta_ms:4.0f}ms\033[0m"
+        else:
+            delta_str = "\033[90mΔt=  ---ms\033[0m"
+        last_arrival_time[device_id] = now
+
+        # Jalankan pipeline pemrosesan telemetri
         should_publish_feedback = message.topic.startswith("physio/")
         feedback, dash = process_telemetry(payload_dict, publish_mqtt=should_publish_feedback)
+        telemetry = last_telemetry.get(device_id)
 
-        # Log hasil inferensi ML secara eksplisit
+        # Kode Warna ANSI untuk Tampilan Terminal
+        CLR_RESET = "\033[0m"
+        CLR_BOLD = "\033[1m"
+        CLR_DIM = "\033[2m"
+        CLR_RED = "\033[91m"
+        CLR_GREEN = "\033[92m"
+        CLR_YELLOW = "\033[93m"
+        CLR_CYAN = "\033[96m"
+        CLR_BG_RED = "\033[41m\033[37m\033[1m"
+        CLR_BG_GREEN = "\033[42m\033[30m\033[1m"
+        CLR_BG_YELLOW = "\033[43m\033[30m\033[1m"
+
+        # Badge SQA
+        if feedback.sqa_status == "GOOD":
+            sqa_badge = f"{CLR_GREEN}GOOD{CLR_RESET}"
+        else:
+            sqa_badge = f"{CLR_YELLOW}{feedback.sqa_status}{CLR_RESET}"
+
+        # Badge Status Fisiologis
+        if feedback.status == "anomaly":
+            status_badge = f"{CLR_BG_RED} ANOMALI {CLR_RESET}"
+        elif feedback.status == "cek_sensor":
+            status_badge = f"{CLR_BG_YELLOW} CEK SENSOR {CLR_RESET}"
+        else:
+            status_badge = f"{CLR_BG_GREEN} NORMAL {CLR_RESET}"
+
+        # Indikator Buzzer Alarm
+        if feedback.buzzer_active:
+            alarm_badge = f"{CLR_RED}{CLR_BOLD}🔊 [ALARM ON!]{CLR_RESET}"
+        else:
+            alarm_badge = f"{CLR_DIM}🔇 [Buzzer Off]{CLR_RESET}"
+
+        # Nilai Sensor
+        hr_val = telemetry.raw_sensors.heart_rate if telemetry else 0.0
+        spo2_val = telemetry.raw_sensors.spo2 if telemetry else 0.0
+        temp_val = telemetry.raw_sensors.temperature if telemetry else 0.0
+
+        # Skor Model & Threshold
         thresh_val = getattr(anomaly_detector, "anomaly_threshold", 0.0) if anomaly_detector else 0.0
-        logger.info(
-            f"🔬 [INFERENSI ML] Device: {feedback.device_id} | Status: {feedback.status} | SQA: {feedback.sqa_status} | "
-            f"Anomaly Score: {feedback.anomaly_score:+.4f} (Thresh FPR 13%: {thresh_val:.4f}) | "
-            f"Buzzer Alarm: {feedback.buzzer_active} | [Catatan: SpO2 masih statis 98.0%]"
+        score_str = f"Score: {feedback.anomaly_score:+.3f} (T: {thresh_val:.4f})"
+
+        # Indikator Buffer saat tahap inisialisasi
+        buffer_info = ""
+        if feature_engine and len(feature_engine.buffer) < feature_engine.window_size:
+            buffer_info = f" {CLR_DIM}(Buffer {len(feature_engine.buffer)}/15){CLR_RESET}"
+
+        # Format Tampilan Baris Log Real-Time yang Rapi dan Mudah Dipantau
+        log_line = (
+            f"\033[90m[\033[0m{now_str} \033[90m|\033[0m {delta_str}\033[90m]\033[0m "
+            f"HR: {CLR_BOLD}{hr_val:5.1f}{CLR_RESET} bpm \033[90m|\033[0m "
+            f"SpO2: {CLR_BOLD}{spo2_val:4.1f}%{CLR_RESET} \033[90m|\033[0m "
+            f"Temp: {CLR_BOLD}{temp_val:4.1f}°C \033[90m│\033[0m "
+            f"SQA: {sqa_badge} \033[90m│\033[0m {status_badge} \033[90m│\033[0m "
+            f"{score_str}{buffer_info} \033[90m│\033[0m {alarm_badge}"
         )
+
+        print(log_line, flush=True)
+        logger.info(f"MQTT Rx: dev={device_id} status={feedback.status} hr={hr_val} temp={temp_val} buzz={feedback.buzzer_active}")
+
     except Exception as e:
         logger.error(f"Error handling MQTT message on {message.topic}: {e}")
 
