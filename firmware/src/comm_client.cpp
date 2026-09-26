@@ -28,13 +28,25 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
         return;
     }
 
-    // Mendapatkan data dari JSON (contoh format backend)
-    const char* status_str = doc["status"]; // "normal" atau "anomaly"
+    // Mendapatkan data dari JSON feedback backend
+    const char* status_str = doc["status"];
     bool buzzer_active = doc["buzzer_active"] | false;
 
-    SystemStatus new_status = NORMAL;
-    if (status_str && strcmp(status_str, "anomaly") == 0) {
-        new_status = ANOMALI;
+    SystemStatus new_status = STATUS_NORMAL;
+    if (status_str) {
+        if (strcmp(status_str, "HIGH DEVIATION (SUSTAINED)") == 0) {
+            new_status = STATUS_HIGH_DEVIATION_SUSTAINED;
+        } else if (strcmp(status_str, "HIGH DEVIATION") == 0) {
+            new_status = STATUS_HIGH_DEVIATION;
+        } else if (strcmp(status_str, "LOW DEVIATION (SUSTAINED)") == 0) {
+            new_status = STATUS_LOW_DEVIATION_SUSTAINED;
+        } else if (strcmp(status_str, "LOW DEVIATION") == 0) {
+            new_status = STATUS_LOW_DEVIATION;
+        } else if (strcmp(status_str, "SIGNAL QUALITY LOW") == 0) {
+            new_status = STATUS_SIGNAL_QUALITY_LOW;
+        } else {
+            new_status = STATUS_NORMAL;
+        }
     }
 
     if (fb_callback) {
@@ -125,9 +137,12 @@ void comm_send_telemetry(const SensorData& data, SystemStatus current_status) {
     telemetry["finger_detected"] = data.finger_detected;
 
     // Status
-    const char* status_str = "normal";
-    if (current_status == CEK_SENSOR) status_str = "cek_sensor";
-    else if (current_status == ANOMALI) status_str = "anomaly";
+    const char* status_str = "NORMAL";
+    if (current_status == STATUS_SIGNAL_QUALITY_LOW) status_str = "SIGNAL QUALITY LOW";
+    else if (current_status == STATUS_LOW_DEVIATION) status_str = "LOW DEVIATION";
+    else if (current_status == STATUS_LOW_DEVIATION_SUSTAINED) status_str = "LOW DEVIATION (SUSTAINED)";
+    else if (current_status == STATUS_HIGH_DEVIATION) status_str = "HIGH DEVIATION";
+    else if (current_status == STATUS_HIGH_DEVIATION_SUSTAINED) status_str = "HIGH DEVIATION (SUSTAINED)";
     doc["status"] = status_str;
 
     char jsonBuffer[512];

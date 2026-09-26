@@ -98,10 +98,15 @@ with b2:
     st.subheader("Status")
     if st.session_state.data_buffer:
         diag = latest['diagnostics']
-        if diag['sqa_status'] != "GOOD":
-            st.error("CEK SENSOR")
+        severity = diag.get('severity', '')
+        if diag.get('sqa_status') != "GOOD":
+            st.warning("SIGNAL QUALITY LOW")
+        elif "HIGH DEVIATION" in severity:
+            st.error(severity)
+        elif "LOW DEVIATION" in severity:
+            st.warning(severity)
         elif diag.get('is_anomaly'):
-            st.warning("ANOMALI")
+            st.warning("DEVIATION")
         else:
             st.success("NORMAL")
 

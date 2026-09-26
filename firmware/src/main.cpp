@@ -8,7 +8,7 @@
 
 // State Global
 SensorData current_sensor_data;
-SystemStatus current_system_status = NORMAL;
+SystemStatus current_system_status = STATUS_NORMAL;
 
 // Manajemen Waktu
 unsigned long last_sensor_read_time = 0;
@@ -79,11 +79,11 @@ void loop() {
 
         // Update status lokal jika tidak ada jari
         if (!current_sensor_data.finger_detected) {
-            current_system_status = CEK_SENSOR;
-        } else if (current_system_status == CEK_SENSOR) {
-            // Jika jari kembali terdeteksi dan status sebelumnya CEK_SENSOR, kembalikan ke NORMAL
-            // (Status ANOMALI hanya diubah oleh feedback dari server)
-            current_system_status = NORMAL;
+            current_system_status = STATUS_SIGNAL_QUALITY_LOW;
+        } else if (current_system_status == STATUS_SIGNAL_QUALITY_LOW) {
+            // Jika jari kembali terdeteksi dan status sebelumnya STATUS_SIGNAL_QUALITY_LOW, kembalikan ke STATUS_NORMAL
+            // (Status deviasi hanya diubah oleh feedback dari server)
+            current_system_status = STATUS_NORMAL;
         }
 
         // Kirim telemetri (hanya dikirim jika WiFi terhubung)

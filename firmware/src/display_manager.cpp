@@ -64,14 +64,23 @@ void display_update(const SensorData& data, SystemStatus status, bool wifi_conne
     display.setCursor(0, 52);
     display.print("STATUS : ");
     switch (status) {
-        case NORMAL:
+        case STATUS_NORMAL:
             display.println("NORMAL");
             break;
-        case CEK_SENSOR:
-            display.println("CEK SENSOR");
+        case STATUS_LOW_DEVIATION:
+            display.println("LOW DEV");
             break;
-        case ANOMALI:
-            display.println("ANOMALI");
+        case STATUS_LOW_DEVIATION_SUSTAINED:
+            display.println("LOW DEV (S)");
+            break;
+        case STATUS_HIGH_DEVIATION:
+            display.println("HIGH DEV");
+            break;
+        case STATUS_HIGH_DEVIATION_SUSTAINED:
+            display.println("HIGH DEV (S)");
+            break;
+        case STATUS_SIGNAL_QUALITY_LOW:
+            display.println("SIG QUAL LOW");
             break;
     }
 

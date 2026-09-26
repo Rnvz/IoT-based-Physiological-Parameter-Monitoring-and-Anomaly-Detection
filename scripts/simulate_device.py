@@ -48,7 +48,7 @@ def on_message(client, userdata, msg):
         display = data.get("display", {}).get("line_status", "-")
 
         buzz_str = "🔊 [BUZZER AKTIF!]" if buzz else "🔇 [Buzzer Mati]"
-        print(f"  └── 📩 [RECV FEEDBACK] Seq={seq:2} | Status={status:<10} | SQA={sqa:<12} | Score={score:+.3f} | OLED={display:<10} | {buzz_str}")
+        print(f"  └── 📩 [RECV FEEDBACK] Seq={seq:2} | Status={status:<26} | SQA={sqa:<12} | Score={score:+.3f} | OLED={display:<12} | {buzz_str}")
     except Exception as e:
         print(f"  └── ⚠️ Gagal decode feedback: {e}")
 
@@ -144,16 +144,16 @@ def run_simulation(host: str, port: int, topic: str = TELEMETRY_TOPIC, is_flat: 
     time.sleep(1.0)
 
     # --------------------------------------------------------------------------
-    # SKENARIO 4: Anomali Persisten (4 Sampel Berturut-turut) & Pemulihan
+    # SKENARIO 4: Anomali Persisten (11 Sampel -> Uji Status SUSTAINED >= 10 Sampel) & Pemulihan
     # --------------------------------------------------------------------------
-    print("\n--- [SKENARIO 4] Anomali Persisten (4 Sampel Anomali -> 1 Sampel Pemulihan) ---")
-    for i in range(4):
-        send_telemetry(client, topic, seq, hr=145.0 + i * 2, spo2=86.0 - i, temp=39.5 + i * 0.2, amp=1800.0, finger=True, is_flat=is_flat, scenario_desc=f"Anomali Persisten #{i+1}")
+    print("\n--- [SKENARIO 4] Anomali Persisten (11 Sampel -> Uji Status SUSTAINED >= 10 Sampel) ---")
+    for i in range(11):
+        send_telemetry(client, topic, seq, hr=145.0 + i * 1, spo2=86.0, temp=39.5, amp=1800.0, finger=True, is_flat=is_flat, scenario_desc=f"Deviasi Persisten #{i+1}")
         seq += 1
         time.sleep(1.0)
 
-    # 1 Sampel pemulihan normal
-    send_telemetry(client, topic, seq, hr=75.0, spo2=98.0, temp=36.5, amp=2400.0, finger=True, is_flat=is_flat, scenario_desc="Pemulihan Normal")
+    # 1 Sampel pemulihan normal (Strict Reset)
+    send_telemetry(client, topic, seq, hr=75.0, spo2=98.0, temp=36.5, amp=2400.0, finger=True, is_flat=is_flat, scenario_desc="Pemulihan Normal (Strict Reset)")
     seq += 1
     time.sleep(1.5)
 

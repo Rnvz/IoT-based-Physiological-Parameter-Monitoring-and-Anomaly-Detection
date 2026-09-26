@@ -56,6 +56,16 @@ Sistem pemantauan parameter fisiologis (Heart Rate, SpO2, Suhu Tubuh) berbasis I
 4. **Mekanisme Debounce di Backend**:
    - `PersistentAnomalyEvaluator`: **Strict Reset** (`count = 0` seketika saat terdeteksi normal, trigger alarm saat `count >= 3`).
 
+5. **Skema Terminologi Status Severity (Non-Diagnostik — Terinspirasi NEWS)**:
+   Sistem mengadopsi terminologi *severity* bergradasi yang sejalan dengan sistem **National Early Warning Score (NEWS / EWS)** di layanan kesehatan rumah sakit. Istilah *"deviation"* murni bersifat statistik (penyimpangan pola dari distribusi normal) dan tidak menyebut kondisi medis atau penyakit tertentu, menjaga kepatuhan penuh terhadap Batasan Sistem (Constraint #1 — Non-Diagnostik):
+   - `NORMAL`: Pola fisiologis dalam batas normal (OLED: `NORMAL`).
+   - `LOW DEVIATION`: Terdeteksi deviasi ringan atau skor ML menyimpang (< 10 sampel) (OLED: `LOW DEV`).
+   - `LOW DEVIATION (SUSTAINED)`: Deviasi ringan bertahan $\ge 10$ sampel kontinu (OLED: `LOW DEV (S)`).
+   - `HIGH DEVIATION`: Terdeteksi deviasi tajam/kritis (< 10 sampel) (OLED: `HIGH DEV`).
+   - `HIGH DEVIATION (SUSTAINED)`: Deviasi tajam bertahan $\ge 10$ sampel kontinu (OLED: `HIGH DEV (S)`).
+   - `SIGNAL QUALITY LOW`: Filter SQA mendeteksi sinyal optik tidak reliabel / jari lepas (OLED: `SIG QUAL LOW`). Alarm diredam otomatis untuk menghindari false alarm.
+   - **Logika Alarm Buzzer**: Aktif jika deviasi bertahan $\ge 3$ sampel (`threshold = 3`), dan seketika mati saat kembali normal (Strict Reset).
+
 ---
 
 ## Perintah Eksekusi Pipeline
@@ -73,3 +83,11 @@ python ml_pipeline/src/train_isolation_forest.py
 # 4. Verifikasi unit tests
 pytest tests/ -v
 ```
+
+---
+
+## Batasan & Aturan Operasional AI Agent (AI Agent Rules)
+
+- **Strict User Intent Adherence**:
+  Jangan menambahkan logika, rule, atau parameter apapun yang TIDAK diminta secara eksplisit oleh user -- termasuk 'asumsi wajar' berdasarkan referensi yang disebutkan user (misal: menambahkan rule tanda vital karena user menyebut 'NEWS' sebagai inspirasi terminologi, padahal user hanya minta penamaan istilah, bukan logika scoring NEWS yang sesungguhnya). Jika ragu apakah sesuatu termasuk dalam permintaan atau ekstrapolasi sendiri, TANYA dulu sebelum implementasi, jangan berasumsi lalu laporkan sebagai selesai.
+

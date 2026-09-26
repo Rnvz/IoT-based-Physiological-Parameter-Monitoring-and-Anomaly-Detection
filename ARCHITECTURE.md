@@ -32,25 +32,27 @@ flowchart TD
         
         Ingestion --> SQA["Signal Quality Assessment (SQA)"]
         
-        SQA -->|Kualitas Rendah / Kontak Lepas| LowSQARoute["Status: KUALITAS SINYAL RENDAH"]
+        SQA -->|Kualitas Rendah / Kontak Lepas| LowSQARoute["Status: SIGNAL QUALITY LOW"]
         SQA -->|Kualitas Baik / Memadai| FeatureEngine["Temporal Feature Fusion Engine"]
         
         subgraph FeatureEngineDetails ["Feature Fusion & Temporal Engine"]
             FeatureEngine --> CalcStats["Kalkulasi Rolling Window: Moving Avg, Variance, Delta, Rate of Change"]
-            CalcStats --> FeatureVector["14-Dimensional Feature Vector"]
+            CalcStats --> FeatureVector["13-Dimensional Feature Vector"]
         end
         
         FeatureVector --> MLInference["Isolation Forest Anomaly Detection"]
         FeatureVector --> BaselineInference["Single-Parameter Threshold Comparator"]
         
-        MLInference --> PersistentCheck["Persistent Anomaly Evaluator (Debounce Filter)"]
+        MLInference --> PersistentCheck["Persistent Anomaly Evaluator (Debounce & Severity)"]
         BaselineInference -.-> LogComparator["Benchmark Logging & Evaluation"]
         
-        PersistentCheck -->|Kombinasi Normal| NormalStatus["Status: NORMAL"]
-        PersistentCheck -->|Menyimpang Konsisten (N-Window)| AnomalyStatus["Status: POLA MENYIMPANG"]
+        PersistentCheck -->|Profil Normal| NormalStatus["Status: NORMAL"]
+        PersistentCheck -->|Deviasi Ringan| LowDev["Status: LOW DEVIATION / (SUSTAINED)"]
+        PersistentCheck -->|Deviasi Tinggi / Kritis| HighDev["Status: HIGH DEVIATION / (SUSTAINED)"]
         
         NormalStatus --> StatusDispatcher["Status & Feedback Dispatcher"]
-        AnomalyStatus --> StatusDispatcher
+        LowDev --> StatusDispatcher
+        HighDev --> StatusDispatcher
         LowSQARoute --> StatusDispatcher
         
         StatusDispatcher --> StorageLog["Local SQLite / Time-Series CSV Storage"]
@@ -74,7 +76,7 @@ flowchart TD
 | :--- | :--- | :--- |
 | **Edge Hardware** | `MAX30102 Driver` | Membaca sinyal optik PPG (Red & IR LED), mengekstrak estimasi HR dan SpO₂ dasar. |
 | | `DS18B20 Driver` | Mengonversi sinyal digital suhu permukaan kulit secara akurat. |
-| | `OLED Manager` | Merender teks parameter instan dan status operasional (`NORMAL`, `CEK SENSOR`, `ANOMALI`). |
+| | `OLED Manager` | Merender teks parameter instan dan status operasional (`NORMAL`, `LOW DEV`, `LOW DEV (S)`, `HIGH DEV`, `HIGH DEV (S)`, `SIG QUAL LOW`). |
 | | `Buzzer Controller` | Mengatur alarm audio aktif dengan proteksi *fail-safe* dan pemutus otomatis (*time-out*). |
 | | `Edge Fail-Safe` | Jika Wi-Fi putus, tetap jalankan pembacaan lokal mandiri tanpa *blocking* / *crash*. |
 | **Backend Ingestion** | `Gateway / Receiver` | Menerima paket JSON dari ESP32 via broker MQTT atau endpoint WebSocket/REST. |
@@ -142,10 +144,15 @@ Dikirimkan dari backend ke ESP32 via MQTT topik `physio/device/feedback` atau re
 }
 ```
 
-#### Kondisi Status Payload:
-- **Kondisi Normal**: `"status": "NORMAL"`, `"buzzer_active": false`, `"display": {"line_status": "NORMAL"}`
-- **Kondisi Anomali Konsisten**: `"status": "ANOMALI"`, `"buzzer_active": true`, `"display": {"line_status": "ANOMALI"}`
-- **Kondisi Kontak Lepas / Noise**: `"status": "CEK SENSOR"`, `"buzzer_active": false`, `"display": {"line_status": "CEK SENSOR"}`
+#### Taksonomi Status Severity (Terinspirasi National Early Warning Score / NEWS):
+Sistem menggunakan istilah keparahan fisiologis berbasis deviasi non-diagnostik yang sejalan dengan sistem **National Early Warning Score (NEWS / EWS)** di monitoring klinis rumah sakit. Kata *"deviation"* murni merupakan representasi deviasi statistik multidimensi dari distribusi normal, tanpa klaim diagnostik penyakit tertentu (mematuhi Batasan Sistem / Constraint #1):
+
+1. **`NORMAL`**: Vital fisiologis dalam rentang referensi dan model ML mengenali pola sebagai inlier (OLED: `NORMAL`, Buzzer: `false`).
+2. **`LOW DEVIATION`**: Terdeteksi deviasi ringan atau skor ML menyimpang di bawah ambang batas deteksi (< 10 sampel berturut-turut) (OLED: `LOW DEV`, Buzzer: `true` jika $\ge 3$ sampel).
+3. **`LOW DEVIATION (SUSTAINED)`**: Deviasi ringan bertahan secara persisten $\ge 10$ sampel kontinu (OLED: `LOW DEV (S)`, Buzzer: `true`).
+4. **`HIGH DEVIATION`**: Terdeteksi deviasi tajam/kritis (misal HR > 125/< 45, SpO2 < 90%, demam $\ge 38.5$°C, atau skor ML ekstrim) (< 10 sampel) (OLED: `HIGH DEV`, Buzzer: `true` jika $\ge 3$ sampel).
+5. **`HIGH DEVIATION (SUSTAINED)`**: Deviasi tajam/kritis bertahan $\ge 10$ sampel kontinu (OLED: `HIGH DEV (S)`, Buzzer: `true`).
+6. **`SIGNAL QUALITY LOW`**: Kualitas sinyal PPG dinilai buruk oleh filter SQA (motion artifact, jari lepas, sinyal saturasi/nol) (OLED: `SIG QUAL LOW`, Buzzer: `false`). Menggantikan istilah lama `CEK SENSOR` demi konsistensi terminologi teknis.
 
 ---
 

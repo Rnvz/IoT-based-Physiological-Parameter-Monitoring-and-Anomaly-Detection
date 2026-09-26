@@ -4,9 +4,12 @@
 #include "sensors.h"
 
 enum SystemStatus {
-    NORMAL,
-    CEK_SENSOR,
-    ANOMALI
+    STATUS_NORMAL,
+    STATUS_LOW_DEVIATION,
+    STATUS_LOW_DEVIATION_SUSTAINED,
+    STATUS_HIGH_DEVIATION,
+    STATUS_HIGH_DEVIATION_SUSTAINED,
+    STATUS_SIGNAL_QUALITY_LOW
 };
 
 void display_init();

@@ -35,8 +35,8 @@ last_arrival_time: Dict[str, float] = {}
 msg_counter: int = 0
 
 TABLE_HEADER = (
-    f"\n\033[1m\033[96m  WAKTU        INTERVAL   HR INSTAN    ΔHR      MA_HR    VAR_HR   SpO2    SUHU     SQA       STATUS        HASIL MODEL ML      BUZZER\033[0m\n"
-    f"\033[2m " + "─" * 126 + "\033[0m"
+    f"\n\033[1m\033[96m  WAKTU        INTERVAL   HR INSTAN    d_HR     MA_HR    VAR_HR   SpO2    SUHU     SQA           STATUS           HASIL MODEL ML      BUZZER\033[0m\n"
+    f"\033[2m " + "-" * 130 + "\033[0m"
 )
 
 
@@ -103,27 +103,24 @@ def process_telemetry(payload_dict: dict, publish_mqtt: bool = False) -> Tuple[F
 
     if sqa_status == "GOOD" and features is not None and anomaly_detector is not None:
         anom_result = anomaly_detector.predict(features)
-        eval_result = persistent_evaluator.evaluate(anom_result.is_anomaly)
+        eval_result = persistent_evaluator.evaluate(anom_result.is_anomaly, anom_result.severity)
         is_anomaly = eval_result.is_persistent_anomaly
         anomaly_score = anom_result.anomaly_score
         should_buzz = eval_result.should_buzz
+        status = eval_result.severity
+        line_status = eval_result.oled_status
     else:
         # Jika SQA POOR atau buffer fitur belum penuh, redam alarm
         should_buzz = False
+        if sqa_status != "GOOD":
+            status = "SIGNAL QUALITY LOW"
+            line_status = "SIG QUAL LOW"
+        else:
+            status = "NORMAL"
+            line_status = "NORMAL"
 
     # Simpan telemetri terakhir
     last_telemetry[device_id] = telemetry
-
-    # Status untuk firmware ESP32 & tampilan OLED
-    if sqa_status != "GOOD":
-        status = "cek_sensor"
-        line_status = "CEK SENSOR"
-    elif is_anomaly:
-        status = "anomaly"
-        line_status = "ANOMALI"
-    else:
-        status = "normal"
-        line_status = "NORMAL"
 
     seq_id = telemetry.sequence_id if telemetry.sequence_id is not None else telemetry.network.sequence_id
 
@@ -153,6 +150,7 @@ def process_telemetry(payload_dict: dict, publish_mqtt: bool = False) -> Tuple[F
             "sqa_status": sqa_status,
             "anomaly_score": float(anomaly_score),
             "is_anomaly": is_anomaly,
+            "severity": status,
         },
         system={
             "rssi": telemetry.network.wifi_rssi,
@@ -214,7 +212,7 @@ def on_mqtt_message(client, userdata, message):
         if prev_time is not None:
             delta_s = now - prev_time
             if delta_s > 2.5:
-                dt_str = f"\033[93m{delta_s:5.2f}s ⚠\033[0m"
+                dt_str = f"\033[93m{delta_s:5.2f}s [!]\033[0m"
             else:
                 dt_str = f"\033[96m{delta_s:5.2f}s  \033[0m"
         else:
@@ -238,6 +236,7 @@ def on_mqtt_message(client, userdata, message):
         CLR_BG_RED = "\033[41m\033[97m\033[1m"
         CLR_BG_GREEN = "\033[42m\033[30m\033[1m"
         CLR_BG_YELLOW = "\033[43m\033[30m\033[1m"
+        CLR_BG_MAGENTA = "\033[45m\033[97m\033[1m"
 
         hr_val = telemetry.raw_sensors.heart_rate if telemetry else 0.0
         spo2_val = telemetry.raw_sensors.spo2 if telemetry else 0.0
@@ -262,7 +261,7 @@ def on_mqtt_message(client, userdata, message):
             delta_hr, ma_hr, var_hr = 0.0, 0.0, 0.0
 
         # HR Instan Formatting
-        if hr_val <= 0 or feedback.status == "cek_sensor":
+        if hr_val <= 0 or feedback.status == "SIGNAL QUALITY LOW":
             hr_str = f"{CLR_DIM}  -- bpm {CLR_RESET}"
         elif hr_val < 50 or hr_val > 110:
             hr_str = f"{CLR_RED}{CLR_BOLD}{hr_val:5.1f} bpm{CLR_RESET}"
@@ -270,7 +269,7 @@ def on_mqtt_message(client, userdata, message):
             hr_str = f"{CLR_WHITE}{CLR_BOLD}{hr_val:5.1f} bpm{CLR_RESET}"
 
         # Debug: ΔHR Formatting
-        if hr_val <= 0 or feedback.status == "cek_sensor":
+        if hr_val <= 0 or feedback.status == "SIGNAL QUALITY LOW":
             d_hr_str = f"{CLR_DIM}   --  {CLR_RESET}"
         elif abs(delta_hr) > 15.0:
             d_hr_str = f"{CLR_RED}{CLR_BOLD}{delta_hr:+6.1f} {CLR_RESET}"
@@ -278,13 +277,13 @@ def on_mqtt_message(client, userdata, message):
             d_hr_str = f"{CLR_CYAN}{delta_hr:+6.1f} {CLR_RESET}"
 
         # Debug: MA_HR Formatting
-        if hr_val <= 0 or feedback.status == "cek_sensor":
+        if hr_val <= 0 or feedback.status == "SIGNAL QUALITY LOW":
             ma_hr_str = f"{CLR_DIM}   --  {CLR_RESET}"
         else:
             ma_hr_str = f"{CLR_WHITE}{ma_hr:5.1f} {CLR_RESET}"
 
         # Debug: VAR_HR Formatting
-        if hr_val <= 0 or feedback.status == "cek_sensor":
+        if hr_val <= 0 or feedback.status == "SIGNAL QUALITY LOW":
             var_hr_str = f"{CLR_DIM}   --   {CLR_RESET}"
         elif var_hr > 50.0:
             var_hr_str = f"{CLR_RED}{CLR_BOLD}{var_hr:6.1f} {CLR_RESET}"
@@ -296,9 +295,9 @@ def on_mqtt_message(client, userdata, message):
 
         # Suhu Formatting
         if temp_val >= 38.0:
-            temp_str = f"{CLR_RED}{CLR_BOLD}{temp_val:4.1f}°C{CLR_RESET}"
+            temp_str = f"{CLR_RED}{CLR_BOLD}{temp_val:4.1f} C{CLR_RESET}"
         else:
-            temp_str = f"{CLR_WHITE}{temp_val:4.1f}°C{CLR_RESET}"
+            temp_str = f"{CLR_WHITE}{temp_val:4.1f} C{CLR_RESET}"
 
         # SQA Formatting
         if feedback.sqa_status == "GOOD":
@@ -306,32 +305,38 @@ def on_mqtt_message(client, userdata, message):
         else:
             sqa_str = f"{CLR_YELLOW}POOR{CLR_RESET}"
 
-        # Status Fisiologis Formatting
-        if feedback.status == "anomaly":
-            stat_str = f"{CLR_BG_RED}  ANOMALI  {CLR_RESET}"
-        elif feedback.status == "cek_sensor":
-            stat_str = f"{CLR_BG_YELLOW} CEK SENSOR{CLR_RESET}"
+        # Status Fisiologis Formatting (NEWS-inspired Non-Diagnostic Severity)
+        if feedback.status == "HIGH DEVIATION (SUSTAINED)":
+            stat_str = f"{CLR_BG_RED} HIGH DEV (S) {CLR_RESET}"
+        elif feedback.status == "HIGH DEVIATION":
+            stat_str = f"{CLR_BG_RED}   HIGH DEV   {CLR_RESET}"
+        elif feedback.status == "LOW DEVIATION (SUSTAINED)":
+            stat_str = f"{CLR_BG_MAGENTA} LOW DEV (S)  {CLR_RESET}"
+        elif feedback.status == "LOW DEVIATION":
+            stat_str = f"{CLR_BG_YELLOW}   LOW DEV    {CLR_RESET}"
+        elif feedback.status == "SIGNAL QUALITY LOW":
+            stat_str = f"\033[43m\033[30m\033[1m SIG QUAL LOW {CLR_RESET}"
         else:
-            stat_str = f"{CLR_BG_GREEN}  NORMAL   {CLR_RESET}"
+            stat_str = f"{CLR_BG_GREEN}    NORMAL    {CLR_RESET}"
 
         # Model ML Result / Buffer Status
         buf_len = len(feature_engine.buffer) if feature_engine else 0
         buf_max = feature_engine.window_size if feature_engine else 15
-        thresh_val = getattr(anomaly_detector, "anomaly_threshold", 0.2535) if anomaly_detector else 0.2535
+        thresh_val = getattr(anomaly_detector, "anomaly_threshold", 0.0629) if anomaly_detector else 0.0629
 
         if buf_len < buf_max:
             ml_str = f"{CLR_DIM}Buffer ({buf_len:2d}/{buf_max:2d})   {CLR_RESET}"
         else:
             if feedback.anomaly_score < thresh_val:
-                ml_str = f"{CLR_RED}{CLR_BOLD}Skor: {feedback.anomaly_score:+.3f} ⚠  {CLR_RESET}"
+                ml_str = f"{CLR_RED}{CLR_BOLD}Skor: {feedback.anomaly_score:+.3f} [!] {CLR_RESET}"
             else:
-                ml_str = f"{CLR_GREEN}Skor: {feedback.anomaly_score:+.3f}    {CLR_RESET}"
+                ml_str = f"{CLR_GREEN}Skor: {feedback.anomaly_score:+.3f}     {CLR_RESET}"
 
         # Buzzer State Formatting
         if feedback.buzzer_active:
-            buzz_str = f"{CLR_BG_RED} 🔊 AKTIF {CLR_RESET}"
+            buzz_str = f"{CLR_BG_RED}  AKTIF   {CLR_RESET}"
         else:
-            buzz_str = f"{CLR_DIM} 🔇 Mati  {CLR_RESET}"
+            buzz_str = f"{CLR_DIM}   Mati   {CLR_RESET}"
 
         # Tampilkan Header setiap 25 baris
         if msg_counter % 25 == 0:
