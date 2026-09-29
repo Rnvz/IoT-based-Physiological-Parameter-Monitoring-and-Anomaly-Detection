@@ -69,8 +69,12 @@ class TelemetryPayload(BaseModel):
                 temp = float(data.get("temp", 0.0))
                 status_str = str(data.get("status", "NORMAL"))
                 
-                # Heuristik deteksi jari: jika status "MENUNGGU_SENSOR" atau HR <= 0
-                is_menunggu = (status_str.upper() == "MENUNGGU_SENSOR") or (hr <= 0.0)
+                # Heuristik deteksi jari: jika status "MENUNGGU_SENSOR", "MENUNGGU SENSOR", "MENDETEKSI", atau HR <= 0 atau SpO2 <= 0
+                is_menunggu = (
+                    status_str.upper() in ["MENUNGGU_SENSOR", "MENUNGGU SENSOR", "MENDETEKSI"]
+                    or hr <= 0.0
+                    or spo2 <= 0.0
+                )
                 amp = 0.0 if is_menunggu else 2000.0
 
                 if "raw_sensors" not in data:
@@ -82,7 +86,7 @@ class TelemetryPayload(BaseModel):
                 if "sensor_status" not in data:
                     data["sensor_status"] = {
                         "max30102_ok": not is_menunggu,
-                        "ds18b20_ok": temp > 0,
+                        "ds18b20_ok": temp > 0.0,
                         "ppg_amplitude": amp,
                     }
                 if "network" not in data:

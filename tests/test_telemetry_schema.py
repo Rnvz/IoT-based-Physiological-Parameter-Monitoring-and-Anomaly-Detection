@@ -88,3 +88,37 @@ def test_arduino_code_flat_json_menunggu_sensor():
     assert payload.sensor_status.max30102_ok is False
     assert payload.sensor_status.ppg_amplitude == 0.0
 
+def test_arduino_code_flat_json_menunggu_sensor_with_space():
+    flat_data = {
+        "hr": 0.0,
+        "spo2": 0.0,
+        "temp": 36.5,
+        "status": "MENUNGGU SENSOR"
+    }
+    payload = TelemetryPayload.model_validate(flat_data)
+    assert payload.sensor_status.max30102_ok is False
+    assert payload.sensor_status.ppg_amplitude == 0.0
+    assert payload.raw_sensors.spo2 == 0.0
+
+def test_arduino_code_flat_json_mendeteksi():
+    flat_data = {
+        "hr": 0.0,
+        "spo2": 0.0,
+        "temp": 36.5,
+        "status": "MENDETEKSI"
+    }
+    payload = TelemetryPayload.model_validate(flat_data)
+    assert payload.sensor_status.max30102_ok is False
+    assert payload.sensor_status.ppg_amplitude == 0.0
+
+def test_arduino_code_flat_json_temp_disconnected():
+    flat_data = {
+        "hr": 76.0,
+        "spo2": 98.0,
+        "temp": 0.0,
+        "status": "NORMAL"
+    }
+    payload = TelemetryPayload.model_validate(flat_data)
+    assert payload.sensor_status.ds18b20_ok is False
+
+

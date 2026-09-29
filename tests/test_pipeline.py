@@ -21,7 +21,7 @@ def test_pipeline_normal_stream():
             "telemetry": {
                 "heart_rate": 75.0,
                 "spo2": 98.0,
-                "temperature": 32.5,
+                "temperature": 36.5,
                 "ppg_amplitude": 2500.0,
                 "finger_detected": True
             },
@@ -43,7 +43,7 @@ def test_pipeline_sqa_finger_off_triggers_signal_quality_low():
         "telemetry": {
             "heart_rate": 0.0,
             "spo2": 0.0,
-            "temperature": 32.5,
+            "temperature": 36.5,
             "ppg_amplitude": 0.0,
             "finger_detected": False
         },
@@ -67,9 +67,9 @@ def test_pipeline_persistent_anomaly_buzzes():
             "sequence_id": i + 1,
             "timestamp_ms": 10000 + i * 1000,
             "telemetry": {
-                "heart_rate": 150.0, # High tachycardia
-                "spo2": 85.0,        # Hypoxia
-                "temperature": 39.5, # Fever
+                "heart_rate": 160.0 + (i % 3) * 5.0, # High tachycardia with dynamics
+                "spo2": 82.0,        # Severe Hypoxia
+                "temperature": 39.5, # High Fever
                 "ppg_amplitude": 1500.0,
                 "finger_detected": True
             },
@@ -96,7 +96,7 @@ def test_pipeline_low_deviation_and_sustained():
             "telemetry": {
                 "heart_rate": 75.0,
                 "spo2": 98.0,
-                "temperature": 32.5,
+                "temperature": 36.5,
                 "ppg_amplitude": 2500.0,
                 "finger_detected": True
             },
@@ -104,16 +104,16 @@ def test_pipeline_low_deviation_and_sustained():
         }
         process_telemetry(sample, publish_mqtt=False)
 
-    # Send 4 mild anomaly samples (HR=105, SpO2=94) -> count=4 (>= 3 -> buzz=True, < 10 -> LOW DEVIATION)
+    # Send 4 mild anomaly samples (HR=88, SpO2=95, Temp=36.5) -> count=4 (>= 3 -> buzz=True, < 10 -> LOW DEVIATION)
     for i in range(4):
         sample = {
             "device_id": "test_esp32_low",
             "sequence_id": 20 + i,
             "timestamp_ms": 20000 + i * 1000,
             "telemetry": {
-                "heart_rate": 105.0,
-                "spo2": 94.0,
-                "temperature": 32.5,
+                "heart_rate": 88.0,
+                "spo2": 95.0,
+                "temperature": 36.5,
                 "ppg_amplitude": 2500.0,
                 "finger_detected": True
             },
@@ -131,9 +131,9 @@ def test_pipeline_low_deviation_and_sustained():
             "sequence_id": 30 + i,
             "timestamp_ms": 30000 + i * 1000,
             "telemetry": {
-                "heart_rate": 105.0,
-                "spo2": 94.0,
-                "temperature": 32.5,
+                "heart_rate": 88.0,
+                "spo2": 95.0,
+                "temperature": 36.5,
                 "ppg_amplitude": 2500.0,
                 "finger_detected": True
             },
@@ -153,7 +153,7 @@ def test_pipeline_low_deviation_and_sustained():
             "telemetry": {
                 "heart_rate": 75.0,
                 "spo2": 98.0,
-                "temperature": 32.5,
+                "temperature": 36.5,
                 "ppg_amplitude": 2500.0,
                 "finger_detected": True
             },

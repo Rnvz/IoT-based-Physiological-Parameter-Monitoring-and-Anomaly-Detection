@@ -291,10 +291,17 @@ def on_mqtt_message(client, userdata, message):
             var_hr_str = f"{CLR_WHITE}{var_hr:6.1f} {CLR_RESET}"
 
         # SpO2 Formatting
-        spo2_str = f"{CLR_WHITE}{spo2_val:4.0f}%{CLR_RESET}"
+        if spo2_val <= 0 or feedback.status == "SIGNAL QUALITY LOW":
+            spo2_str = f"{CLR_DIM} -- %{CLR_RESET}"
+        elif spo2_val < 90:
+            spo2_str = f"{CLR_RED}{CLR_BOLD}{spo2_val:4.0f}%{CLR_RESET}"
+        else:
+            spo2_str = f"{CLR_WHITE}{spo2_val:4.0f}%{CLR_RESET}"
 
         # Suhu Formatting
-        if temp_val >= 38.0:
+        if temp_val <= 0 or (telemetry and not telemetry.sensor_status.ds18b20_ok):
+            temp_str = f"{CLR_DIM} --.- C{CLR_RESET}"
+        elif temp_val >= 38.0:
             temp_str = f"{CLR_RED}{CLR_BOLD}{temp_val:4.1f} C{CLR_RESET}"
         else:
             temp_str = f"{CLR_WHITE}{temp_val:4.1f} C{CLR_RESET}"
