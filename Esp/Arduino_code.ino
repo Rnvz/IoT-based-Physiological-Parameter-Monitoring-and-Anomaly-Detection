@@ -13,6 +13,8 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
+#include <ArduinoJson.h>
+
 
 // ============================================================
 // WIFI
@@ -200,6 +202,14 @@ float spo2Filtered = 0;
 
 
 // ============================================================
+// RAW PPG AMPLITUDE
+// ============================================================
+
+uint32_t lastIR = 0;
+uint32_t lastRED = 0;
+
+
+// ============================================================
 // TEMPERATURE
 // ============================================================
 
@@ -264,6 +274,23 @@ bool mqttConnecting = false;
 
 
 // ============================================================
+// BACKEND FEEDBACK
+// ============================================================
+
+const char* MQTT_FEEDBACK_TOPIC =
+  "skripsi/physiomonitor/feedback";
+
+bool buzzerActiveFromBackend = false;
+
+String severityFromBackend = "";
+
+unsigned long lastFeedbackTime = 0;
+
+const unsigned long FEEDBACK_TIMEOUT =
+  10000;
+
+
+// ============================================================
 // RESET VITALS
 // ============================================================
 
@@ -278,6 +305,9 @@ void resetVitals() {
   spo2Filtered = 0;
 
   validSpO2 = 0;
+
+  lastIR = 0;
+  lastRED = 0;
 
 
   // HR history
@@ -713,6 +743,9 @@ void processMAX30102() {
     uint32_t irValue =
       particleSensor.getFIFOIR();
 
+    lastIR = irValue;
+    lastRED = redValue;
+
 
     // --------------------------------------------------------
     // Sample counter
@@ -951,6 +984,72 @@ void serviceWiFi() {
 
 
 // ============================================================
+// MQTT CALLBACK (Backend Feedback)
+// ============================================================
+
+void mqttCallback(
+  char* topic,
+  byte* payload,
+  unsigned int length
+) {
+
+  JsonDocument doc;
+
+  DeserializationError err =
+    deserializeJson(
+      doc,
+      payload,
+      length
+    );
+
+  if (err) {
+
+    Serial.print(
+      "JSON parse error: "
+    );
+
+    Serial.println(
+      err.c_str()
+    );
+
+    return;
+  }
+
+
+  buzzerActiveFromBackend =
+    doc["buzzer_active"] | false;
+
+  const char* sev =
+    doc["severity"] | "NORMAL";
+
+  severityFromBackend =
+    String(sev);
+
+  lastFeedbackTime =
+    millis();
+
+
+  Serial.print(
+    "FEEDBACK <- "
+  );
+
+  Serial.print(
+    severityFromBackend
+  );
+
+  Serial.print(
+    " | Buzzer: "
+  );
+
+  Serial.println(
+    buzzerActiveFromBackend
+      ? "ON"
+      : "OFF"
+  );
+}
+
+
+// ============================================================
 // MQTT CONNECT
 // ============================================================
 
@@ -1020,6 +1119,18 @@ void serviceMQTT() {
 
     Serial.println(
       "MQTT connected"
+    );
+
+    mqttClient.subscribe(
+      MQTT_FEEDBACK_TOPIC
+    );
+
+    Serial.print(
+      "Subscribed: "
+    );
+
+    Serial.println(
+      MQTT_FEEDBACK_TOPIC
     );
 
     mqttConnecting = false;
@@ -1125,13 +1236,32 @@ void updateBuzzer() {
   unsigned long now =
     millis();
 
+  bool shouldBuzz = false;
+
+  // Cek apakah ada feedback backend yang masih fresh (< 10 detik)
+  if (
+    lastFeedbackTime > 0 &&
+    (now - lastFeedbackTime < FEEDBACK_TIMEOUT)
+  ) {
+
+    // Gunakan keputusan ML dari backend
+    shouldBuzz =
+      buzzerActiveFromBackend;
+
+  } else {
+
+    // Fallback: logika threshold lokal jika koneksi/backend terputus > 10s
+    shouldBuzz =
+      (statusSistem == "ANOMALI");
+  }
+
 
   // ----------------------------------------------------------
-  // Jika bukan anomaly
+  // Jika buzzer tidak aktif
   // ----------------------------------------------------------
 
   if (
-    statusSistem != "ANOMALI"
+    !shouldBuzz
   ) {
 
     digitalWrite(
@@ -1316,9 +1446,22 @@ void updateOLED() {
 
   display.setCursor(0, 51);
 
-  display.print(
-    statusSistem
-  );
+  if (
+    lastFeedbackTime > 0 &&
+    (millis() - lastFeedbackTime < FEEDBACK_TIMEOUT) &&
+    severityFromBackend.length() > 0
+  ) {
+
+    display.print(
+      severityFromBackend
+    );
+
+  } else {
+
+    display.print(
+      statusSistem
+    );
+  }
 
 
   display.display();
@@ -1409,6 +1552,11 @@ void publishMQTT() {
 
     payload += "0.0";
   }
+
+
+  // Amplitude (PPG IR)
+  payload += ",\"amp\":";
+  payload += String(lastIR);
 
 
   // Status
@@ -1750,6 +1898,10 @@ void setup() {
     MQTT_PORT
   );
 
+  mqttClient.setCallback(
+    mqttCallback
+  );
+
 
   // ==========================================================
   // WIFI
@@ -1857,18 +2009,6 @@ void loop() {
   // ==========================================================
   // DEBUG
   // ==========================================================
-
-  static uint32_t lastIR = 0;
-  static uint32_t lastRED = 0;
-
-  if (particleSensor.available()) {
-
-    lastIR =
-      particleSensor.getFIFOIR();
-
-    lastRED =
-      particleSensor.getFIFORed();
-  }
 
   printDebug(
     lastIR,

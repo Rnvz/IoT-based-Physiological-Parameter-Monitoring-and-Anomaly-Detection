@@ -158,14 +158,20 @@ def process_telemetry(payload_dict: dict, publish_mqtt: bool = False) -> Tuple[F
         },
     )
 
-    # Kirim umpan balik ke topik MQTT perangkat
-    if publish_mqtt and mqtt_client is not None:
+    # Kirim umpan balik ke topik MQTT feedback untuk ESP32
+    if mqtt_client is not None:
         try:
-            feedback_topic = f"physio/{device_id}/feedback"
-            feedback_json = feedback.model_dump_json()
-            mqtt_client.publish(feedback_topic, feedback_json)
+            feedback_topic = "skripsi/physiomonitor/feedback"
+            # Payload ringan khusus ESP32: hanya field yang dibutuhkan device
+            esp_feedback = {
+                "buzzer_active": should_buzz and status in ("HIGH DEVIATION", "HIGH DEVIATION (SUSTAINED)"),
+                "severity": status,
+                "anomaly_score": round(float(anomaly_score), 4),
+                "timestamp": datetime.now().isoformat(),
+            }
+            mqtt_client.publish(feedback_topic, json.dumps(esp_feedback))
             logger.info(
-                f"MQTT Feedback sent to {feedback_topic} | status={status}, buzz={should_buzz}, score={anomaly_score:.3f}"
+                f"MQTT Feedback -> {feedback_topic} | severity={status}, buzz={esp_feedback['buzzer_active']}, score={anomaly_score:.3f}"
             )
         except Exception as e:
             logger.error(f"Failed to publish MQTT feedback: {e}")
@@ -219,9 +225,8 @@ def on_mqtt_message(client, userdata, message):
             dt_str = "\033[2m   --   \033[0m"
         last_arrival_time[device_id] = now
 
-        # Jalankan pipeline pemrosesan telemetri
-        should_publish_feedback = message.topic.startswith("physio/")
-        feedback, dash = process_telemetry(payload_dict, publish_mqtt=should_publish_feedback)
+        # Jalankan pipeline pemrosesan telemetri (selalu publish feedback)
+        feedback, dash = process_telemetry(payload_dict, publish_mqtt=True)
         telemetry = last_telemetry.get(device_id)
 
         # ANSI Colors

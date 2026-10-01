@@ -31,6 +31,7 @@ class TelemetryPayload(BaseModel):
     sequence_id: Optional[int] = None
     timestamp_ms: Optional[int] = None
     status: Optional[str] = None
+    amp: Optional[float] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -53,7 +54,7 @@ class TelemetryPayload(BaseModel):
                     seq = int(data["network"].get("sequence_id", 0))
             data.setdefault("sequence_id", seq)
 
-            # 1. Format Flat dari Arduino_code.ino asli (contoh: {"hr": 75.0, "spo2": 98.0, "temp": 36.5, "status": "NORMAL"})
+            # 1. Format Flat dari Arduino_code.ino asli (contoh: {"hr": 75.0, "spo2": 98.0, "temp": 36.5, "amp": 45000, "status": "NORMAL"})
             if "hr" in data or ("temp" in data and "raw_sensors" not in data and "telemetry" not in data):
                 import time
                 data.setdefault("device_id", "esp32_hardware")
@@ -75,7 +76,15 @@ class TelemetryPayload(BaseModel):
                     or hr <= 0.0
                     or spo2 <= 0.0
                 )
-                amp = 0.0 if is_menunggu else 2000.0
+
+                # Ambil nilai amplitudo PPG nyata jika dikirim oleh firmware (lastIR)
+                amp_in = data.get("amp")
+                if amp_in is not None:
+                    amp = float(amp_in)
+                    max_ok = not is_menunggu and amp > 0.0
+                else:
+                    amp = 0.0 if is_menunggu else 2000.0
+                    max_ok = not is_menunggu
 
                 if "raw_sensors" not in data:
                     data["raw_sensors"] = {
@@ -85,7 +94,7 @@ class TelemetryPayload(BaseModel):
                     }
                 if "sensor_status" not in data:
                     data["sensor_status"] = {
-                        "max30102_ok": not is_menunggu,
+                        "max30102_ok": max_ok,
                         "ds18b20_ok": temp > 0.0,
                         "ppg_amplitude": amp,
                     }

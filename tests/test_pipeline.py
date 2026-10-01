@@ -163,3 +163,98 @@ def test_pipeline_low_deviation_and_sustained():
     assert fb_rec.status == "NORMAL"
     assert fb_rec.display.line_status == "NORMAL"
     assert fb_rec.buzzer_active is False
+
+def test_mqtt_feedback_payload_and_buzzer_logic(mocker):
+    import app.main as main_mod
+    import json
+
+    mock_client = mocker.MagicMock()
+    main_mod.mqtt_client = mock_client
+
+    # 1. Normal samples - buzzer_active must be False
+    sample_normal = {
+        "device_id": "test_esp_fb",
+        "hr": 75.0,
+        "spo2": 98.0,
+        "temp": 36.5,
+        "status": "NORMAL"
+    }
+    process_telemetry(sample_normal)
+    assert mock_client.publish.called
+    call_topic, call_payload = mock_client.publish.call_args[0]
+    assert call_topic == "skripsi/physiomonitor/feedback"
+    parsed = json.loads(call_payload)
+    assert parsed["buzzer_active"] is False
+    assert parsed["severity"] == "NORMAL"
+    assert "anomaly_score" in parsed
+    assert "timestamp" in parsed
+
+    # 2. Feed 15 normal samples to fill buffer
+    for i in range(15):
+        s = {
+            "device_id": "test_esp_fb",
+            "sequence_id": i + 1,
+            "timestamp_ms": 1000 + i * 1000,
+            "telemetry": {
+                "heart_rate": 75.0,
+                "spo2": 98.0,
+                "temperature": 36.5,
+                "ppg_amplitude": 2500.0,
+                "finger_detected": True
+            },
+            "status": "normal"
+        }
+        process_telemetry(s)
+
+    # 3. Mild anomaly (LOW DEVIATION) for 4 samples: count >= 3 so should_buzz is True,
+    # but buzzer_active in MQTT feedback must remain False because it is NOT HIGH DEVIATION
+    mock_client.reset_mock()
+    for i in range(4):
+        s = {
+            "device_id": "test_esp_fb",
+            "sequence_id": 20 + i,
+            "timestamp_ms": 20000 + i * 1000,
+            "telemetry": {
+                "heart_rate": 88.0,
+                "spo2": 95.0,
+                "temperature": 36.5,
+                "ppg_amplitude": 2500.0,
+                "finger_detected": True
+            },
+            "status": "normal"
+        }
+        process_telemetry(s)
+
+    assert mock_client.publish.called
+    call_topic, call_payload = mock_client.publish.call_args[0]
+    parsed = json.loads(call_payload)
+    assert parsed["severity"] == "LOW DEVIATION"
+    assert parsed["buzzer_active"] is False  # Must be False for LOW DEVIATION
+
+    # 4. Severe anomaly (HIGH DEVIATION) for 4 samples: buzzer_active must be True
+    main_mod.feature_engine.reset()
+    main_mod.persistent_evaluator.reset()
+    mock_client.reset_mock()
+    for i in range(20):
+        s = {
+            "device_id": "test_esp_fb_high",
+            "sequence_id": i + 1,
+            "timestamp_ms": 30000 + i * 1000,
+            "telemetry": {
+                "heart_rate": 160.0 + (i % 3) * 5.0,
+                "spo2": 82.0,
+                "temperature": 39.5,
+                "ppg_amplitude": 1500.0,
+                "finger_detected": True
+            },
+            "status": "normal"
+        }
+        process_telemetry(s)
+
+    call_topic, call_payload = mock_client.publish.call_args[0]
+    parsed = json.loads(call_payload)
+    assert parsed["severity"] in ("HIGH DEVIATION", "HIGH DEVIATION (SUSTAINED)")
+    assert parsed["buzzer_active"] is True
+
+    # Clean up mock
+    main_mod.mqtt_client = None

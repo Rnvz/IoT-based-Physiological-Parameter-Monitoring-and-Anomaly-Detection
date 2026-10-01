@@ -121,4 +121,54 @@ def test_arduino_code_flat_json_temp_disconnected():
     payload = TelemetryPayload.model_validate(flat_data)
     assert payload.sensor_status.ds18b20_ok is False
 
+def test_arduino_code_flat_json_with_amp():
+    from app.services.sqa import SignalQualityAssessor
+    flat_data = {
+        "hr": 75.5,
+        "spo2": 98.0,
+        "temp": 36.6,
+        "amp": 45231.0,
+        "status": "NORMAL"
+    }
+    payload = TelemetryPayload.model_validate(flat_data)
+    assert payload.sensor_status.ppg_amplitude == 45231.0
+    assert payload.sensor_status.max30102_ok is True
+
+    # SQA should evaluate this as GOOD
+    assessor = SignalQualityAssessor()
+    sqa_res = assessor.assess(payload)
+    assert sqa_res.state == "GOOD"
+    assert "Low PPG amplitude" not in sqa_res.reasons
+
+def test_arduino_code_flat_json_with_low_amp():
+    from app.services.sqa import SignalQualityAssessor
+    flat_data = {
+        "hr": 75.5,
+        "spo2": 98.0,
+        "temp": 36.6,
+        "amp": 50.0,  # Below 100 threshold
+        "status": "NORMAL"
+    }
+    payload = TelemetryPayload.model_validate(flat_data)
+    assert payload.sensor_status.ppg_amplitude == 50.0
+
+    # SQA should flag Low PPG amplitude
+    assessor = SignalQualityAssessor()
+    sqa_res = assessor.assess(payload)
+    assert "Low PPG amplitude" in sqa_res.reasons
+    assert sqa_res.state == "POOR_QUALITY"
+
+def test_arduino_code_flat_json_backward_compat_no_amp():
+    # Backward compatibility: payload without 'amp' still works and defaults to 2000.0
+    flat_data = {
+        "hr": 75.5,
+        "spo2": 98.0,
+        "temp": 36.6,
+        "status": "NORMAL"
+    }
+    payload = TelemetryPayload.model_validate(flat_data)
+    assert payload.sensor_status.ppg_amplitude == 2000.0
+    assert payload.sensor_status.max30102_ok is True
+
+
 
