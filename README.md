@@ -9,13 +9,6 @@
 
 IoT-based physiological parameter monitoring and unsupervised multivariate anomaly detection system using optical Photoplethysmogram (PPG), Blood Oxygen Saturation (SpO2), Skin Surface Temperature, and Isolation Forest.
 
----
-
-> [!IMPORTANT]
-> **NON-CLINICAL EARLY WARNING DISCLAIMER**: This system is an academic research prototype designed strictly for non-clinical early warning monitoring and feasibility evaluation. It is **NOT** a certified medical diagnostic device. The classification output "Deviating Pattern" denotes statistical deviation from baseline physiological distributions learned by the unsupervised model. It does not provide medical diagnoses for arrhythmia, tachycardia, bradycardia, hypoxia, hypothermia, fever, or related clinical conditions.
-
----
-
 ## Project Overview
 
 Wearable physiological monitoring systems frequently experience false alarms due to motion artifacts, sensor displacement, and rigid single-parameter threshold limits. This project implements an integrated edge-to-server IoT architecture designed to provide robust, non-clinical early warning monitoring:
