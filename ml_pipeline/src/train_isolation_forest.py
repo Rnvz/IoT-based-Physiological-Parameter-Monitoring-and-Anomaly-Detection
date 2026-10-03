@@ -50,7 +50,7 @@ def main(train_path: str, val_path: str, test_path: str, model_path: str,
     df_val = pd.read_csv(val_path)
     df_test = pd.read_csv(test_path)
 
-    # --- Training: hanya pola NORMAL dari dataset tepercaya (tanpa rishanmascarenhas) ---
+    # Training: hanya pola NORMAL dari dataset yang tervalidasi
     train_normal_mask = (
         ((df_train['Source'] == 'nasirayub2') & (df_train['OUTPUT'] == 0)) |
         ((df_train['Source'] == 'engrarri21') & (df_train['OUTPUT'] == 0)) |

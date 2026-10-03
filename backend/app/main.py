@@ -204,7 +204,7 @@ def on_mqtt_message(client, userdata, message):
         payload_str = message.payload.decode("utf-8")
         payload_dict = json.loads(payload_str)
 
-        # Ekstrak device_id jika ada di topik, atau beri nama default untuk device teman
+        # Ekstrak device_id jika ada di topik, atau gunakan default
         topic_parts = message.topic.split("/")
         if len(topic_parts) >= 3 and "device_id" not in payload_dict:
             payload_dict["device_id"] = topic_parts[1]
@@ -247,7 +247,7 @@ def on_mqtt_message(client, userdata, message):
         spo2_val = telemetry.raw_sensors.spo2 if telemetry else 0.0
         temp_val = telemetry.raw_sensors.temperature if telemetry else 0.0
 
-        # Ekstrak Fitur Temporal Jendela Geser (Debug Temporal Dynamics)
+        # Ekstrak Fitur Temporal Jendela Geser
         if dash.temporal_features is not None:
             delta_hr = float(dash.temporal_features[3])
             ma_hr = float(dash.temporal_features[6])
@@ -273,7 +273,7 @@ def on_mqtt_message(client, userdata, message):
         else:
             hr_str = f"{CLR_WHITE}{CLR_BOLD}{hr_val:5.1f} bpm{CLR_RESET}"
 
-        # Debug: ΔHR Formatting
+        # Format ΔHR
         if hr_val <= 0 or feedback.status == "SIGNAL QUALITY LOW":
             d_hr_str = f"{CLR_DIM}   --  {CLR_RESET}"
         elif abs(delta_hr) > 15.0:
@@ -281,13 +281,13 @@ def on_mqtt_message(client, userdata, message):
         else:
             d_hr_str = f"{CLR_CYAN}{delta_hr:+6.1f} {CLR_RESET}"
 
-        # Debug: MA_HR Formatting
+        # Format MA_HR
         if hr_val <= 0 or feedback.status == "SIGNAL QUALITY LOW":
             ma_hr_str = f"{CLR_DIM}   --  {CLR_RESET}"
         else:
             ma_hr_str = f"{CLR_WHITE}{ma_hr:5.1f} {CLR_RESET}"
 
-        # Debug: VAR_HR Formatting
+        # Format VAR_HR
         if hr_val <= 0 or feedback.status == "SIGNAL QUALITY LOW":
             var_hr_str = f"{CLR_DIM}   --   {CLR_RESET}"
         elif var_hr > 50.0:
@@ -317,7 +317,7 @@ def on_mqtt_message(client, userdata, message):
         else:
             sqa_str = f"{CLR_YELLOW}POOR{CLR_RESET}"
 
-        # Status Fisiologis Formatting (NEWS-inspired Non-Diagnostic Severity)
+        # Status Fisiologis Formatting
         if feedback.status == "HIGH DEVIATION (SUSTAINED)":
             stat_str = f"{CLR_BG_RED} HIGH DEV (S) {CLR_RESET}"
         elif feedback.status == "HIGH DEVIATION":
@@ -355,7 +355,7 @@ def on_mqtt_message(client, userdata, message):
             print(TABLE_HEADER, flush=True)
         msg_counter += 1
 
-        # Baris Tabular Rapi dengan Kolom Debug Temporal
+        # Format output baris tabular
         row = (
             f" {now_str}   {dt_str}  {hr_str}  {d_hr_str}  {ma_hr_str}  {var_hr_str}   "
             f"{spo2_str}  {temp_str}   {sqa_str}   {stat_str}   {ml_str}   {buzz_str}"

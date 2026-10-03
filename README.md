@@ -115,17 +115,10 @@ $$\mathbf{X} = [x_1, x_2, \dots, x_{14}]$$
 
 ```text
 .
-├── ARCHITECTURE.md              # Technical architecture and payload contracts
-├── FASE_1_REPORT.md             # Comprehensive Phase 1 experimental and evaluation report
-├── PROPOSAL.md                  # Complete project proposal transcript
 ├── README.md                    # Project overview and system documentation
-├── REQUIREMENTS.md              # Functional, non-functional, and boundary requirements
-├── ROADMAP.md                   # Six-phase implementation roadmap
-├── SECURITY.md                  # Security, data privacy, and hardware safety policies
-│
 ├── backend/                     # FastAPI backend and inference service
 │   ├── app/
-│   │   ├── main.py              # Server application and WebSocket endpoints
+│   │   ├── main.py              # Server application, MQTT worker & WebSocket endpoints
 │   │   ├── core/config.py       # Configuration and threshold definitions
 │   │   ├── schemas/telemetry.py # Pydantic data contract schemas
 │   │   └── services/            # SQA, Feature Fusion, and Anomaly Model services
@@ -141,15 +134,17 @@ $$\mathbf{X} = [x_1, x_2, \dots, x_{14}]$$
 │   └── src/                     # Non-blocking modular C++ implementations
 │
 ├── ml_pipeline/                 # Machine learning training and data pipeline
-│   ├── data/                    # Cleaned datasets and feature matrices
-│   ├── models/                  # Serialized models (isolation_forest_model.joblib, scaler.joblib)
+│   ├── data/                    # Dataset directory
+│   ├── models/                  # Serialized models and scalers
 │   └── src/                     # Preprocessing, feature engineering, and training scripts
 │
 └── tests/                       # Automated pytest test suites
     ├── conftest.py              # Shared fixtures and mock telemetry data
     ├── test_features.py         # Feature fusion and windowing tests
     ├── test_model.py            # Model inference and persistent evaluator tests
-    └── test_sqa.py              # Signal Quality Assessment boundary tests
+    ├── test_pipeline.py         # End-to-end telemetry and feedback loop tests
+    ├── test_sqa.py              # Signal Quality Assessment boundary tests
+    └── test_telemetry_schema.py # Schema normalization tests
 ```
 
 ---
@@ -207,14 +202,3 @@ cp include/secrets.h.example include/secrets.h
 pio run --target upload
 pio device monitor
 ```
-
----
-
-## Technical Documentation Links
-
-- [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture and JSON contract specifications.
-- [FASE_1_REPORT.md](FASE_1_REPORT.md) - Comprehensive Phase 1 experimental and evaluation report.
-- [REQUIREMENTS.md](REQUIREMENTS.md) - Functional, non-functional, and boundary requirements.
-- [ROADMAP.md](ROADMAP.md) - Implementation roadmap across six project phases.
-- [SECURITY.md](SECURITY.md) - Authentication, data privacy, and buzzer safety limits.
-- [PROPOSAL.md](PROPOSAL.md) - Original project proposal document.

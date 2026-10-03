@@ -14,9 +14,11 @@ firmware/include/secrets.h
 .streamlit/secrets.toml
 
 # ------------------------------------------------------------------------------
-# 1.1 AI Agent Instructions (Private Local Guides)
+# 1.1 AI Agent Instructions & Internal Docs (Private Local Guides)
 # ------------------------------------------------------------------------------
 AGENTS.md
+CLAUDE.md
+.gemini/
 
 # ------------------------------------------------------------------------------
 # 2. Python & Virtual Environments
@@ -93,15 +95,16 @@ Dataset/
 *.zip
 *.tar.gz
 *.7z
-# Kecualikan folder data dan file instruksinya
+# Kecualikan folder data
 !ml_pipeline/data/
 ml_pipeline/data/*
-!ml_pipeline/data/README.md
 !ml_pipeline/data/.gitkeep
 
 # ------------------------------------------------------------------------------
-# 4. Embedded / PlatformIO / C++ Firmware
+# 4. Embedded / PlatformIO / Arduino Firmware
 # ------------------------------------------------------------------------------
+Esp/
+*.ino
 .pio/
 .pioenvs/
 .piolibdeps/

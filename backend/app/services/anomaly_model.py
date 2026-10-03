@@ -23,8 +23,7 @@ class PersistentResult(BaseModel):
 class AnomalyDetector:
     """
     Layanan deteksi anomali menggunakan model Isolation Forest yang telah dilatih.
-    Mendukung penentuan tingkat deviasi (LOW DEVIATION vs HIGH DEVIATION)
-    yang terinspirasi dari National Early Warning Score (NEWS).
+    Mendukung penentuan tingkat deviasi (LOW DEVIATION vs HIGH DEVIATION).
     """
     def __init__(self):
         self.model = None
@@ -82,14 +81,12 @@ class AnomalyDetector:
 
     def predict(self, feature_vector: np.ndarray) -> AnomalyResult:
         """
-        Klasifikasi anomali dan penentuan tingkat deviasi (severity) MURNI
+        Klasifikasi anomali dan penentuan tingkat deviasi (severity)
         berdasarkan skor decision_function model Machine Learning dibandingkan
-        terhadap threshold terkalibrasi (FPR 13% & FPR 5% dari thresholds.joblib):
-        - anomaly_score >= anomaly_threshold (FPR 13%) -> NORMAL
+        terhadap threshold terkalibrasi:
+        - anomaly_score >= anomaly_threshold -> NORMAL
         - high_threshold <= anomaly_score < anomaly_threshold -> LOW DEVIATION
-        - anomaly_score < high_threshold (FPR 5%) -> HIGH DEVIATION
-        
-        Murni statistik tanpa aturan manual/hardcoded pada tanda vital.
+        - anomaly_score < high_threshold -> HIGH DEVIATION
         """
         anomaly_score = 0.0
         is_anomaly = False
@@ -142,8 +139,7 @@ class AnomalyDetector:
 
 class PersistentAnomalyEvaluator:
     """
-    Mengevaluasi anomali berulang dan menentukan status severity bergradasi.
-    Terinspirasi dari National Early Warning Score (NEWS) untuk early-warning non-diagnostik:
+    Mengevaluasi anomali berulang dan menentukan status severity bergradasi:
     - NORMAL: data berada dalam profil normal
     - LOW DEVIATION: deviasi ringan (< 10 sampel)
     - LOW DEVIATION (SUSTAINED): deviasi ringan bertahan >= 10 sampel

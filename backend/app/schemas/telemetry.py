@@ -54,7 +54,7 @@ class TelemetryPayload(BaseModel):
                     seq = int(data["network"].get("sequence_id", 0))
             data.setdefault("sequence_id", seq)
 
-            # 1. Format Flat dari Arduino_code.ino asli (contoh: {"hr": 75.0, "spo2": 98.0, "temp": 36.5, "amp": 45000, "status": "NORMAL"})
+            # Format Flat JSON firmware (contoh: {"hr": 75.0, "spo2": 98.0, "temp": 36.5, "amp": 45000, "status": "NORMAL"})
             if "hr" in data or ("temp" in data and "raw_sensors" not in data and "telemetry" not in data):
                 import time
                 data.setdefault("device_id", "esp32_hardware")
@@ -104,7 +104,7 @@ class TelemetryPayload(BaseModel):
                         "sequence_id": seq,
                     }
 
-            # 2. Jika data menggunakan format firmware scaffold (ada blok 'telemetry')
+            # Format hierarkis dengan blok 'telemetry'
             elif "telemetry" in data and isinstance(data["telemetry"], dict):
                 t = data["telemetry"]
                 if "raw_sensors" not in data:

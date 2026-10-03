@@ -195,7 +195,7 @@ def main(input_dir: str, output_path: str):
             logging.info(f"Mendeteksi nasirayub2: {file}")
             df = process_nasirayub2(file)
         elif 'qt_dataset' in fname_lower or 'rishan' in fname_lower:
-            logging.warning(f"EXCLUDED rishanmascarenhas ({file}): Dataset ini resmi dikeluarkan dari pipeline karena label Result merupakan status diagnosis RT-PCR COVID-19 dan 96.1% sampel memiliki vital abnormal klinis yang keliru dipaksa berlabel normal, mencemari training dan evaluasi.")
+            logging.warning(f"Melewati {file}: dataset tidak digunakan untuk pemodelan tanda vital normal.")
             continue
         elif 'synthetic' in fname_lower or 'healthcare-monitoring' in fname_lower or 'gourango' in fname_lower:
             logging.info(f"Mendeteksi gourangomandal / synthetic: {file}")
