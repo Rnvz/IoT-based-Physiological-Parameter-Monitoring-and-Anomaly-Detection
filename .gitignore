@@ -143,7 +143,6 @@ temp/
 tmp/
 *.pdf
 *.docx
-/NOTE_BACKEND_ML_DB*.md
 
 # ------------------------------------------------------------------------------
 # 8. IDE & Operating System
