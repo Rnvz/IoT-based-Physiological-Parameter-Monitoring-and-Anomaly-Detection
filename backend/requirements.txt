@@ -12,3 +12,7 @@ scipy
 joblib
 sqlalchemy
 aiosqlite
+httpx
+pytest
+pytest-mock
+
