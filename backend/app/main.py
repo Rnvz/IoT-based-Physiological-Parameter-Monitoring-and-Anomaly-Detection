@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Optional
 from fastapi import FastAPI, Request
@@ -62,3 +63,9 @@ app.include_router(health_router)
 app.include_router(telemetry_router)
 app.include_router(actuator_router)
 app.include_router(session_router)
+
+dashboard_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../Dashboard/files"))
+if os.path.isdir(dashboard_dir):
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/dashboard", StaticFiles(directory=dashboard_dir, html=True), name="dashboard")
+
