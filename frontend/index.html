@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Physio Monitor</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Physio Monitor</h1>
+    <div class="topbar-right">
+      <span id="device-pill" class="pill pill-off">Device: checking</span>
+      <label class="key">
+        <span>API key</span>
+        <input id="api-key" type="password" autocomplete="off" placeholder="For light control">
+      </label>
+    </div>
+  </header>
+
+  <p id="banner" class="banner" hidden></p>
+  <p id="mode-note" class="note-bar" hidden></p>
+
+  <main>
+    <div class="status-overview">
+
+      <section id="status-band" class="band band-none" aria-live="polite">
+        <div class="band-content">
+          <p class="band-label">Model result</p>
+          <p id="band-text" class="band-text">Waiting for data</p>
+          <p id="band-sub" class="band-sub">Model result indicates unusual data patterns, not a medical diagnosis.</p>
+        </div>
+      </section>
+
+      <div class="indicators-col">
+
+        <div class="indicator-card-side">
+          <span class="r-name">Lamp Status</span>
+          <div class="indicator-wrap">
+            <div id="ind-lamp" class="ind-circle ind-off"></div>
+            <span id="ind-lamp-text" class="ind-text">OFF</span>
+          </div>
+        </div>
+
+        <div class="indicator-card-side">
+          <span class="r-name">Buzzer Status</span>
+          <div class="indicator-wrap">
+            <div id="ind-buzzer" class="ind-circle ind-off"></div>
+            <span id="ind-buzzer-text" class="ind-text">OFF</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <section class="readings" aria-label="Latest readings">
+      <div class="reading"><span class="r-name">Heart Rate</span><span id="v-hr" class="r-val">--</span><span class="r-unit">BPM</span></div>
+      <div class="reading"><span class="r-name">SpO2</span><span id="v-spo2" class="r-val">--</span><span class="r-unit">%</span></div>
+      <div class="reading"><span class="r-name">Skin Temp</span><span id="v-temp" class="r-val">--</span><span class="r-unit">°C</span></div>
+      <div class="reading ctx"><span class="r-name">Room Temp</span><span id="v-room" class="r-val">--</span><span class="r-unit">°C</span></div>
+      <div class="reading ctx"><span class="r-name">Humidity</span><span id="v-hum" class="r-val">--</span><span class="r-unit">%</span></div>
+    </section>
+    <p id="updated" class="updated">No data yet</p>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Last 30 minutes history</h2>
+        <button id="btn-csv" type="button" class="tool-btn" hidden>Download CSV</button>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-card chart-full">
+          <h3 class="card-title">Heart Rate (BPM)</h3>
+          <div class="chart-wrap"><canvas id="chart-hr"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3 class="card-title">SpO2 (%)</h3>
+          <div class="chart-wrap"><canvas id="chart-spo2"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3 class="card-title">Skin Temp (°C)</h3>
+          <div class="chart-wrap"><canvas id="chart-temp"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3 class="card-title">Room Temp (°C)</h3>
+          <div class="chart-wrap"><canvas id="chart-room"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3 class="card-title">Humidity (%)</h3>
+          <div class="chart-wrap"><canvas id="chart-hum"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="bottom-grid">
+      <section class="panel control-panel">
+        <div class="panel-head-compact">
+          <h2>Warning Light</h2>
+          <div class="seg" role="group" aria-label="Light mode">
+            <button id="btn-auto" type="button">Auto</button>
+            <button id="btn-manual" type="button">Manual</button>
+          </div>
+        </div>
+        
+        <div class="lamp-row-compact">
+          <span id="lamp-swatch" class="swatch"></span>
+          <div>
+            <p id="lamp-state" class="lamp-state">Status not received</p>
+            <p id="lamp-detail" class="lamp-detail"></p>
+          </div>
+        </div>
+
+        <div id="manual-box" class="manual-box">
+          <div class="colors" role="group" aria-label="Light color">
+            <button type="button" data-color="GREEN" class="c-green">Green</button>
+            <button type="button" data-color="YELLOW" class="c-yellow">Yellow</button>
+            <button type="button" data-color="RED" class="c-red">Red</button>
+            <button type="button" data-color="BLUE" class="c-blue">Blue</button>
+            <button type="button" data-color="WHITE" class="c-white">White</button>
+            <button type="button" data-color="OFF" class="c-off">Off</button>
+          </div>
+          <label class="slider">
+            <span>Brightness <output id="bright-out">60</output>%</span>
+            <input id="brightness" type="range" min="0" max="100" step="5" value="60">
+          </label>
+        </div>
+        <p class="note">Status reported by ESP32. Manual mode returns to auto after 5m.</p>
+      </section>
+
+      <section class="panel control-panel buzzer-panel">
+        <div class="panel-head-compact">
+          <h2>Buzzer Test</h2>
+        </div>
+        
+        <div class="buzzer-wrap-centered">
+          <button id="btn-buzzer" type="button" class="buzzer-btn-modern" aria-pressed="false">Buzzer: off</button>
+        </div>
+        
+        <p class="note text-center">Only to ensure the buzzer is working. Automatically turns off after 30 seconds. Anomaly alarm continues to run normally on the device.</p>
+      </section>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/direct.js"></script>
+</body>
+</html>
