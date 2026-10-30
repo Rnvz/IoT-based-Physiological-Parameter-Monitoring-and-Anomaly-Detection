@@ -1,237 +1,223 @@
 # IoT-Based Physiological Parameter Monitoring and Anomaly Detection
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32-orange.svg)](https://platformio.org/)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
-[![Streamlit](https://img.shields.io/badge/Dashboard-Streamlit-FF4B4B.svg)](https://streamlit.io/)
-[![Scikit-Learn](https://img.shields.io/badge/ML-Isolation%20Forest-green.svg)](https://scikit-learn.org/)
+[![MQTT](https://img.shields.io/badge/MQTT-HiveMQ%20%2F%20Mosquitto-orange.svg)](https://mqtt.org/)
+[![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32-E95420.svg)](https://platformio.org/)
 [![License](https://img.shields.io/badge/License-Academic%20Research-lightgrey.svg)]()
 
-IoT-based physiological parameter monitoring and unsupervised multivariate anomaly detection system using optical Photoplethysmogram (PPG), Blood Oxygen Saturation (SpO2), Skin Surface Temperature, and Isolation Forest.
-
-## Project Overview
-
-Wearable physiological monitoring systems frequently experience false alarms due to motion artifacts, sensor displacement, and rigid single-parameter threshold limits. This project implements an integrated edge-to-server IoT architecture designed to provide robust, non-clinical early warning monitoring:
-
-1. **Multi-Sensor Acquisition**: Real-time optical PPG, estimated Heart Rate (HR), and SpO2 via the MAX30102 sensor, paired with digital skin surface temperature measurement via DS18B20.
-2. **Signal Quality Assessment (SQA)**: Real-time validation of raw sensor data (valid physiological boundaries, sudden jump limits, PPG pulsatile amplitude, and flatline detection) before feature extraction.
-3. **Temporal Feature Fusion (14-Dimensional Vector)**: Rolling window extraction combining instantaneous readings, first-order temporal differences (Delta), moving averages, variance, and composite rate of change.
-4. **Unsupervised Anomaly Detection**: Isolation Forest model trained on normal physiological distributions, evaluating multivariate deviations without requiring labeled pathology data.
-5. **Persistent Anomaly Debouncing**: Local acoustic alert (active buzzer) triggers only after consecutive anomaly detections over a configurable debounce window ($N = 3$), eliminating transient false alarms.
-6. **Edge Autonomy and Dual Feedback**: Local 0.96-inch OLED displays live readings and operational states (`NORMAL`, `CHECK SENSOR`, `ANOMALY`). In the event of network disruption, the ESP32 node continues local sensor acquisition and display updates.
+IoT-based physiological telemetry monitoring system providing multi-sensor acquisition (optical PPG Heart Rate, SpO2, and Skin Surface Temperature), real-time rule-based threshold evaluation, and experimental unsupervised anomaly detection.
 
 ---
 
-## Hardware Specifications and Wiring
+## 1. System Overview
 
-The prototype consists of an ESP32 edge microcontroller interfaced with dedicated physiological sensors and local output peripherals:
-
-| Component | Interface / Protocol | ESP32 GPIO Pin | Description |
-| :--- | :--- | :---: | :--- |
-| **MAX30102 SDA** | I2C Data | GPIO 21 | PPG, Heart Rate, and SpO2 sensor data line |
-| **MAX30102 SCL** | I2C Clock | GPIO 22 | PPG, Heart Rate, and SpO2 sensor clock line |
-| **SSD1306 OLED SDA** | I2C Data | GPIO 21 | Shared I2C bus (Address: 0x3C) |
-| **SSD1306 OLED SCL** | I2C Clock | GPIO 22 | Shared I2C bus (Address: 0x3C) |
-| **DS18B20 Data** | 1-Wire Digital | GPIO 4 | Skin surface temperature probe (4.7k Ohm pull-up to 3.3V) |
-| **Active Buzzer** | Digital Output | GPIO 25 | Local audible alarm for persistent anomalies |
-| **Power Supply** | DC Power | 3.3V / GND | Regulated system power |
-
----
-
-## System Architecture
-
-The end-to-end data pipeline routes data from the physical edge sensors through local processing, network ingestion, server-side inference, and visualization:
+This system acquires physiological parameters from an ESP32 edge microcontroller and transmits them via MQTT to a FastAPI backend service. The server processes telemetry, executes decision arbitration (Rule-Based vs. Machine Learning), logs records to a de-duplicated CSV repository, and exposes a hardened REST API for dashboards and data export.
 
 ```mermaid
-flowchart TD
-    subgraph Edge ["Edge Tier: ESP32 Node"]
-        S1["MAX30102 Sensor (PPG, HR, SpO2)"] -->|I2C| MCU["ESP32 Microcontroller"]
-        S2["DS18B20 Sensor (Skin Temperature)"] -->|1-Wire| MCU
-        
-        MCU -->|I2C| OLED["0.96 inch OLED Display"]
-        MCU -->|GPIO| BUZ["Active Buzzer (Local Alarm)"]
+flowchart LR
+    subgraph Edge ["Edge Device: ESP32"]
+        MAX["MAX30102 (HR, SpO2)"] --> MCU["ESP32 Microcontroller"]
+        DS["DS18B20 (Skin Temp)"] --> MCU
+        DHT["DHT22 (Room Temp/Hum)"] --> MCU
+        MCU --> OLED["0.96 inch OLED"]
+        MCU --> BUZ["Buzzer & LED"]
     end
 
-    subgraph Network ["Network Tier"]
-        MCU -->|JSON Telemetry via WebSocket / MQTT| SRV["FastAPI Ingestion Service"]
+    subgraph Broker ["MQTT Broker"]
+        MCU -->|Publish: &lt;prefix&gt;/data| BKR["HiveMQ / Mosquitto"]
+        BKR -->|Publish: &lt;prefix&gt;/cmd| MCU
+        MCU -->|Publish: &lt;prefix&gt;/actuator| BKR
+        BKR -->|Publish: &lt;prefix&gt;/result| MCU
     end
 
-    subgraph Backend ["Server Tier: Analytics Engine"]
-        SRV --> SQA["Signal Quality Assessment (SQA)"]
-        
-        SQA -->|Low Quality / Sensor Displaced| STATE_SQA["State: LOW_SIGNAL_QUALITY\n(OLED: CHECK SENSOR)"]
-        SQA -->|Valid Quality| FEAT["Temporal Feature Fusion Engine\n(14-Dim Vector, Window W=15)"]
-        
-        FEAT --> SCALER["RobustScaler Normalization"]
-        SCALER --> IF["Isolation Forest Model"]
-        FEAT --> BASE["Single-Parameter Baseline Comparator"]
-        
-        IF --> DEBOUNCE["Persistent Anomaly Evaluator (Debounce N=3)"]
-        DEBOUNCE --> DISPATCH["Feedback and State Dispatcher"]
-        STATE_SQA --> DISPATCH
-    end
-
-    subgraph Presentation ["Presentation Tier"]
-        DISPATCH -->|Feedback JSON via Wi-Fi| MCU
-        DISPATCH -->|WebSocket Stream| DASH["Streamlit Real-Time Dashboard"]
+    subgraph Server ["FastAPI Backend Engine"]
+        BKR <--> MQC["MQTT Consumer & Publisher"]
+        MQC --> ARB["Decision Arbitrator"]
+        ARB --> RE["Rule Engine (Default)"]
+        ARB -.-> ML["ML Isolation Forest (Experimental)"]
+        ARB --> CSV["CSV Storage Repository"]
+        CSV --> REST["REST API (/latest, /history, /export)"]
     end
 ```
 
 ---
 
-## 14-Dimensional Feature Vector Specification
+## 2. Hardware Specifications
 
-For each sliding window ($W = 15$ samples), the Feature Fusion engine extracts a 14-dimensional feature vector:
-
-$$\mathbf{X} = [x_1, x_2, \dots, x_{14}]$$
-
-| Index | Feature Identifier | Mathematical Definition | Physiological Significance |
-| :---: | :--- | :--- | :--- |
-| $x_1$ | `Heart_Rate` | $HR_t$ | Instantaneous heart rate (BPM) |
-| $x_2$ | `SpO2` | $SpO2_t$ | Instantaneous peripheral blood oxygenation (%) |
-| $x_3$ | `Temperature` | $Temp_t$ | Instantaneous skin surface temperature (°C) |
-| $x_4$ | `Heart_Rate_Delta` | $HR_t - HR_{t-1}$ | Immediate pulse velocity change |
-| $x_5$ | `SpO2_Delta` | $SpO2_t - SpO2_{t-1}$ | Immediate oxygenation trend |
-| $x_6$ | `Temperature_Delta` | $Temp_t - Temp_{t-1}$ | Immediate thermal trend |
-| $x_7$ | `MA_Heart_Rate` | $\frac{1}{W} \sum_{i=0}^{W-1} HR_{t-i}$ | Rolling baseline heart rate |
-| $x_8$ | `MA_SpO2` | $\frac{1}{W} \sum_{i=0}^{W-1} SpO2_{t-i}$ | Rolling baseline oxygen saturation |
-| $x_9$ | `MA_Temperature` | $\frac{1}{W} \sum_{i=0}^{W-1} Temp_{t-i}$ | Rolling baseline skin temperature |
-| $x_{10}$ | `Var_Heart_Rate` | $\sigma^2_{HR}(W)$ | Heart rate stability / short-term variability |
-| $x_{11}$ | `Var_SpO2` | $\sigma^2_{SpO2}(W)$ | Oxygenation stability |
-| $x_{12}$ | `Var_Temperature` | $\sigma^2_{Temp}(W)$ | Thermal stability |
-| $x_{13}$ | `Rate_of_Change` | $\frac{\|\Delta HR\|}{\bar{HR}} + \frac{\|\Delta SpO2\|}{\bar{SpO2}} + \frac{\|\Delta Temp\|}{\bar{Temp}}$ | Normalized composite rate of physiological change |
-| $x_{14}$ | `Signal_Quality_Score` | $SQA \in [0.0, 1.0]$ | SQA confidence coefficient |
+| Component | Function / Measurement | Edge Interface | ESP32 Pinout |
+| :--- | :--- | :---: | :---: |
+| **ESP32 NodeMCU** | Central 32-bit Dual-Core Edge Controller | Core | - |
+| **MAX30102** | Optical Photoplethysmogram (Heart Rate, SpO2) | I2C | GPIO 21 (SDA), GPIO 22 (SCL) |
+| **DS18B20** | Digital Skin Surface Temperature | 1-Wire | GPIO 4 (with 4.7kΩ pull-up) |
+| **DHT22 / AM2302** | Ambient Room Temperature and Humidity | Digital | GPIO 19 |
+| **SSD1306 OLED** | 0.96-inch Monochrome Local Display (0x3C) | I2C | GPIO 21 (SDA), GPIO 22 (SCL) |
+| **Active Buzzer** | Acoustic Alert for Critical Alarms | Digital Output | GPIO 25 |
+| **Status LED** | Visual Actuation Indicator (RGB) | Digital Output | GPIO 26 / 27 |
 
 ---
 
-## Repository Structure
+## 3. Flat MQTT Protocol Contract
 
-```text
-.
-├── README.md                    # Project overview and system documentation
-├── backend/                     # FastAPI backend and inference service
-│   ├── app/
-│   │   ├── main.py              # Server application, MQTT worker & WebSocket endpoints
-│   │   ├── core/config.py       # Configuration and threshold definitions
-│   │   ├── schemas/telemetry.py # Pydantic data contract schemas
-│   │   └── services/            # SQA, Feature Fusion, and Anomaly Model services
-│   └── requirements.txt         # Backend Python dependencies
-│
-├── dashboard/                   # Streamlit PC visualization dashboard
-│   ├── app.py                   # Real-time multi-metric visualization application
-│   └── requirements.txt         # Dashboard Python dependencies
-│
-├── firmware/                    # ESP32 embedded firmware (PlatformIO / C++)
-│   ├── platformio.ini           # PlatformIO project configuration and libraries
-│   ├── include/                 # Pinout, sensor, display, and client headers
-│   └── src/                     # Non-blocking modular C++ implementations
-│
-├── ml_pipeline/                 # Machine learning training and data pipeline
-│   ├── data/                    # Dataset directory
-│   ├── models/                  # Serialized models and scalers
-│   └── src/                     # Preprocessing, feature engineering, and training scripts
-│
-└── tests/                       # Automated pytest test suites
-    ├── conftest.py              # Shared fixtures and mock telemetry data
-    ├── test_features.py         # Feature fusion and windowing tests
-    ├── test_model.py            # Model inference and persistent evaluator tests
-    ├── test_pipeline.py         # End-to-end telemetry and feedback loop tests
-    ├── test_sqa.py              # Signal Quality Assessment boundary tests
-    └── test_telemetry_schema.py # Schema normalization tests
-```
+Communication between the edge node and backend uses four flat MQTT topics partitioned by a configurable `TOPIC_PREFIX`:
+
+| Topic Direction | MQTT Topic | Payload Schema & Key Fields |
+| :--- | :--- | :--- |
+| **Edge &rarr; Server** | `<prefix>/data` | `{"device_id": "esp32-01", "hr": 75.0, "spo2": 98.0, "temp": 33.2, "hum": 60.0, "room_temp": 28.5, "finger": true, "status": "NORMAL"}` |
+| **Server &rarr; Edge** | `<prefix>/result` | `{"label": "NORMAL", "severity": 0, "score": 0.1957, "model_version": "if_v1"}` |
+| **Server &rarr; Edge** | `<prefix>/cmd` | `{"mode": "AUTO", "color": "RED", "brightness": 100, "buzzer_test": true, "seq": 42}` |
+| **Edge &rarr; Server** | `<prefix>/actuator` | `{"mode": "AUTO", "led": {"color": "RED", "brightness": 100}, "buzzer": {"test": true}, "source": "ML_RESULT", "ack_seq": 42, "manual_left_s": 0}` |
+
+*Severity convention*: `0` = Normal, `1` = Warning / Borderline, `2` = Critical Alert.
 
 ---
 
-## Quickstart Guide
+## 4. Local CSV Storage Architecture
 
-### 1. Prerequisites
-- Python 3.10+
-- PlatformIO Core or PlatformIO IDE (VS Code extension)
-- Git
+The backend persists telemetry and system events to structured CSV files within a configurable storage directory (`CSV_DIR`, default `./data`):
 
-### 2. Clone Repository
+1. **`readings.csv`**: Raw sensor telemetry de-duplicated on `(device_id, ts)`:
+   `ts, device_id, hr, spo2, temp, hum, room_temp, finger, fw_status`
+2. **`predictions.csv`**: Evaluated severity outputs and scoring breakdown:
+   `ts, device_id, rule_severity, ml_severity, published_severity, decision_mode, decision_source`
+3. **`actuator_events.csv`**: Sequence-tracked commands and status acknowledgments:
+   `ts, kind, seq, payload_json`
+4. **`scenario_events.csv`**: Benign operational tags for evaluation recordings:
+   `ts, scenario, note`
+
+---
+
+## 5. REST API Endpoints
+
+The FastAPI service exposes synchronous endpoints for dashboards and data verification (default base URL: `http://localhost:8000`):
+
+- **Health Checks**:
+  - `GET /health`: Liveness probe (`{"status": "ok"}`).
+  - `GET /health/details`: Readiness probe checking MQTT connection, storage availability, and ML model status.
+- **Telemetry & State**:
+  - `GET /latest`: Latest valid telemetry reading and actuator status.
+  - `GET /history?limit=100`: Recent telemetry series for charting.
+  - `GET /predictions?limit=100`: Recent decision arbitration records.
+  - `GET /device/status`: Current connection state and latency statistics.
+- **Actuator Control**:
+  - `GET /actuator/status`: Current actuator state.
+  - `POST /actuator/mode`: Switch mode (`AUTO` vs `MANUAL`).
+  - `POST /actuator/led`: Manual LED override (`color`, `brightness`).
+  - `POST /actuator/buzzer`: Manual acoustic test (`duration_ms`).
+- **Scenario Tagging**:
+  - `POST /session/scenario`: Tag current session (`REST`, `TYPING`, `LIGHT_ACTIVITY`, `MOTION`, `FINGER_SHIFT`, `SENSOR_OFF`, `OTHER`).
+  - `GET /session/scenario`: Fetch currently active scenario tag.
+- **Dataset Export**:
+  - `GET /export/readings.csv`: Stream raw `readings.csv`.
+  - `GET /export/dataset.csv`: Stream complete research dataset combining vitals, predictions, scenario tags, and actuator states via an exact **as-of join**.
+
+*Security*: Write and export endpoints require an `X-API-Key` header. Read endpoints can optionally enforce authentication via `READ_AUTH_REQUIRED=true`.
+
+---
+
+## 6. Decision Arbitration: Rule Engine vs. ML
+
+The backend calculates both `rule_severity` and `ml_severity` on every valid message where `finger=True`. The published severity is selected by `DECISION_MODE`:
+
+### Rule Engine (`DECISION_MODE=RULE` - Default)
+Rule mode is the **default operational mode**. Thresholds are fully configurable via `.env` without hardcoding:
+- Critical Alert (Severity 2): `HR < 50` or `HR > 100` BPM; `SpO2 < 90%`; `Temp >= 38.0°C` (optional).
+- Warning Band (Severity 1): `50 <= HR < 55` or `95 < HR <= 100` BPM; `90 <= SpO2 <= 94%`.
+- Low-temperature rules are disabled by default.
+
+### Machine Learning (`DECISION_MODE=ML` - Experimental)
+> [!WARNING]
+> **Experimental ML Mode**: Multivariate anomaly detection uses an Isolation Forest model with per-device rolling windows ($W=15$ samples) and persistence debouncing ($N=3$).
+> The ML model is designated as **experimental** due to verified dataset distribution mismatches in public training data. Consult [`docs/KNOWN_LIMITATIONS.md`](docs/KNOWN_LIMITATIONS.md) for full empirical diagnostic reports.
+> If the ML result is unavailable or during the initial 15-sample warm-up, the system automatically falls back to Rule Mode (`decision_source=RULE_FALLBACK`).
+
+---
+
+## 7. Quickstart Guide
+
+### 1. Environment Setup
 ```bash
 git clone https://github.com/Rnvz/IoT-based-Physiological-Parameter-Monitoring-and-Anomaly-Detection.git
 cd IoT-based-Physiological-Parameter-Monitoring-and-Anomaly-Detection
+
+# Create virtual environment and install backend dependencies
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
 ```
 
-### 3. Run the Machine Learning Pipeline
+### 2. Configure Environment Variables
 ```bash
-cd ml_pipeline
-pip install -r requirements.txt
-python src/clean_datasets.py
-python src/feature_engineering.py
-python src/train_isolation_forest.py
+cp backend/.env.example backend/.env
+# Edit backend/.env with your MQTT broker, topic prefix, and secret API key
 ```
 
-### 4. Run the Backend Service (FastAPI)
+### 3. Run Backend Service
 ```bash
-cd ../backend
-pip install -r requirements.txt
-cp .env.example .env
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+cd backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-Interactive API documentation is accessible at `http://localhost:8000/docs`.
+Interactive OpenAPI documentation will be available at `http://localhost:8000/docs`.
 
-### 5. Run the Visualization Dashboard (Streamlit)
-```bash
-cd ../dashboard
-pip install -r requirements.txt
-streamlit run app.py
-```
-The dashboard interface will open at `http://localhost:8501`.
-
-### 6. Run Test Suites
+### 4. Run Automated Test Suite
 ```bash
 # Execute from project root
-python -m pytest tests/ -v
+pytest tests/ -v
 ```
 
-### 7. Compile and Flash ESP32 Firmware
+---
+
+## 8. Simulator and Dataset Isolation
+
+Simulated telemetry must **never** contaminate real device recordings. Always run the simulator against a dedicated test prefix and separate storage directory.
+
 ```bash
-cd firmware
-cp include/secrets.h.example include/secrets.h
-# Edit include/secrets.h with Wi-Fi credentials and server IP
-pio run --target upload
-pio device monitor
-```
-
-### 8. Running the Device Simulator (Isolated Environment)
-
-> [!WARNING]
-> **Preventing Data Contamination**: Simulated telemetry MUST NEVER be written into the real device recording dataset (`data/readings.csv`). To guarantee total data isolation between synthetic tests and physical sensor recordings, the backend must be executed with a dedicated `CSV_DIR` and a dedicated test `TOPIC_PREFIX`.
-
-**Step 1: Start Backend in Isolated Simulation Mode**
-```bash
-# Run backend with dedicated storage dir (data_sim/) and test prefix
+# 1. Start backend with isolated storage
 CSV_DIR=./data_sim TOPIC_PREFIX=physiomonitor/test uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
 
-**Step 2: Run the ESP32 Simulator against the Test Prefix**
-```bash
-# Interactive test stream (5 structured scenarios @ 1 Hz)
+# 2. Run interactive 5-scenario simulator (1 Hz live table)
 python scripts/simulate_device.py --topic-prefix physiomonitor/test
 
-# Fast dataset benchmark mode (1,200 samples)
+# 3. Or run fast 1,200-sample pipeline benchmark
 python scripts/simulate_device.py --topic-prefix physiomonitor/test --fast-1200
 ```
 
-**Step 3: Verify Dataset Quality and Integrity**
-```bash
-# Check dataset validity, bursts, gaps, and 1,000-row thesis quota
-python scripts/dataset_check.py -i data_sim/readings.csv
-```
+---
 
-### 9. Scenario Tagging for Real Own-Device Recordings
+## 9. Own-Device Recording and Dataset Validation
 
-When collecting real recording sessions with the physical ESP32 device, tag active behavioral conditions via the CLI helper:
-```bash
-# Tag benign recording scenarios
-python scripts/tag_scenario.py REST --note "kamar tidur, posisi duduk relaks"
-python scripts/tag_scenario.py TYPING --note "mengetik tugas akhir"
-python scripts/tag_scenario.py MOTION --note "jalan santai di ruangan"
+When recording sessions from the physical ESP32 device:
 
-# Inspect currently active scenario
-python scripts/tag_scenario.py --show
-```
+1. **Tag Active Activity Scenarios**:
+   ```bash
+   python scripts/tag_scenario.py REST --note "kamar tidur, posisi duduk relaks"
+   python scripts/tag_scenario.py TYPING --note "mengetik naskah skripsi"
+   python scripts/tag_scenario.py MOTION --note "berjalan santai di ruangan"
 
+   # View active tag
+   python scripts/tag_scenario.py --show
+   ```
+
+2. **Verify Dataset Quality and Integrity**:
+   Check timestamp continuity, duplicate records, high-frequency bursts, and progress toward the 1,000 valid-row target:
+   ```bash
+   python scripts/dataset_check.py -i data/readings.csv
+   ```
+
+---
+
+## 10. Dashboard Web UI Note
+
+The end-user visualization dashboard resides in `frontend/` (consuming the `/latest`, `/history`, and `/predictions` REST endpoints). 
+Please note that `frontend/` is decoupled from this core ingestion and analysis engine and is **not** currently part of this repository branch.
+
+---
+
+## 11. Project Credits and Contributors
+
+- **Yohanes Wenanta** ([@Rnvz](https://github.com/Rnvz)): Embedded firmware development (PlatformIO/C++), hardware sensor interfacing (MAX30102, DS18B20, SSD1306), and initial pipeline architecture.
+- **Cona / Advanced Agentic Coding Pair Programmer**: Modular backend rebuild (FastAPI), flat MQTT contract implementation, configurable rule engine, ML adapter with per-device rolling windows, REST API security hardening, dataset integrity checking tools, and empirical diagnostic documentation.
+- **Dataset Authors**:
+  - Nasir Ayub et al. (*Human Vital Signs Dataset 2024*)
+  - Engr Arri (*Human Vital Signs R Dataset*)
+  - Gourango Mandal (*Synthetic Patient HealthCare Monitoring Dataset*)
