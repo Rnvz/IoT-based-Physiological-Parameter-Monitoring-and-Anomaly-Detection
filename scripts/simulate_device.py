@@ -48,7 +48,7 @@ received_results: List[Dict[str, Any]] = []
 received_cmds: List[Dict[str, Any]] = []
 
 
-def print_banner(host: str, port: int, topic: str, prefix: str, device_id: str, base_temp: float):
+def print_banner(host: str, port: int, topic: str, prefix: str, device_id: str, base_temp: float, use_color: bool = True):
     print(BOX_SEP)
     t1 = "ESP32 TELEMETRY SIMULATOR - PHYSIOMONITOR REBUILD"
     t2 = f"Broker   : {host}:{port}"
@@ -57,6 +57,20 @@ def print_banner(host: str, port: int, topic: str, prefix: str, device_id: str, 
     t5 = f"Perangkat: {device_id} | Suhu Kulit Dasar: {base_temp:.1f} C"
     for line in [t1, t2, t3, t4, t5]:
         print(f"| {line[:INNER_WIDTH]:<{INNER_WIDTH}} |")
+    print(BOX_SEP)
+
+    # Peringatan isolasi data simulasi vs rekaman perangkat asli
+    w1 = f"PERINGATAN: DATA SIMULASI AKTIF (TARGET PREFIX: '{prefix}')"
+    w2 = "Pastikan backend berjalan dengan direktori terpisah (misal: CSV_DIR=./data_sim)"
+    w3 = "agar data uji ini TIDAK bercampur dengan rekaman perangkat asli (real recordings)!"
+    if use_color:
+        print(f"| \033[1;33m{w1[:INNER_WIDTH]:<{INNER_WIDTH}}\033[0m |")
+        print(f"| \033[1;33m{w2[:INNER_WIDTH]:<{INNER_WIDTH}}\033[0m |")
+        print(f"| \033[1;33m{w3[:INNER_WIDTH]:<{INNER_WIDTH}}\033[0m |")
+    else:
+        print(f"| {w1[:INNER_WIDTH]:<{INNER_WIDTH}} |")
+        print(f"| {w2[:INNER_WIDTH]:<{INNER_WIDTH}} |")
+        print(f"| {w3[:INNER_WIDTH]:<{INNER_WIDTH}} |")
     print(BOX_SEP)
 
 
@@ -461,7 +475,8 @@ def main():
         topic=topic,
         prefix=clean_prefix,
         device_id=args.device_id,
-        base_temp=args.base_temp
+        base_temp=args.base_temp,
+        use_color=use_color
     )
 
     client = create_mqtt_client(clean_prefix, use_color=use_color)

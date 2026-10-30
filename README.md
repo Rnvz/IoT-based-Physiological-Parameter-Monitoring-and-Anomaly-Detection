@@ -195,3 +195,43 @@ cp include/secrets.h.example include/secrets.h
 pio run --target upload
 pio device monitor
 ```
+
+### 8. Running the Device Simulator (Isolated Environment)
+
+> [!WARNING]
+> **Preventing Data Contamination**: Simulated telemetry MUST NEVER be written into the real device recording dataset (`data/readings.csv`). To guarantee total data isolation between synthetic tests and physical sensor recordings, the backend must be executed with a dedicated `CSV_DIR` and a dedicated test `TOPIC_PREFIX`.
+
+**Step 1: Start Backend in Isolated Simulation Mode**
+```bash
+# Run backend with dedicated storage dir (data_sim/) and test prefix
+CSV_DIR=./data_sim TOPIC_PREFIX=physiomonitor/test uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+**Step 2: Run the ESP32 Simulator against the Test Prefix**
+```bash
+# Interactive test stream (5 structured scenarios @ 1 Hz)
+python scripts/simulate_device.py --topic-prefix physiomonitor/test
+
+# Fast dataset benchmark mode (1,200 samples)
+python scripts/simulate_device.py --topic-prefix physiomonitor/test --fast-1200
+```
+
+**Step 3: Verify Dataset Quality and Integrity**
+```bash
+# Check dataset validity, bursts, gaps, and 1,000-row thesis quota
+python scripts/dataset_check.py -i data_sim/readings.csv
+```
+
+### 9. Scenario Tagging for Real Own-Device Recordings
+
+When collecting real recording sessions with the physical ESP32 device, tag active behavioral conditions via the CLI helper:
+```bash
+# Tag benign recording scenarios
+python scripts/tag_scenario.py REST --note "kamar tidur, posisi duduk relaks"
+python scripts/tag_scenario.py TYPING --note "mengetik tugas akhir"
+python scripts/tag_scenario.py MOTION --note "jalan santai di ruangan"
+
+# Inspect currently active scenario
+python scripts/tag_scenario.py --show
+```
+
