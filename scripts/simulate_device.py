@@ -248,9 +248,9 @@ def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, b
 
 def main():
     parser = argparse.ArgumentParser(description="Simulasi ESP32 Telemetry untuk Backend Rebuild")
-    parser.add_argument("--host", default=DEFAULT_BROKER, help=f"Host broker MQTT (default: {DEFAULT_BROKER})")
+    parser.add_argument("--host", "--broker", default=DEFAULT_BROKER, help=f"Host broker MQTT (default: {DEFAULT_BROKER})")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Port broker (default: {DEFAULT_PORT})")
-    parser.add_argument("--prefix", default=DEFAULT_PREFIX, help=f"Topic prefix (default: {DEFAULT_PREFIX})")
+    parser.add_argument("--prefix", "--topic-prefix", default=DEFAULT_PREFIX, help=f"Topic prefix (default: {DEFAULT_PREFIX})")
     parser.add_argument("--device-id", default=DEVICE_ID, help=f"Device ID (default: {DEVICE_ID})")
     parser.add_argument("--base-temp", type=float, default=33.0, help="Suhu dasar kulit realistis (default: 33.0 C)")
     parser.add_argument("--fast-1200", action="store_true", help="Kirim 1.200 sampel cepat untuk verifikasi dataset")
