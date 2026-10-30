@@ -130,3 +130,20 @@ async def test_pipeline_actuator_message_saved(mock_mqtt_service):
     assert event is not None
     assert event.seq == 999
     assert "ML_RESULT" in event.payload_json
+
+def test_mqtt_service_refuses_empty_topic_prefix(monkeypatch):
+    """
+    MQTTService must refuse to start (raise ValueError) when TOPIC_PREFIX is empty.
+    """
+    monkeypatch.setattr(settings, "topic_prefix", "")
+    with pytest.raises(ValueError, match="Invalid TOPIC_PREFIX"):
+        MQTTService()
+
+def test_mqtt_service_refuses_placeholder_topic_prefix(monkeypatch):
+    """
+    MQTTService must refuse to start (raise ValueError) when TOPIC_PREFIX contains GANTI-ID-UNIK.
+    """
+    monkeypatch.setattr(settings, "topic_prefix", "physiomonitor/GANTI-ID-UNIK")
+    with pytest.raises(ValueError, match="GANTI-ID-UNIK"):
+        MQTTService()
+

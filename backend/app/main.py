@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
 
     configured_key = settings.api_key.strip() if settings.api_key else ""
     if not configured_key:
-        raise RuntimeError("API_KEY must not be empty. Server refusing to start with unsecured routes.")
+        logger.warning("[Security] API_KEY is empty. POST routes and /export will remain disabled (HTTP 500).")
 
     logger.info("Initializing IoT Physio Monitor Backend...")
     try:
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
             f"Topic prefix: {settings.topic_prefix}, Decision mode: {settings.decision_mode}"
         )
     except Exception as e:
-        logger.warning(f"Could not start MQTT service ({e}). Continuing in standalone API mode.")
+        logger.error(f"[MQTT] Could not start MQTT service ({e}). Continuing in standalone API mode.")
 
     yield
 

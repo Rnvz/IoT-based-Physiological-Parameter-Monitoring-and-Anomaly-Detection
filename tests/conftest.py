@@ -30,3 +30,10 @@ def sample_anomaly_telemetry():
 @pytest.fixture
 def mock_model(mocker):
     return mocker.patch('joblib.load')
+
+@pytest.fixture(autouse=True)
+def configure_test_settings(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "api_key", "test_secret_key")
+    monkeypatch.setattr(settings, "topic_prefix", "physiomonitor/test")
+

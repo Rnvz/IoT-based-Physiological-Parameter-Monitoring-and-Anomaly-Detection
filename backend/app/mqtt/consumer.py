@@ -29,7 +29,15 @@ class MQTTService:
 
     def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None):
         self.loop = loop
-        self.prefix = settings.topic_prefix.rstrip("/")
+        prefix = (settings.topic_prefix or "").strip()
+        if not prefix or "GANTI-ID-UNIK" in prefix:
+            logger.error(
+                f"[MQTT] Invalid TOPIC_PREFIX ('{prefix}'). MQTT service refusing to start. "
+                "Please configure a valid, unique TOPIC_PREFIX in .env."
+            )
+            raise ValueError(f"Invalid TOPIC_PREFIX ('{prefix}'). Must not be empty or contain 'GANTI-ID-UNIK'.")
+
+        self.prefix = prefix.rstrip("/")
         self.data_topic = f"{self.prefix}/data"
         self.actuator_topic = f"{self.prefix}/actuator"
 

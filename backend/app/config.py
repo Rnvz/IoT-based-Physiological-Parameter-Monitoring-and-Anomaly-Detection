@@ -5,7 +5,7 @@ import os
 class Settings(BaseSettings):
     mqtt_broker: str = "broker.hivemq.com"
     mqtt_port: int = 1883
-    topic_prefix: str = "physiomonitor/test"
+    topic_prefix: str = ""
     device_id: str = "esp32-01"
 
     db_backend: str = "csv"
@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     supabase_url: Optional[str] = None
     supabase_service_key: Optional[str] = None
 
-    api_key: str = "default_secret_key"
+    api_key: str = ""
     read_auth_required: bool = False
     cors_origins: str = "http://localhost:8080,http://localhost:3000,http://127.0.0.1:8080"
     log_level: str = "INFO"

@@ -482,3 +482,39 @@ async def test_dataset_export_includes_scenario_column_with_as_of_join(client_an
 
     assert reader[2]["ts"] == t4
     assert reader[2]["scenario"] == "MOTION"
+
+def test_api_disabled_when_api_key_empty(client_and_repo, monkeypatch):
+    """
+    POST routes and /export must stay disabled (HTTP 500) when API_KEY is empty.
+    Health checks must remain accessible (HTTP 200).
+    """
+    client, _, _ = client_and_repo
+    monkeypatch.setattr(settings, "api_key", "")
+
+    res_health = client.get("/health")
+    assert res_health.status_code == 200
+    assert res_health.json() == {"status": "ok"}
+
+    res_mode = client.post(
+        "/actuator/mode",
+        json={"mode": "AUTO"},
+        headers={"X-API-Key": "any-key"}
+    )
+    assert res_mode.status_code == 500
+    assert res_mode.json()["detail"] == "API_KEY is not configured on server"
+
+    res_scenario = client.post(
+        "/session/scenario",
+        json={"scenario": "REST", "note": "baseline"},
+        headers={"X-API-Key": "any-key"}
+    )
+    assert res_scenario.status_code == 500
+    assert res_scenario.json()["detail"] == "API_KEY is not configured on server"
+
+    res_export = client.get(
+        "/export/dataset.csv",
+        headers={"X-API-Key": "any-key"}
+    )
+    assert res_export.status_code == 500
+    assert res_export.json()["detail"] == "API_KEY is not configured on server"
+

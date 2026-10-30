@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     model_path: str = "ml_pipeline/models/isolation_forest_model.joblib"
     scaler_path: str = "ml_pipeline/models/scaler.joblib"
     db_path: str = "sqlite+aiosqlite:///data.db"
-    device_token: str = "default_token"
+    device_token: str = ""
     log_level: str = "INFO"
 
     hr_min: float = 30.0
