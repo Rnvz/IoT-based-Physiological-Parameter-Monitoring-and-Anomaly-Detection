@@ -42,9 +42,9 @@ def create_mqtt_client(prefix: str):
     actuator_topic = f"{prefix}/actuator"
 
     def on_connect(client, userdata, flags, rc, properties=None):
-        print(f"[*] Terhubung ke broker MQTT (rc={rc})")
+        print(f"[STATUS] Terhubung ke broker MQTT (rc={rc})")
         client.subscribe([(result_topic, 0), (cmd_topic, 0)])
-        print(f"[*] Berlangganan topik: {result_topic} dan {cmd_topic}\n")
+        print(f"[STATUS] Berlangganan topik: {result_topic} dan {cmd_topic}\n")
 
     def on_message(client, userdata, msg):
         topic = msg.topic
@@ -52,7 +52,7 @@ def create_mqtt_client(prefix: str):
         try:
             data = json.loads(payload_str)
         except json.JSONDecodeError:
-            print(f"  └── [Rx {topic}] Non-JSON payload: {payload_str}")
+            print(f"  |--> [RX {topic}] Non-JSON payload: {payload_str}")
             return
 
         if topic == result_topic:
@@ -60,11 +60,12 @@ def create_mqtt_client(prefix: str):
             label = data.get("label", "UNKNOWN")
             sev = data.get("severity", -1)
             score = data.get("score")
-            score_str = f"{score:+.4f}" if score is not None else "None"
+            score_str = f"{score:+.4f}" if score is not None else " None "
             ver = data.get("model_version", "-")
             color_tag = "\033[92m" if sev == 0 else ("\033[93m" if sev == 1 else "\033[91m")
             reset = "\033[0m"
-            print(f"  └── 📩 [RECV /result] {color_tag}Label={label:<8} | Severity={sev} | Score={score_str:<8} | Ver={ver}{reset}")
+            sev_desc = "NORMAL" if sev == 0 else ("WARN" if sev == 1 else ("ALERT" if sev == 2 else "UNKNOWN"))
+            print(f"  |--> [RX:RESULT] {color_tag}Label={label:<8} | Severity={sev} [{sev_desc:<6}] | Score={score_str:<7} | ModelVer={ver}{reset}")
 
         elif topic == cmd_topic:
             received_cmds.append(data)
@@ -73,7 +74,8 @@ def create_mqtt_client(prefix: str):
             color = data.get("color", "-")
             bright = data.get("brightness", "-")
             buzz = data.get("buzzer_test", False)
-            print(f"  └── ⚙️ [RECV /cmd] Seq={seq} | Mode={mode} | Color={color} | Brightness={bright} | BuzzerTest={buzz}")
+            buzz_str = "ON" if buzz else "OFF"
+            print(f"  |--> [RX:CMD]    Seq={seq} | Mode={mode} | LED={color} ({bright}%) | Buzzer={buzz_str}")
 
             # Kirim konfirmasi balik ke <prefix>/actuator
             ack_payload = {
@@ -85,7 +87,7 @@ def create_mqtt_client(prefix: str):
                 "manual_left_s": 300 if mode == "MANUAL" else 0
             }
             client.publish(actuator_topic, json.dumps(ack_payload))
-            print(f"      └── 🚀 [ACK /actuator] Sent confirmation for seq {seq}")
+            print(f"       |--> [TX:ACK]    Seq={seq} dikonfirmasi ke {actuator_topic}")
 
     if hasattr(mqtt, "CallbackAPIVersion"):
         client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
@@ -120,11 +122,14 @@ def send_data_packet(
         "status": status
     }
     client.publish(topic, json.dumps(payload))
-    hr_str = f"{hr:5.1f}" if hr is not None else "  -- "
-    spo2_str = f"{spo2:4.0f}%" if spo2 is not None else " --%"
-    temp_str = f"{temp:4.1f}°C" if temp is not None else " --.-"
-    desc_str = f" ({desc})" if desc else ""
-    print(f"[*] 🚀 [SEND /data] HR={hr_str} | SpO2={spo2_str} | Temp={temp_str} | Finger={'YES' if finger else 'NO '}{desc_str}")
+    hr_str = f"{hr:5.1f} bpm" if hr is not None else "  --.- bpm"
+    spo2_str = f"{spo2:3.0f}%" if spo2 is not None else " --%"
+    temp_str = f"{temp:4.1f}°C" if temp is not None else " --.-°C"
+    hum_str = f"{hum:4.1f}%" if hum is not None else " --.-%"
+    room_str = f"{room_temp:4.1f}°C" if room_temp is not None else " --.-°C"
+    finger_str = "YES" if finger else "NO "
+    desc_str = f" | {desc}" if desc else ""
+    print(f"[TX:DATA] HR={hr_str} | SpO2={spo2_str} | Skin={temp_str} | Hum={hum_str} | Room={room_str} | Finger={finger_str}{desc_str}")
 
 def run_fast_1200(client: mqtt.Client, topic: str, device_id: str, base_temp: float = 33.0):
     """
@@ -132,9 +137,9 @@ def run_fast_1200(client: mqtt.Client, topic: str, device_id: str, base_temp: fl
     Memenuhi kebutuhan minimal 1.000 baris dataset untuk skripsi.
     """
     total_records = 1200
-    print("\n" + "=" * 75)
-    print(f"  MODE CEPAT: MENGIRIM {total_records} SAMPEL KE {topic} (Suhu Kulit Dasar: {base_temp}°C)")
-    print("=" * 75)
+    print("\n" + "=" * 90)
+    print(f"  MODE CEPAT: MENGIRIM {total_records} SAMPEL KE {topic} (Suhu Dasar: {base_temp}°C)")
+    print("=" * 90)
 
     base_hr = 75.0
     base_spo2 = 98.0
@@ -178,17 +183,19 @@ def run_fast_1200(client: mqtt.Client, topic: str, device_id: str, base_temp: fl
 
         send_data_packet(client, topic, device_id, hr, spo2, temp, hum, room_temp, finger, status)
         if (i + 1) % 100 == 0:
-            print(f"  └── Progress: {i + 1}/{total_records} sampel terkirim...")
+            print(f"  |--> Progress: {i + 1}/{total_records} sampel terkirim...")
         time.sleep(0.01)  # Interval cepat 10ms per record
 
     elapsed = time.time() - start_time
-    print(f"\n[✓] Selesai mengirim {total_records} rekor dalam {elapsed:.2f} detik (~{total_records/elapsed:.1f} msg/s)!\n")
+    print(f"\n[INFO] Selesai mengirim {total_records} rekor dalam {elapsed:.2f} detik (~{total_records/elapsed:.1f} msg/s)!\n")
 
 def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, base_temp: float = 33.0, duration_s: int = 60):
     """
     Menjalankan 5 skenario terstruktur @ 1 Hz selama ~60 detik untuk pengujian normal.
     """
-    print(f"\n--- [SKENARIO 1] Data Normal (35 Sampel -> Melampaui ML Warmup 15 Sampel) ---")
+    print("\n" + "=" * 90)
+    print("  [SCENARIO 1/5] Data Normal (35 Sampel -> Melampaui ML Warmup 15 Sampel)")
+    print("=" * 90)
     for i in range(35):
         t_noise = round(base_temp + (i % 3) * 0.1, 1)
         send_data_packet(
@@ -199,7 +206,9 @@ def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, b
         )
         time.sleep(1.0)
 
-    print("\n--- [SKENARIO 2] Finger Off / Sensor Lepas (5 Sampel -> Reset Buffer, No /result) ---")
+    print("\n" + "=" * 90)
+    print("  [SCENARIO 2/5] Finger Off / Sensor Lepas (5 Sampel -> Reset Buffer, No /result)")
+    print("=" * 90)
     for i in range(5):
         send_data_packet(
             client, topic, device_id,
@@ -209,7 +218,9 @@ def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, b
         )
         time.sleep(1.0)
 
-    print("\n--- [SKENARIO 3] Anomali Transien 1 Detik & Pemulihan (5 Sampel) ---")
+    print("\n" + "=" * 90)
+    print("  [SCENARIO 3/5] Anomali Transien 1 Detik & Pemulihan (5 Sampel)")
+    print("=" * 90)
     send_data_packet(
         client, topic, device_id,
         hr=145.0, spo2=88.0, temp=39.0,
@@ -226,7 +237,9 @@ def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, b
         )
         time.sleep(1.0)
 
-    print("\n--- [SKENARIO 4] Anomali Kritis Berkelanjutan (10 Sampel -> Severity 2) ---")
+    print("\n" + "=" * 90)
+    print("  [SCENARIO 4/5] Anomali Kritis Berkelanjutan (10 Sampel -> Severity 2)")
+    print("=" * 90)
     for i in range(10):
         send_data_packet(
             client, topic, device_id,
@@ -236,7 +249,9 @@ def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, b
         )
         time.sleep(1.0)
 
-    print("\n--- [SKENARIO 5] Pemulihan Kembali Normal (5 Sampel) ---")
+    print("\n" + "=" * 90)
+    print("  [SCENARIO 5/5] Pemulihan Kembali Normal (5 Sampel)")
+    print("=" * 90)
     for i in range(5):
         send_data_packet(
             client, topic, device_id,
@@ -259,18 +274,18 @@ def main():
     topic = f"{args.prefix.rstrip('/')}/data"
     client = create_mqtt_client(args.prefix.rstrip('/'))
 
-    print("=" * 75)
-    print(f"  ESP32 SIMULATOR (PHYSIOMONITOR REBUILD)")
+    print("=" * 90)
+    print("  ESP32 TELEMETRY SIMULATOR")
     print(f"  Broker   : {args.host}:{args.port}")
     print(f"  Data     : {topic}")
     print(f"  Device   : {args.device_id}")
     print(f"  Base Temp: {args.base_temp}°C")
-    print("=" * 75)
+    print("=" * 90)
 
     try:
         client.connect(args.host, args.port, keepalive=60)
     except Exception as e:
-        print(f"[!] Gagal koneksi ke broker MQTT: {e}")
+        print(f"[ERROR] Gagal koneksi ke broker MQTT: {e}")
         sys.exit(1)
 
     client.loop_start()
@@ -282,12 +297,12 @@ def main():
         else:
             run_interactive_scenarios(client, topic, args.device_id, base_temp=args.base_temp)
     except KeyboardInterrupt:
-        print("\n[*] Simulasi dihentikan pengguna.")
+        print("\n[INFO] Simulasi dihentikan pengguna.")
     finally:
         time.sleep(1.0)
         client.loop_stop()
         client.disconnect()
-        print(f"\n[*] Selesai. Total /result diterima: {len(received_results)}, /cmd diterima: {len(received_cmds)}")
+        print(f"\n[INFO] Selesai. Total /result diterima: {len(received_results)}, /cmd diterima: {len(received_cmds)}")
 
 if __name__ == "__main__":
     main()
