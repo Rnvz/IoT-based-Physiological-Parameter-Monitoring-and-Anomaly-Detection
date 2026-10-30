@@ -32,7 +32,7 @@ class MQTTPublisher:
         try:
             payload_str = result.model_dump_json()
             info = self.client.publish(self.result_topic, payload_str, qos=0)
-            logger.info(f"[MQTTPublisher] Published /result: {payload_str}")
+            logger.debug(f"[MQTTPublisher] Published /result: {payload_str}")
             return info.rc == mqtt.MQTT_ERR_SUCCESS
         except Exception as e:
             logger.error(f"[MQTTPublisher] Error publishing /result: {e}")

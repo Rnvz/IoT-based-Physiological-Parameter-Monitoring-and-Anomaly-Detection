@@ -19,6 +19,14 @@ from app.mqtt.publisher import MQTTPublisher
 
 logger = logging.getLogger(__name__)
 
+TABLE_SEP = "+----------+----------+--------+-------+--------+--------+------------+----------------------------------+"
+TABLE_HDR = "| Waktu    | Device   |   HR   | SpO2  |  Suhu  |  Jari  | Status FW  | Evaluasi / Aksi                  |"
+
+def _print_table_header():
+    print(TABLE_SEP, flush=True)
+    print(TABLE_HDR, flush=True)
+    print(TABLE_SEP, flush=True)
+
 class MQTTService:
     """
     MQTT Service managing consumer and publisher for:
@@ -29,6 +37,8 @@ class MQTTService:
 
     def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None):
         self.loop = loop
+        self._row_count = 0
+
         prefix = (settings.topic_prefix or "").strip()
         if not prefix or "GANTI-ID-UNIK" in prefix:
             logger.error(
@@ -124,9 +134,23 @@ class MQTTService:
         except Exception as e:
             logger.error(f"[MQTT] Error in raw storage: {e}")
 
+        ts_now = datetime.now().strftime("%H:%M:%S")
+        dev = device_id[:8]
+        hr_str = f"{telemetry.hr:4.1f}" if telemetry.hr is not None else "--"
+        spo2_str = f"{int(telemetry.spo2)}%" if telemetry.spo2 is not None else "--"
+        temp_str = f"{telemetry.temp:4.1f}C" if telemetry.temp is not None else "--"
+        finger_str = "ADA" if telemetry.finger else "LEPAS"
+        fw_status = (telemetry.status or "NORMAL")[:10]
+
         if not telemetry.finger or not telemetry.has_valid_vitals:
             self.ml_service.reset_device(device_id)
-            logger.info(f"[MQTT] Device {device_id}: finger={telemetry.finger}, vitals_valid={telemetry.has_valid_vitals}. /result omitted.")
+            eval_desc = "Jari lepas (window reset)" if not telemetry.finger else "Menunggu vitals valid (omit)"
+            if self._row_count % 20 == 0:
+                _print_table_header()
+            self._row_count += 1
+            row = f"| {ts_now:<8} | {dev:<8} | {hr_str:^6} | {spo2_str:^5} | {temp_str:^6} | {finger_str:^6} | {fw_status:<10} | {eval_desc[:32]:<32} |"
+            print(row, flush=True)
+            logger.debug(f"[MQTT] Device {device_id}: finger={telemetry.finger}, vitals_valid={telemetry.has_valid_vitals}. /result omitted.")
             return
 
         rule_sev, rule_label = evaluate_rules(telemetry.hr, telemetry.spo2, telemetry.temp)
@@ -175,6 +199,13 @@ class MQTTService:
         )
         self.publisher.publish_result(result_payload)
 
+        if self._row_count % 20 == 0:
+            _print_table_header()
+        self._row_count += 1
+        eval_desc = f"{arb.published_label} (Sev {arb.published_severity}, {arb.decision_source}) -> /result"
+        row = f"| {ts_now:<8} | {dev:<8} | {hr_str:^6} | {spo2_str:^5} | {temp_str:^6} | {finger_str:^6} | {fw_status:<10} | {eval_desc[:32]:<32} |"
+        print(row, flush=True)
+
     async def _handle_actuator_message(self, data: dict, raw_str: str):
         ts = datetime.now(timezone.utc).isoformat()
         seq = data.get("ack_seq")
@@ -191,7 +222,19 @@ class MQTTService:
         )
         try:
             await self.repo.save_actuator_event(event)
-            logger.info(f"[MQTT] Recorded /actuator status (ack_seq={seq_int}, mode={data.get('mode')})")
+            ts_now = datetime.now().strftime("%H:%M:%S")
+            dev = (data.get("device_id") or settings.device_id)[:8]
+            mode = data.get("mode", "AUTO")
+            led = data.get("led", {})
+            led_color = led.get("color", "-") if isinstance(led, dict) else "-"
+            led_bright = led.get("brightness", "-") if isinstance(led, dict) else "-"
+            buzzer = data.get("buzzer", {})
+            buzz_test = buzzer.get("test", False) if isinstance(buzzer, dict) else False
+            buzz_str = "TEST" if buzz_test else "OFF"
+            act_text = f"[AKTUATOR] Mode: {mode} | LED: {led_color} ({led_bright}%) | Buzz: {buzz_str} (seq: {seq_int})"
+            row = f"| {ts_now:<8} | {dev:<8} | {act_text[:76]:<76} |"
+            print(row, flush=True)
+            logger.debug(f"[MQTT] Recorded /actuator status (ack_seq={seq_int}, mode={data.get('mode')})")
         except Exception as e:
             logger.error(f"[MQTT] Error storing actuator status event: {e}")
 
