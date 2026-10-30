@@ -12,6 +12,8 @@ secrets.h
 firmware/include/secrets.h
 !firmware/include/secrets.h.example
 .streamlit/secrets.toml
+Dashboard/
+
 
 # ------------------------------------------------------------------------------
 # 1.1 AI Agent Instructions & Internal Docs (Private Local Guides)
