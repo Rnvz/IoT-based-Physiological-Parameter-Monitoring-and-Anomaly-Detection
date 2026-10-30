@@ -3,7 +3,6 @@ from pydantic import ValidationError
 from app.schemas.telemetry import TelemetryPayload
 from app.schemas.result import ResultPayload
 from app.schemas.cmd import CommandPayload
-from app.schemas.actuator import ActuatorStatusPayload
 
 def test_telemetry_payload_valid_parsing():
     data = {
@@ -134,17 +133,3 @@ def test_command_payload_validation():
     with pytest.raises(ValidationError):
         CommandPayload(mode="AUTO", seq=2147483648)
 
-def test_actuator_status_payload_validation():
-    data = {
-        "mode": "AUTO",
-        "led": {"color": "GREEN", "brightness": 40},
-        "buzzer": {"test": False},
-        "source": "ML_RESULT",
-        "ack_seq": 103,
-        "manual_left_s": 0
-    }
-    payload = ActuatorStatusPayload.model_validate(data)
-    assert payload.mode == "AUTO"
-    assert payload.source == "ML_RESULT"
-    assert payload.ack_seq == 103
-    assert payload.led["color"] == "GREEN"

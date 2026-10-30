@@ -9,7 +9,6 @@ from app.schemas.telemetry import (
 )
 from app.schemas.result import ResultPayload
 from app.schemas.cmd import CommandPayload
-from app.schemas.actuator import ActuatorStatusPayload
 
 __all__ = [
     "TelemetryPayload",
@@ -21,5 +20,5 @@ __all__ = [
     "NetworkInfo",
     "ResultPayload",
     "CommandPayload",
-    "ActuatorStatusPayload",
 ]
+
