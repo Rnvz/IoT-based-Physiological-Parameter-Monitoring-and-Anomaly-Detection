@@ -51,13 +51,11 @@ def analyze_metric(values: List[float], name: str, unit: str, k_warn: float, k_a
     p95_val = float(np.percentile(arr, 95))
     max_val = float(np.max(arr))
 
-    # Suggested bounds
     warn_low = mean_val - k_warn * std_val
     warn_high = mean_val + k_warn * std_val
     alert_low = mean_val - k_alert * std_val
     alert_high = mean_val + k_alert * std_val
 
-    # Physiological clamp for SpO2 (cannot exceed 100%)
     if "SpO2" in name:
         warn_high = min(100.0, warn_high)
         alert_high = min(100.0, alert_high)
@@ -139,7 +137,6 @@ def main():
 
             valid_finger_rows += 1
 
-            # HR
             hr_raw = row.get("hr", "").strip()
             if hr_raw:
                 try:
@@ -149,7 +146,6 @@ def main():
                 except ValueError:
                     pass
 
-            # SpO2
             spo2_raw = row.get("spo2", "").strip()
             if spo2_raw:
                 try:
@@ -159,7 +155,6 @@ def main():
                 except ValueError:
                     pass
 
-            # Temp
             temp_raw = row.get("temp", "").strip()
             if temp_raw:
                 try:

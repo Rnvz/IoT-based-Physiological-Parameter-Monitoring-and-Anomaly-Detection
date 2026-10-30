@@ -61,21 +61,21 @@ def test_telemetry_finger_false_marks_vitals_invalid():
 
 def test_telemetry_range_validation_hr():
     with pytest.raises(ValidationError):
-        TelemetryPayload.model_validate({"hr": 10.0, "finger": True})  # < 20
+        TelemetryPayload.model_validate({"hr": 10.0, "finger": True})
     with pytest.raises(ValidationError):
-        TelemetryPayload.model_validate({"hr": 300.0, "finger": True})  # > 250
+        TelemetryPayload.model_validate({"hr": 300.0, "finger": True})
 
 def test_telemetry_range_validation_spo2():
     with pytest.raises(ValidationError):
-        TelemetryPayload.model_validate({"spo2": 35.0, "finger": True})  # < 40
+        TelemetryPayload.model_validate({"spo2": 35.0, "finger": True})
     with pytest.raises(ValidationError):
-        TelemetryPayload.model_validate({"spo2": 105.0, "finger": True})  # > 100
+        TelemetryPayload.model_validate({"spo2": 105.0, "finger": True})
 
 def test_telemetry_range_validation_temp():
     with pytest.raises(ValidationError):
-        TelemetryPayload.model_validate({"temp": 15.0, "finger": True})  # < 20
+        TelemetryPayload.model_validate({"temp": 15.0, "finger": True})
     with pytest.raises(ValidationError):
-        TelemetryPayload.model_validate({"temp": 50.0, "finger": True})  # > 45
+        TelemetryPayload.model_validate({"temp": 50.0, "finger": True})
 
 def test_telemetry_range_validation_dht22():
     with pytest.raises(ValidationError):
@@ -106,40 +106,33 @@ def test_result_payload_validation():
     assert res.label == "NORMAL"
     assert res.score == 0.1234
 
-    # Out of bounds severity (must be 0, 1, or 2)
     with pytest.raises(ValidationError):
         ResultPayload(label="ANOMALY", severity=3)
     with pytest.raises(ValidationError):
         ResultPayload(label="NORMAL", severity=-1)
 
 def test_command_payload_validation():
-    # Valid AUTO mode
     cmd1 = CommandPayload(mode="AUTO", seq=101)
     assert cmd1.mode == "AUTO"
     assert cmd1.seq == 101
 
-    # Valid MANUAL mode
     cmd2 = CommandPayload(mode="MANUAL", color="RED", brightness=60, seq=102)
     assert cmd2.color == "RED"
     assert cmd2.brightness == 60
 
-    # Valid buzzer test
     cmd3 = CommandPayload(buzzer_test=True, seq=103)
     assert cmd3.buzzer_test is True
 
-    # Invalid color
     with pytest.raises(ValidationError):
         CommandPayload(mode="MANUAL", color="PURPLE", seq=104)
 
-    # Invalid brightness (<0 or >100)
     with pytest.raises(ValidationError):
         CommandPayload(mode="MANUAL", color="BLUE", brightness=150, seq=105)
 
-    # Seq must be 32-bit positive integer
     with pytest.raises(ValidationError):
         CommandPayload(mode="AUTO", seq=0)
     with pytest.raises(ValidationError):
-        CommandPayload(mode="AUTO", seq=2147483648)  # > INT32_MAX
+        CommandPayload(mode="AUTO", seq=2147483648)
 
 def test_actuator_status_payload_validation():
     data = {

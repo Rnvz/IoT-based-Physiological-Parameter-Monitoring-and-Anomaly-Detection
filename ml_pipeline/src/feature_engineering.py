@@ -22,7 +22,6 @@ def compute_temporal_features_timeseries(df: pd.DataFrame, window: int = 15) -> 
         df['Temperature_Delta'].abs() / df['Temperature'].mean()
     )
     
-    # Drop first (window-1) rows
     if len(df) >= window:
         df = df.iloc[window-1:].reset_index(drop=True)
     return df
@@ -52,12 +51,10 @@ def main(input_path: str, output_train: str, output_val: str, output_test: str, 
     logging.info(f"Memuat data dari {input_path}")
     df = pd.read_csv(input_path)
     
-    # 1. SPLIT DATA: Train (60%) / Validation (20%) / Test (20%)
     train_dfs, val_dfs, test_dfs = [], [], []
     for source in df['Source'].unique():
         source_df = df[df['Source'] == source].reset_index(drop=True)
         if source == 'engrarri21':
-            # Temporal split kronologis 60/20/20 per sesi rekaman
             n = len(source_df)
             t1, t2 = int(n * 0.6), int(n * 0.8)
             s_tr = source_df.iloc[:t1].copy()
@@ -70,7 +67,6 @@ def main(input_path: str, output_train: str, output_val: str, output_test: str, 
             val_dfs.append(s_va)
             test_dfs.append(s_te)
         else:
-            # Random split 60/20/20 (cross-sectional)
             tr, rest = train_test_split(source_df, test_size=0.4, random_state=42, stratify=source_df['OUTPUT'])
             va, te = train_test_split(rest, test_size=0.5, random_state=42, stratify=rest['OUTPUT'])
             train_dfs.append(tr)
@@ -83,7 +79,6 @@ def main(input_path: str, output_train: str, output_val: str, output_test: str, 
     
     logging.info(f"Train: {len(df_train_raw)}, Val: {len(df_val_raw)}, Test: {len(df_test_raw)}")
     
-    # 2. FEATURE ENGINEERING (terpisah per partisi)
     df_train_feat = process_features(df_train_raw, window)
     df_val_feat = process_features(df_val_raw, window)
     df_test_feat = process_features(df_test_raw, window)
@@ -96,7 +91,6 @@ def main(input_path: str, output_train: str, output_val: str, output_test: str, 
         'Rate_of_Change'
     ]
     
-    # 3. SCALING (fit hanya pada train)
     scaler = RobustScaler()
     X_train_scaled = pd.DataFrame(scaler.fit_transform(df_train_feat[feature_cols]), columns=feature_cols)
     X_val_scaled = pd.DataFrame(scaler.transform(df_val_feat[feature_cols]), columns=feature_cols)
@@ -111,7 +105,6 @@ def main(input_path: str, output_train: str, output_val: str, output_test: str, 
         if col in df_test_feat:
             X_test_scaled[col] = df_test_feat[col].values
             
-    # Simpan output
     os.makedirs(os.path.dirname(scaler_path), exist_ok=True)
     joblib.dump(scaler, scaler_path)
     

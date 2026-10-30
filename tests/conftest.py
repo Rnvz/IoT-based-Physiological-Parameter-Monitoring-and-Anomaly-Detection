@@ -3,7 +3,6 @@ import os
 import pytest
 import numpy as np
 
-# Tambahkan backend ke path import
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend')))
 
 @pytest.fixture
@@ -30,5 +29,4 @@ def sample_anomaly_telemetry():
 
 @pytest.fixture
 def mock_model(mocker):
-    # Mocking joblib.load for testing model service
     return mocker.patch('joblib.load')

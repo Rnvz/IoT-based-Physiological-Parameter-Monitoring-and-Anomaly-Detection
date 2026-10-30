@@ -56,7 +56,6 @@ class DevicePersistentEvaluator:
 
     def evaluate(self, raw_severity: int) -> int:
         if raw_severity == 0:
-            # Strict reset: immediately clear counter on normal reading
             self.consecutive_count = 0
             self.last_severity = 0
             return 0
@@ -64,11 +63,9 @@ class DevicePersistentEvaluator:
         self.consecutive_count += 1
         self.last_severity = raw_severity
 
-        # If debounced limit reached, emit raw severity (1 or 2); otherwise hold at 0 or 1
         if self.consecutive_count >= self.debounce_count:
             return raw_severity
         else:
-            # During debounce window (< 3 consecutive anomalies), suppress critical severity 2 to warning 1
             return 1 if raw_severity >= 1 else 0
 
     def reset(self):

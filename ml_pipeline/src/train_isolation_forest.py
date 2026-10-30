@@ -33,7 +33,6 @@ def calibrate_threshold(scores_normal: np.ndarray, target_fpr: float) -> float:
     Isolation Forest decision_function: skor rendah = lebih anomali.
     FPR = fraksi sampel normal yang skor-nya < threshold.
     """
-    # Percentile dari bawah: target_fpr persen dari normal harus di bawah threshold
     threshold = np.percentile(scores_normal, target_fpr * 100)
     return threshold
 
@@ -50,7 +49,6 @@ def main(train_path: str, val_path: str, test_path: str, model_path: str,
     df_val = pd.read_csv(val_path)
     df_test = pd.read_csv(test_path)
 
-    # Training: hanya pola NORMAL dari dataset yang tervalidasi
     train_normal_mask = (
         ((df_train['Source'] == 'nasirayub2') & (df_train['OUTPUT'] == 0)) |
         ((df_train['Source'] == 'engrarri21') & (df_train['OUTPUT'] == 0)) |
@@ -59,9 +57,6 @@ def main(train_path: str, val_path: str, test_path: str, model_path: str,
     X_train = df_train.loc[train_normal_mask, FEATURE_COLS]
     logging.info(f"Training samples (normal only): {X_train.shape[0]:,}")
 
-    # --- Train Isolation Forest ---
-    # contamination rendah (0.01) agar model belajar profil "normal" secara ketat.
-    # Keputusan anomali ditentukan oleh threshold yang dikalibrasi, bukan contamination.
     clf = IsolationForest(
         n_estimators=n_estimators, contamination=0.01,
         max_samples='auto', random_state=42, n_jobs=-1
@@ -71,9 +66,6 @@ def main(train_path: str, val_path: str, test_path: str, model_path: str,
     joblib.dump(clf, model_path)
     logging.info(f"Model disimpan di {model_path}")
 
-    # ==================================================
-    # TAHAP KALIBRASI: pada Validation Set
-    # ==================================================
     X_val = df_val[FEATURE_COLS]
     y_val = df_val['OUTPUT'].values
     val_normal_mask = y_val == 0
@@ -106,9 +98,6 @@ def main(train_path: str, val_path: str, test_path: str, model_path: str,
         })
         logging.info(f"  FPR target={fpr_target*100:.0f}%: threshold={thr:.4f}, actual_FPR={actual_fpr:.4f}, Recall={recall_val:.4f}")
 
-    # ==================================================
-    # TAHAP EVALUASI FINAL: pada Test Set (belum pernah disentuh)
-    # ==================================================
     X_test = df_test[FEATURE_COLS]
     y_test = df_test['OUTPUT'].values
     test_normal_mask = y_test == 0
@@ -137,13 +126,9 @@ def main(train_path: str, val_path: str, test_path: str, model_path: str,
             'CM': cm
         })
 
-    # --- Per-source breakdown pada test set (menggunakan FPR 10% sebagai contoh) ---
     mid_thr = thresholds[0.10]
     mid_pred = np.where(test_scores < mid_thr, 1, 0)
 
-    # ==================================================
-    # TULIS LAPORAN
-    # ==================================================
     report = "=" * 65 + "\n"
     report += "LAPORAN EVALUASI v3 — THRESHOLD CALIBRATION (3-PARTISI)\n"
     report += "=" * 65 + "\n\n"
@@ -211,7 +196,6 @@ def main(train_path: str, val_path: str, test_path: str, model_path: str,
     report += "  v2 (holdout, c=0.40):      P=0.7233 R=0.7234 F1=0.7234 (FPR~37%)\n"
     report += "  v3 (3-partisi, FPR=10%):   lihat tabel di atas\n"
 
-    # Simpan threshold yang dipilih bersama model
     threshold_path = os.path.join(os.path.dirname(model_path), 'thresholds.joblib')
     joblib.dump(thresholds, threshold_path)
     logging.info(f"Threshold disimpan di {threshold_path}")

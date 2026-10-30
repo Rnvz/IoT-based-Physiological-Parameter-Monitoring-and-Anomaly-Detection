@@ -48,10 +48,8 @@ async def test_csv_repo_reading_deduplication(temp_csv_repo):
         temp=36.6,
         finger=True
     )
-    # First save succeeds
     assert await repo.save_reading(reading) is True
 
-    # Duplicate (same device_id and ts) is rejected
     assert await repo.save_reading(reading) is False
 
 @pytest.mark.anyio
@@ -83,11 +81,9 @@ async def test_csv_repo_history_retrieval(temp_csv_repo):
     repo = temp_csv_repo
     now = datetime.now(timezone.utc)
     
-    # Save reading from 10 minutes ago
     ts_10m = (now - timedelta(minutes=10)).isoformat()
     await repo.save_reading(ReadingRecord(ts=ts_10m, device_id="esp32-01", hr=70.0, spo2=98.0, temp=36.5, finger=True))
 
-    # Save reading from 45 minutes ago
     ts_45m = (now - timedelta(minutes=45)).isoformat()
     await repo.save_reading(ReadingRecord(ts=ts_45m, device_id="esp32-01", hr=72.0, spo2=98.0, temp=36.5, finger=True))
 
@@ -113,7 +109,6 @@ async def test_csv_repo_predictions(temp_csv_repo):
     saved = await repo.save_prediction(pred)
     assert saved is True
 
-    # Duplicate prediction rejected
     assert await repo.save_prediction(pred) is False
 
     preds = await repo.get_predictions("esp32-01", limit=10)
@@ -144,12 +139,10 @@ async def test_csv_repo_scenario_events(temp_csv_repo):
     from app.database.interfaces import ScenarioEventRecord
     repo = temp_csv_repo
 
-    # Initial scenario defaults to UNLABELED
     init_sc = await repo.get_current_scenario()
     assert init_sc.scenario == "UNLABELED"
     assert init_sc.note is None
 
-    # Save a new scenario
     t1 = datetime.now(timezone.utc).isoformat()
     rec1 = ScenarioEventRecord(ts=t1, scenario="REST", note="resting baseline")
     assert await repo.save_scenario_event(rec1) is True
@@ -159,7 +152,6 @@ async def test_csv_repo_scenario_events(temp_csv_repo):
     assert curr1.note == "resting baseline"
     assert curr1.ts == t1
 
-    # Save second scenario
     t2 = datetime.now(timezone.utc).isoformat()
     rec2 = ScenarioEventRecord(ts=t2, scenario="TYPING", note="laptop typing")
     assert await repo.save_scenario_event(rec2) is True

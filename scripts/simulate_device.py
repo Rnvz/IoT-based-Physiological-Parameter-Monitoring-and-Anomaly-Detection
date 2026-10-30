@@ -30,7 +30,6 @@ DEFAULT_PORT = 1883
 DEFAULT_PREFIX = "physiomonitor/test"
 DEVICE_ID = "esp32-01"
 
-# Layout Grid Konstan (Total Lebar: 109 Karakter)
 INNER_WIDTH = 105
 BOX_SEP = "+" + "-" * (INNER_WIDTH + 2) + "+"
 SEP = "+" + "-"*6 + "+" + "-"*10 + "+" + "-"*6 + "+" + "-"*8 + "+" + "-"*16 + "+" + "-"*8 + "+" + "-"*12 + "+" + "-"*9 + "+" + "-"*24 + "+"
@@ -40,7 +39,6 @@ c_no, c_hr, c_spo2, c_skin, c_dht, c_fin, c_sev, c_sc, c_desc = (
 )
 HDR = f"| {c_no:^4} | {c_hr:^8} | {c_spo2:^4} | {c_skin:^6} | {c_dht:^14} | {c_fin:^6} | {c_sev:^10} | {c_sc:^7} | {c_desc:<22} |"
 
-# Threading & State Global
 connected_event = threading.Event()
 result_event = threading.Event()
 latest_result: Dict[str, Any] = {}
@@ -59,7 +57,6 @@ def print_banner(host: str, port: int, topic: str, prefix: str, device_id: str, 
         print(f"| {line[:INNER_WIDTH]:<{INNER_WIDTH}} |")
     print(BOX_SEP)
 
-    # Peringatan isolasi data simulasi vs rekaman perangkat asli
     w1 = f"PERINGATAN: DATA SIMULASI AKTIF (TARGET PREFIX: '{prefix}')"
     w2 = "Pastikan backend berjalan dengan direktori terpisah (misal: CSV_DIR=./data_sim)"
     w3 = "agar data uji ini TIDAK bercampur dengan rekaman perangkat asli (real recordings)!"
@@ -128,7 +125,6 @@ def print_row(
 
     finger_str = "ON" if finger else "OFF"
 
-    # Format teks severity (persis 10 karakter) sebelum dibungkus ANSI escape code
     sev_padded = f"{sev_str:<10}"
     if use_color:
         if not finger:
@@ -197,7 +193,6 @@ def create_mqtt_client(prefix: str, use_color: bool = True) -> mqtt.Client:
             bright = data.get("brightness", "-")
             buzz = data.get("buzzer_test", False)
 
-            # Kirim konfirmasi balik (ACK) ke <prefix>/actuator
             ack_payload = {
                 "mode": mode,
                 "led": {"color": color if color != "-" else "GREEN", "brightness": bright if bright != "-" else 40},
@@ -257,7 +252,6 @@ def send_data_packet(
     score_str = "--"
 
     if finger:
-        # Tunggu respons dari backend FastAPI jika mode interaktif/normal (interval >= 0.2s)
         if target_interval_s >= 0.2:
             got_resp = result_event.wait(timeout=0.45)
         else:
@@ -280,7 +274,6 @@ def send_data_packet(
             sev_str = "-- [WAIT]" if target_interval_s >= 0.2 else "-- [FAST]"
             score_str = "--"
     else:
-        # Backend tidak mengirim /result saat sensor dilepas (finger=False)
         sev_code = -2
         sev_str = "-- [OFF]"
         score_str = "--"
@@ -319,7 +312,6 @@ def run_interactive_scenarios(
     """
     sample_no = 0
 
-    # Skenario 1: Data Normal
     print_section("SKENARIO 1/5: Baseline Normal (35 Sampel -> Melampaui ML Warm-up 15 Sampel)", use_color=use_color)
     for i in range(35):
         sample_no += 1
@@ -333,7 +325,6 @@ def run_interactive_scenarios(
             use_color=use_color
         )
 
-    # Skenario 2: Sensor Lepas (Finger Off)
     print_section("SKENARIO 2/5: Finger Off / Sensor Lepas (5 Sampel -> Reset Buffer, No /result)", use_color=use_color)
     for i in range(5):
         sample_no += 1
@@ -347,7 +338,6 @@ def run_interactive_scenarios(
             use_color=use_color
         )
 
-    # Skenario 3: Anomali Transien 1 Detik
     print_section("SKENARIO 3/5: Anomali Transien 1 Detik & Pemulihan (5 Sampel)", use_color=use_color)
     sample_no += 1
     send_data_packet(
@@ -369,7 +359,6 @@ def run_interactive_scenarios(
             use_color=use_color
         )
 
-    # Skenario 4: Anomali Kritis Berkelanjutan
     print_section("SKENARIO 4/5: Anomali Kritis Berkelanjutan (10 Sampel -> Severity 2 Alert)", use_color=use_color)
     for i in range(10):
         sample_no += 1
@@ -382,7 +371,6 @@ def run_interactive_scenarios(
             use_color=use_color
         )
 
-    # Skenario 5: Pemulihan Akhir
     print_section("SKENARIO 5/5: Pemulihan Akhir ke Normal (5 Sampel)", use_color=use_color)
     for i in range(5):
         sample_no += 1
@@ -491,7 +479,6 @@ def main():
 
     client.loop_start()
 
-    # Tunggu konfirmasi koneksi dan subscription selesai
     if not connected_event.wait(timeout=10.0):
         print_status_msg("[ERROR] Timeout (10s) menunggu koneksi dan subscription broker MQTT.")
         print(BOX_SEP)

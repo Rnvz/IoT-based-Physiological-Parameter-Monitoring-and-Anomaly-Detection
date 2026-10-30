@@ -35,7 +35,6 @@ def parse_iso_ts(ts_str: str) -> Optional[datetime]:
     if not ts_str:
         return None
     try:
-        # Handle trailing Z
         clean_ts = ts_str.strip().replace("Z", "+00:00")
         dt = datetime.fromisoformat(clean_ts)
         if dt.tzinfo is None:
@@ -87,7 +86,6 @@ def analyze_dataset(file_path: str) -> Dict[str, Any]:
             finger_raw = row.get("finger")
             scenario_raw = row.get("scenario") if has_scenario_col else None
 
-            # Valid reading criteria: finger is true AND hr, spo2, temp are valid non-null floats
             valid = (
                 is_finger_present(finger_raw) and
                 is_valid_number(hr_raw) and
@@ -129,7 +127,6 @@ def analyze_dataset(file_path: str) -> Dict[str, Any]:
             "failure_reasons": ["Dataset file is empty (0 rows)."]
         }
 
-    # Timestamp sorting and gap calculation
     dated_rows = [r for r in rows_data if r["dt"] is not None]
     dated_rows.sort(key=lambda r: r["dt"])
 
@@ -137,7 +134,6 @@ def analyze_dataset(file_path: str) -> Dict[str, Any]:
     last_ts = dated_rows[-1]["ts_str"] if dated_rows else None
     duration_s = (dated_rows[-1]["dt"] - dated_rows[0]["dt"]).total_seconds() if len(dated_rows) > 1 else 0.0
 
-    # Gaps between consecutive timestamps
     gaps: List[float] = []
     for i in range(1, len(dated_rows)):
         gap = (dated_rows[i]["dt"] - dated_rows[i-1]["dt"]).total_seconds()
@@ -146,11 +142,9 @@ def analyze_dataset(file_path: str) -> Dict[str, Any]:
     median_gap_s = statistics.median(gaps) if gaps else None
     max_gap_s = max(gaps) if gaps else None
 
-    # Duplicate timestamps count
     all_ts = [r["ts_str"] for r in rows_data if r["ts_str"]]
     duplicate_ts_count = len(all_ts) - len(set(all_ts))
 
-    # High frequency burst check: > 3 rows in any 1-second window
     burst_windows_count = 0
     max_rows_in_1s = 0
     n_d = len(dated_rows)
@@ -168,7 +162,6 @@ def analyze_dataset(file_path: str) -> Dict[str, Any]:
 
     burst_detected = (max_rows_in_1s > 3)
 
-    # Valid rows per scenario
     scenario_counts: Dict[str, int] = {}
     if has_scenario_col:
         for r in rows_data:
@@ -176,7 +169,6 @@ def analyze_dataset(file_path: str) -> Dict[str, Any]:
                 sc = r["scenario"] if r["scenario"] else "UNLABELED"
                 scenario_counts[sc] = scenario_counts.get(sc, 0) + 1
 
-    # Longest contiguous valid stretch (gap <= 5.0s between consecutive valid samples)
     longest_valid_stretch = 0
     current_stretch = 0
     prev_valid_dt: Optional[datetime] = None

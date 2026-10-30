@@ -3,7 +3,6 @@ import numpy as np
 from app.services.feature_fusion import FeatureFusionEngine
 from app.ml.device_window import DeviceRollingWindow, DeviceWindowManager
 
-# --- Legacy FeatureFusionEngine Tests ---
 def test_buffer_not_ready_returns_none(sample_normal_telemetry):
     engine = FeatureFusionEngine(window_size=3)
     res = engine.process(sample_normal_telemetry)
@@ -34,7 +33,6 @@ def test_delta_calculation_correctness(sample_normal_telemetry):
     
     engine.process(sample1)
     res = engine.process(sample2)
-    # Delta HR = 80 - 70 = 10.0 (index 3: Heart_Rate_Delta)
     assert res[3] == 10.0
 
 def test_moving_average_correctness(sample_normal_telemetry):
@@ -46,7 +44,6 @@ def test_moving_average_correctness(sample_normal_telemetry):
     
     engine.process(sample1)
     res = engine.process(sample2)
-    # Mean HR should be 75.0 (index 6: MA_Heart_Rate)
     assert res[6] == 75.0
 
 def test_reset_clears_buffer(sample_normal_telemetry):
@@ -56,7 +53,6 @@ def test_reset_clears_buffer(sample_normal_telemetry):
     assert len(engine.buffer) == 0
 
 
-# --- New Rebuilt DeviceRollingWindow & DeviceWindowManager Tests ---
 
 def test_device_rolling_window_warmup():
     """Window of size 15 must return None for samples 1..14."""
@@ -77,13 +73,9 @@ def test_device_rolling_window_math_correctness():
     feat = window.push(hr=80.0, spo2=99.0, temp=37.0, timestamp=11.0)
     
     assert feat is not None
-    # Current [0:3]
     assert np.allclose(feat[0:3], [80.0, 99.0, 37.0])
-    # Delta [3:6]
     assert np.allclose(feat[3:6], [10.0, 2.0, 1.0])
-    # MA [6:9]
     assert np.allclose(feat[6:9], [75.0, 98.0, 36.5])
-    # Variance [9:12] (sample variance for [70, 80] is 50.0)
     assert feat[9] == 50.0
 
 def test_device_rolling_window_reset_on_gap():
@@ -93,9 +85,7 @@ def test_device_rolling_window_reset_on_gap():
     window.push(hr=75.0, spo2=98.0, temp=36.5, timestamp=11.0)
     assert len(window.buffer) == 2
 
-    # Now jump 6 seconds ahead (> 5.0s max gap)
     window.push(hr=75.0, spo2=98.0, temp=36.5, timestamp=17.5)
-    # Gap triggered a reset before appending, so buffer length is now 1
     assert len(window.buffer) == 1
 
 def test_device_window_manager_isolation():

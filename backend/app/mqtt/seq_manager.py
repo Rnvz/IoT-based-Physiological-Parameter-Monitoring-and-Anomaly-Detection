@@ -25,7 +25,6 @@ class SequenceManager:
             except Exception:
                 pass
         
-        # Initialize with random 32-bit integer starting point
         initial_seq = random.randint(1000, 50000)
         self._save(initial_seq)
         return initial_seq

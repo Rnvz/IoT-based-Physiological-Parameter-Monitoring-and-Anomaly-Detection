@@ -16,7 +16,6 @@ class FeatureFusionEngine:
     def process(self, telemetry: TelemetryPayload) -> Optional[np.ndarray]:
         sensors = telemetry.raw_sensors
         
-        # We store tuples of (hr, spo2, temp)
         data_point = np.array([sensors.heart_rate, sensors.spo2, sensors.temperature])
         self.buffer.append(data_point)
         
@@ -26,34 +25,28 @@ class FeatureFusionEngine:
         return self._compute_features()
         
     def _compute_features(self) -> np.ndarray:
-        data = np.array(self.buffer)  # shape: (window_size, 3) -> [HR, SpO2, Temp]
+        data = np.array(self.buffer)
         
-        # x1-x3: Current raw values (latest reading)
-        current_values = data[-1]  # [HR, SpO2, Temp]
+        current_values = data[-1]
         
-        # x4-x6: Delta (difference between last two readings)
-        delta = data[-1] - data[-2]  # [HR_Delta, SpO2_Delta, Temp_Delta]
+        delta = data[-1] - data[-2]
         
-        # x7-x9: Moving average over window
-        moving_avg = np.mean(data, axis=0)  # [MA_HR, MA_SpO2, MA_Temp]
+        moving_avg = np.mean(data, axis=0)
         
-        # x10-x12: Variance over window
-        variance = np.var(data, axis=0, ddof=1)  # [Var_HR, Var_SpO2, Var_Temp]
+        variance = np.var(data, axis=0, ddof=1)
         
-        # x13: Rate of change (normalized composite)
         rate_of_change = (
             abs(delta[0]) / max(moving_avg[0], 1e-6) +
             abs(delta[1]) / max(moving_avg[1], 1e-6) +
             abs(delta[2]) / max(moving_avg[2], 1e-6)
         )
         
-        # 13-dimensional feature vector (Signal_Quality_Score removed)
         feature_vector = np.concatenate([
-            current_values,    # x1-x3
-            delta,             # x4-x6
-            moving_avg,        # x7-x9
-            variance,          # x10-x12
-            [rate_of_change]   # x13
+            current_values,
+            delta,
+            moving_avg,
+            variance,
+            [rate_of_change]
         ])
         
         return feature_vector

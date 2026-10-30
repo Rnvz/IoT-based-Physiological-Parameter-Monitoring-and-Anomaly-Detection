@@ -11,7 +11,7 @@ class MLInferenceResult(BaseModel):
     raw_score: Optional[float] = None
     raw_severity: Optional[int] = None
     debounced_severity: Optional[int] = None
-    label: str = "NO_DATA"  # "NORMAL", "ANOMALY", "NO_DATA", "SENSOR_ERROR"
+    label: str = "NO_DATA"
     model_version: str = "if_v1"
     is_warmup: bool = False
 
@@ -85,7 +85,6 @@ class MLService:
         Resets window if finger=False.
         Returns NO_DATA during warm-up (<15 samples), never NORMAL.
         """
-        # If finger is off or vital values are missing/invalid, reset window and skip inference
         if not finger or hr is None or spo2 is None or temp is None:
             self.reset_device(device_id)
             return MLInferenceResult(label="NO_DATA", model_version=settings.model_version)
@@ -93,11 +92,9 @@ class MLService:
         if self.model is None or self.scaler is None:
             return MLInferenceResult(label="NO_DATA", model_version=settings.model_version)
 
-        # Push to per-device rolling window
         window = self.window_manager.get_window(device_id)
         feature_vector = window.push(hr, spo2, temp, timestamp=timestamp)
 
-        # During warm-up (< 15 samples), return NO_DATA, never NORMAL
         if feature_vector is None:
             return MLInferenceResult(
                 label="NO_DATA",
@@ -105,10 +102,8 @@ class MLService:
                 is_warmup=True
             )
 
-        # Scale and infer
         try:
             features_2d = feature_vector.reshape(1, -1)
-            # Support sklearn feature names warning avoidance if available
             if hasattr(self.scaler, "feature_names_in_"):
                 import pandas as pd
                 cols = list(self.scaler.feature_names_in_)

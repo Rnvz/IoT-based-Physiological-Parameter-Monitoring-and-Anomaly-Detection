@@ -30,7 +30,6 @@ class DeviceRollingWindow:
         """
         now = timestamp if timestamp is not None else time.time()
 
-        # Check gap between messages
         if self.last_timestamp is not None:
             gap = now - self.last_timestamp
             if gap > self.max_gap_seconds:
@@ -45,14 +44,13 @@ class DeviceRollingWindow:
         return self._compute_features()
 
     def _compute_features(self) -> np.ndarray:
-        data = np.array(self.buffer)  # shape: (window_size, 3)
+        data = np.array(self.buffer)
 
-        current_values = data[-1]  # x1-x3: [hr, spo2, temp]
-        delta = data[-1] - data[-2]  # x4-x6: [hr_delta, spo2_delta, temp_delta]
-        moving_avg = np.mean(data, axis=0)  # x7-x9: [ma_hr, ma_spo2, ma_temp]
-        variance = np.var(data, axis=0, ddof=1)  # x10-x12: [var_hr, var_spo2, var_temp]
+        current_values = data[-1]
+        delta = data[-1] - data[-2]
+        moving_avg = np.mean(data, axis=0)
+        variance = np.var(data, axis=0, ddof=1)
 
-        # x13: normalized composite rate of change
         rate_of_change = (
             abs(delta[0]) / max(float(moving_avg[0]), 1e-6) +
             abs(delta[1]) / max(float(moving_avg[1]), 1e-6) +

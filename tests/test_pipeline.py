@@ -6,7 +6,6 @@ from app.config import settings
 
 @pytest.fixture
 def mock_mqtt_service(tmp_path, mocker):
-    # Set isolated csv dir for test
     csv_dir = str(tmp_path / "mqtt_test_csv")
     mocker.patch.object(settings, "csv_dir", csv_dir)
     mocker.patch.object(settings, "topic_prefix", "physiomonitor/test")
@@ -17,7 +16,6 @@ def mock_mqtt_service(tmp_path, mocker):
     mocker.patch("app.mqtt.publisher.get_repository", return_value=repo)
 
     service = MQTTService()
-    # Mock network client publish so we don't need live HiveMQ broker
     service.client = MagicMock()
     service.publisher.client = service.client
     return service, repo
@@ -39,13 +37,11 @@ async def test_pipeline_normal_message_publishes_result_and_persists(mock_mqtt_s
 
     await service.handle_message(topic, json.dumps(payload).encode("utf-8"))
 
-    # 1. Persistence first: reading must be saved
     latest_reading = await repo.get_latest_reading("esp32-01")
     assert latest_reading is not None
     assert latest_reading.hr == 75.0
     assert latest_reading.finger is True
 
-    # 2. Result must be published to <prefix>/result
     assert service.client.publish.called
     call_topic, call_payload = service.client.publish.call_args[0]
     assert call_topic == f"{settings.topic_prefix}/result"
@@ -55,7 +51,6 @@ async def test_pipeline_normal_message_publishes_result_and_persists(mock_mqtt_s
     assert result_dict["severity"] == 0
     assert result_dict["model_version"] == settings.model_version
 
-    # 3. Prediction must be saved
     preds = await repo.get_predictions("esp32-01", limit=1)
     assert len(preds) == 1
     assert preds[0].rule_severity == 0
@@ -79,13 +74,11 @@ async def test_pipeline_finger_false_persists_raw_but_omits_result(mock_mqtt_ser
 
     await service.handle_message(topic, json.dumps(payload).encode("utf-8"))
 
-    # Raw reading is persisted
     latest = await repo.get_latest_reading("esp32-01")
     assert latest is not None
     assert latest.finger is False
     assert latest.hr is None
 
-    # /result is NOT published
     assert not service.client.publish.called
 
 @pytest.mark.anyio
@@ -94,9 +87,9 @@ async def test_pipeline_critical_anomaly_publishes_severity_2(mock_mqtt_service)
     topic = f"{settings.topic_prefix}/data"
     payload = {
         "device_id": "esp32-01",
-        "hr": 140.0,  # Critical tachycardia
-        "spo2": 85.0,   # Critical hypoxia
-        "temp": 39.5,   # Critical fever
+        "hr": 140.0,
+        "spo2": 85.0,
+        "temp": 39.5,
         "finger": True,
         "status": "NORMAL"
     }
@@ -115,7 +108,6 @@ async def test_pipeline_malformed_json_gracefully_ignored(mock_mqtt_service):
     topic = f"{settings.topic_prefix}/data"
     bad_payload = b"NOT_A_JSON_STRING{xyz"
 
-    # Should not raise exception
     await service.handle_message(topic, bad_payload)
     assert not service.client.publish.called
 

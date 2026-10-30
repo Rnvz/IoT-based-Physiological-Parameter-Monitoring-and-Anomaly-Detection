@@ -11,7 +11,6 @@ def test_arbitrator_rule_mode():
         model_version="if_v1",
         is_warmup=False
     )
-    # Mode RULE: published follows rule_severity even if ML differs
     res = arbitrate(
         rule_severity=2,
         rule_label="ANOMALY",
@@ -36,7 +35,6 @@ def test_arbitrator_ml_mode_available():
         model_version="if_v1",
         is_warmup=False
     )
-    # Mode ML: published follows ML severity
     res = arbitrate(
         rule_severity=0,
         rule_label="NORMAL",

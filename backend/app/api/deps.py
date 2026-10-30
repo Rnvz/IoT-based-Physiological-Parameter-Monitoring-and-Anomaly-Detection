@@ -62,7 +62,6 @@ class InMemoryRateLimiter:
         now = time.time()
         window = self.requests[client_ip]
 
-        # Evict timestamps older than window
         while window and now - window[0] > self.window_seconds:
             window.popleft()
 

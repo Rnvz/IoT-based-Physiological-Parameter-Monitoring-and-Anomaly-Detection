@@ -93,14 +93,10 @@ def test_invalid_rows_and_scenarios():
         "buzzer_test", "source"
     ]
     rows = [
-        # Valid REST
         {"ts": (base_time + timedelta(seconds=0)).isoformat(), "hr": "70", "spo2": "98", "temp": "33.0", "finger": "True", "scenario": "REST"},
         {"ts": (base_time + timedelta(seconds=1)).isoformat(), "hr": "71", "spo2": "98", "temp": "33.1", "finger": "True", "scenario": "REST"},
-        # Finger off (invalid)
         {"ts": (base_time + timedelta(seconds=2)).isoformat(), "hr": "0", "spo2": "0", "temp": "0", "finger": "False", "scenario": "SENSOR_OFF"},
-        # Sensor null (invalid)
         {"ts": (base_time + timedelta(seconds=3)).isoformat(), "hr": "null", "spo2": "98", "temp": "33.0", "finger": "True", "scenario": "REST"},
-        # Valid TYPING
         {"ts": (base_time + timedelta(seconds=4)).isoformat(), "hr": "75", "spo2": "97", "temp": "33.2", "finger": "True", "scenario": "TYPING"},
     ]
     fpath = create_temp_csv(rows, fieldnames=fieldnames)
@@ -112,14 +108,13 @@ def test_invalid_rows_and_scenarios():
         assert res["has_scenario_col"] is True
         assert res["scenario_counts"]["REST"] == 2
         assert res["scenario_counts"]["TYPING"] == 1
-        assert "SENSOR_OFF" not in res["scenario_counts"]  # invalid row not counted in valid scenario counts
+        assert "SENSOR_OFF" not in res["scenario_counts"]
         assert res["longest_valid_stretch"] == 2
     finally:
         os.remove(fpath)
 
 def test_burst_detection_and_duplicate_timestamps():
     base_time = datetime(2026, 10, 30, 10, 0, 0, tzinfo=timezone.utc)
-    # 5 rows in the same second -> burst
     rows = []
     for i in range(5):
         t = (base_time + timedelta(milliseconds=100 * i)).isoformat()
@@ -131,7 +126,6 @@ def test_burst_detection_and_duplicate_timestamps():
             "temp": "33.0",
             "finger": "True"
         })
-    # Add a duplicate timestamp
     rows.append({
         "ts": (base_time).isoformat(),
         "device_id": "esp32-01",
@@ -155,7 +149,6 @@ def test_gap_resets_contiguous_stretch():
         {"ts": (base_time + timedelta(seconds=0)).isoformat(), "hr": "70", "spo2": "98", "temp": "33.0", "finger": "True"},
         {"ts": (base_time + timedelta(seconds=1)).isoformat(), "hr": "70", "spo2": "98", "temp": "33.0", "finger": "True"},
         {"ts": (base_time + timedelta(seconds=2)).isoformat(), "hr": "70", "spo2": "98", "temp": "33.0", "finger": "True"},
-        # Gap of 10 seconds (> 5.0s max contiguous gap)
         {"ts": (base_time + timedelta(seconds=12)).isoformat(), "hr": "70", "spo2": "98", "temp": "33.0", "finger": "True"},
         {"ts": (base_time + timedelta(seconds=13)).isoformat(), "hr": "70", "spo2": "98", "temp": "33.0", "finger": "True"},
     ]

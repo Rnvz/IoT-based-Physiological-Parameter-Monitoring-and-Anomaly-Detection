@@ -45,13 +45,11 @@ class CSVRepository(BaseRepository):
         self._init_files()
 
     def _init_files(self):
-        # 1. readings.csv
         if not os.path.exists(self.readings_file):
             with open(self.readings_file, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(["ts", "device_id", "hr", "spo2", "temp", "hum", "room_temp", "finger", "fw_status"])
         else:
-            # Seed seen set to prevent duplicate appends on restart
             try:
                 with open(self.readings_file, "r", encoding="utf-8") as f:
                     reader = csv.DictReader(f)
@@ -63,7 +61,6 @@ class CSVRepository(BaseRepository):
             except Exception:
                 pass
 
-        # 2. predictions.csv
         if not os.path.exists(self.predictions_file):
             with open(self.predictions_file, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -83,13 +80,11 @@ class CSVRepository(BaseRepository):
             except Exception:
                 pass
 
-        # 3. actuator_events.csv
         if not os.path.exists(self.actuator_file):
             with open(self.actuator_file, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(["ts", "kind", "seq", "payload_json"])
 
-        # 4. scenario_events.csv
         if not os.path.exists(self.scenario_file):
             with open(self.scenario_file, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
@@ -112,7 +107,7 @@ class CSVRepository(BaseRepository):
         key = (reading.device_id, reading.ts)
         async with self._lock:
             if key in self._seen_readings:
-                return False  # Duplicate ignored
+                return False
 
             self._seen_readings.add(key)
             self._latest_readings[reading.device_id] = reading
@@ -133,7 +128,6 @@ class CSVRepository(BaseRepository):
                     ])
                 return True
             except Exception as e:
-                # Log error without propagating crash
                 print(f"[CSVRepository] Error writing reading: {e}")
                 return False
 
@@ -142,7 +136,6 @@ class CSVRepository(BaseRepository):
             if device_id in self._latest_readings:
                 return self._latest_readings[device_id]
         
-        # Fallback reading backwards with deque
         try:
             with open(self.readings_file, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
@@ -371,7 +364,6 @@ class CSVRepository(BaseRepository):
         Header:
         ts,hr,spo2,temp,hum,room_temp,finger,fw_status,rule_severity,ml_severity,published_severity,decision_mode,mode,led_color,brightness,buzzer_test,source
         """
-        # 1. Load predictions lookup
         pred_lookup: Dict[Tuple[str, str], Dict[str, Any]] = {}
         if os.path.exists(self.predictions_file):
             try:
@@ -384,7 +376,6 @@ class CSVRepository(BaseRepository):
             except Exception as e:
                 print(f"[CSVRepository] Error reading predictions for export: {e}")
 
-        # 2. Load actuator events timeline
         actuator_timeline: List[Tuple[str, Dict[str, Any]]] = []
         if os.path.exists(self.actuator_file):
             try:
@@ -407,7 +398,6 @@ class CSVRepository(BaseRepository):
             "source": "BOOT"
         }
 
-        # 3. Load scenario events timeline
         scenario_timeline: List[Tuple[str, str]] = []
         if os.path.exists(self.scenario_file):
             try:
@@ -424,7 +414,6 @@ class CSVRepository(BaseRepository):
         scenario_timeline.sort(key=lambda x: x[0])
         scenario_ts_list = [x[0] for x in scenario_timeline]
 
-        # 4. Stream output CSV
         header = [
             "ts", "hr", "spo2", "temp", "hum", "room_temp", "finger", "fw_status",
             "rule_severity", "ml_severity", "published_severity", "decision_mode",
@@ -482,7 +471,6 @@ def parse_actuator_payload(payload_json: str) -> Dict[str, Any]:
 
     mode = data.get("mode", "AUTO")
 
-    # Handle nested {"led": {"color": "...", "brightness": ...}} or flat keys
     if isinstance(data.get("led"), dict):
         led_color = data["led"].get("color", "OFF")
         brightness = data["led"].get("brightness", 100)
@@ -490,7 +478,6 @@ def parse_actuator_payload(payload_json: str) -> Dict[str, Any]:
         led_color = data.get("led_color", "OFF")
         brightness = data.get("brightness", 100)
 
-    # Handle nested {"buzzer": {"test": bool}} or flat keys
     if isinstance(data.get("buzzer"), dict):
         buzzer_test = data["buzzer"].get("test", False)
     else:

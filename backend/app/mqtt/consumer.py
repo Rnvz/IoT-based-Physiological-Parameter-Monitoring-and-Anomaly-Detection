@@ -33,7 +33,6 @@ class MQTTService:
         self.data_topic = f"{self.prefix}/data"
         self.actuator_topic = f"{self.prefix}/actuator"
 
-        # Unique client id
         client_id = f"backend_consumer_{uuid.uuid4().hex[:8]}"
         self.client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
@@ -69,13 +68,11 @@ class MQTTService:
                 self.loop
             )
         else:
-            # Fallback synchronous execution if no event loop is running (e.g. tests)
             asyncio.run(self.handle_message(message.topic, message.payload))
 
     async def handle_message(self, topic: str, payload_bytes: bytes):
         payload_str = payload_bytes.decode("utf-8", errors="replace")
         
-        # 1. Parse JSON safely
         try:
             payload_dict = json.loads(payload_str)
         except json.JSONDecodeError as e:
@@ -92,7 +89,6 @@ class MQTTService:
     async def _handle_data_message(self, data: dict):
         ts = datetime.now(timezone.utc).isoformat()
 
-        # 2. Validate schema
         try:
             telemetry = TelemetryPayload.model_validate(data)
         except ValidationError as e:
@@ -104,7 +100,6 @@ class MQTTService:
 
         device_id = telemetry.device_id or settings.device_id
 
-        # 3. PERSISTENCE FIRST: Save raw reading BEFORE any inference or rule evaluation
         reading = ReadingRecord(
             ts=ts,
             device_id=device_id,
@@ -121,18 +116,13 @@ class MQTTService:
         except Exception as e:
             logger.error(f"[MQTT] Error in raw storage: {e}")
 
-        # 4. Check valid conditions: finger=true and valid vitals
         if not telemetry.finger or not telemetry.has_valid_vitals:
-            # Window reset for device on NO_FINGER
             self.ml_service.reset_device(device_id)
-            # Never publish /result for NO_FINGER
             logger.info(f"[MQTT] Device {device_id}: finger={telemetry.finger}, vitals_valid={telemetry.has_valid_vitals}. /result omitted.")
             return
 
-        # 5. Evaluate Rule Engine
         rule_sev, rule_label = evaluate_rules(telemetry.hr, telemetry.spo2, telemetry.temp)
 
-        # 6. Evaluate ML Engine
         ml_res = None
         try:
             ml_res = self.ml_service.process_reading(
@@ -145,7 +135,6 @@ class MQTTService:
         except Exception as e:
             logger.error(f"[MQTT] ML inference threw exception (continuing safely): {e}")
 
-        # 7. Decision Arbitration
         arb = arbitrate(
             rule_severity=rule_sev,
             rule_label=rule_label,
@@ -153,7 +142,6 @@ class MQTTService:
             mode=settings.decision_mode
         )
 
-        # 8. Save Prediction Record (always stores both rule and ML severities)
         pred_record = PredictionRecord(
             ts=ts,
             device_id=device_id,
@@ -171,7 +159,6 @@ class MQTTService:
         except Exception as e:
             logger.error(f"[MQTT] Error saving prediction record: {e}")
 
-        # 9. Publish /result
         result_payload = ResultPayload(
             label=arb.published_label,
             severity=arb.published_severity,

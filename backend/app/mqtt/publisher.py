@@ -63,7 +63,6 @@ class MQTTPublisher:
             self.client.publish(self.cmd_topic, payload_str, qos=0)
             logger.info(f"[MQTTPublisher] Published /cmd (seq={seq}): {payload_str}")
 
-            # Persist command event
             ts = datetime.now(timezone.utc).isoformat()
             repo = get_repository()
             await repo.save_actuator_event(ActuatorEventRecord(

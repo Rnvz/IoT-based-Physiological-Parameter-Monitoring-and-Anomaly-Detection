@@ -6,7 +6,6 @@ import glob
 import logging
 from typing import Optional, List
 
-# Konfigurasi logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def apply_biological_filters(df: pd.DataFrame) -> pd.DataFrame:
@@ -34,10 +33,8 @@ def process_engrarri21(file_path: str) -> Optional[pd.DataFrame]:
     """Memproses dataset engrarri21 (Human_vital_signs_R.csv)."""
     try:
         df = pd.read_csv(file_path, encoding='latin1')
-        # Bersihkan spasi pada nama kolom
         df.columns = df.columns.str.strip()
         
-        # Mapping kolom: 'HR (BPM)' -> Heart_Rate, 'SpO2 (%)' -> SpO2, 'TEMP (*C)' -> Temperature
         rename_map = {}
         for col in df.columns:
             if 'HR' in col:
@@ -48,7 +45,6 @@ def process_engrarri21(file_path: str) -> Optional[pd.DataFrame]:
                 rename_map[col] = 'Temperature'
         df.rename(columns=rename_map, inplace=True)
         
-        # Mapping OUTPUT: Normal -> 0, Abnormal -> 1
         output_series = df['OUTPUT'].astype(str).str.strip().str.lower()
         output_binary = np.where(output_series == 'normal', 0, 1)
         
@@ -73,12 +69,10 @@ def process_nasirayub2(file_path: str) -> Optional[pd.DataFrame]:
         df = pd.read_csv(file_path, encoding='latin1')
         df.columns = df.columns.str.strip()
         
-        # Kolom utama: Heart Rate, Oxygen Saturation, Body Temperature, Risk Category
         hr = pd.to_numeric(df['Heart Rate'], errors='coerce')
         spo2 = pd.to_numeric(df['Oxygen Saturation'], errors='coerce')
         temp = pd.to_numeric(df['Body Temperature'], errors='coerce')
         
-        # Risk Category: 'Low Risk' -> 0 (Normal), 'High Risk' -> 1 (Abnormal)
         risk = df['Risk Category'].astype(str).str.strip().str.lower()
         output_binary = np.where(risk == 'low risk', 0, 1)
         
@@ -104,13 +98,10 @@ def process_rishanmascarenhas(file_path: str) -> Optional[pd.DataFrame]:
         df = pd.read_csv(file_path, encoding='latin1')
         df.columns = df.columns.str.strip()
         
-        # Kolom: Oxygen, PulseRate, Temperature, Result
         hr = pd.to_numeric(df['PulseRate'], errors='coerce')
         spo2 = pd.to_numeric(df['Oxygen'], errors='coerce')
         temp_f = pd.to_numeric(df['Temperature'], errors='coerce')
         
-        # Konversi Fahrenheit ke Celsius: (°F - 32) * 5/9
-        # Nilai mentah di dataset sekitar 95 - 105 °F
         temp_c = (temp_f - 32.0) * (5.0 / 9.0)
         
         p_id = df['ID'].astype(str) if 'ID' in df.columns else df.index.astype(str)
@@ -119,7 +110,7 @@ def process_rishanmascarenhas(file_path: str) -> Optional[pd.DataFrame]:
             'Heart_Rate': hr,
             'SpO2': spo2,
             'Temperature': temp_c,
-            'OUTPUT': 0,  # Digunakan sebagai suplemen unsupervised training pola normal
+            'OUTPUT': 0,
             'Source': 'rishanmascarenhas',
             'Metadata': df['Result'].astype(str)
         })
@@ -141,7 +132,6 @@ def process_gourangomandal(file_path: str) -> Optional[pd.DataFrame]:
         df = pd.read_csv(file_path, encoding='latin1')
         df.columns = df.columns.str.strip()
         
-        # Identifikasi nama kolom dinamis
         temp_col = [c for c in df.columns if 'temp' in c.lower() and 'alert' not in c.lower()][0]
         hr_col = [c for c in df.columns if 'heart' in c.lower() and 'alert' not in c.lower()][0]
         spo2_col = [c for c in df.columns if 'spo2' in c.lower() and 'alert' not in c.lower()][0]
@@ -150,7 +140,6 @@ def process_gourangomandal(file_path: str) -> Optional[pd.DataFrame]:
         spo2 = pd.to_numeric(df[spo2_col], errors='coerce')
         temp = pd.to_numeric(df[temp_col], errors='coerce')
         
-        # Multi-parameter alert logic
         hr_alert = df['Heart Rate Alert'].astype(str).str.strip().str.upper()
         spo2_alert = df['SpO2 Level Alert'].astype(str).str.strip().str.upper()
         temp_alert = df['Temperature Alert'].astype(str).str.strip().str.upper()
@@ -213,14 +202,11 @@ def main(input_dir: str, output_path: str):
     combined_df = pd.concat(datasets, ignore_index=True)
     logging.info(f"Total baris gabungan sebelum pembersihan: {len(combined_df):,}")
     
-    # Hapus missing values pada parameter inti
     combined_df.dropna(subset=['Heart_Rate', 'SpO2', 'Temperature'], inplace=True)
     
-    # Filter validitas biologis
     cleaned_df = apply_biological_filters(combined_df)
     logging.info(f"Total baris bersih yang valid: {len(cleaned_df):,}")
     
-    # Cetak statistik ringkasan per dataset sumber
     print("\n" + "="*50)
     print("RINGKASAN DATASET HARMONISASI")
     print("="*50)
@@ -231,14 +217,12 @@ def main(input_dir: str, output_path: str):
     print(cleaned_df[['Heart_Rate', 'SpO2', 'Temperature']].describe().round(2))
     print("="*50 + "\n")
     
-    # Simpan hasil harmonisasi
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     cleaned_df.to_csv(output_path, index=False)
     logging.info(f"Dataset harmonisasi tersimpan di: {output_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pembersihan & Harmonisasi Dataset IoT Anomaly Detection")
-    # Default mengarah ke folder Dataset/ di root proyek
     default_input = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'Dataset'))
     default_output = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'harmonized_vitals.csv'))
     

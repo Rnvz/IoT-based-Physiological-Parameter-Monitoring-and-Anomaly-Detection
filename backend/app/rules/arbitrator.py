@@ -32,7 +32,6 @@ def arbitrate(
 
     if mode_upper == "ML":
         if ml_result is not None and ml_result.raw_severity is not None:
-            # Use debounced severity for publishing if configured, else raw
             pub_sev = ml_result.debounced_severity if (settings.ml_use_debounce and ml_result.debounced_severity is not None) else ml_result.raw_severity
             return ArbitrationResult(
                 rule_severity=rule_severity,
@@ -46,7 +45,6 @@ def arbitrate(
                 is_fallback=False
             )
         else:
-            # ML is unavailable (e.g. warm-up NO_DATA or model error) -> Fallback to RULE
             print(f"[Arbitrator] ML result unavailable ({getattr(ml_result, 'label', 'None')}). Falling back to RULE severity {rule_severity}.")
             return ArbitrationResult(
                 rule_severity=rule_severity,
@@ -60,7 +58,6 @@ def arbitrate(
                 is_fallback=True
             )
     else:
-        # Default RULE mode
         return ArbitrationResult(
             rule_severity=rule_severity,
             ml_severity=ml_sev,

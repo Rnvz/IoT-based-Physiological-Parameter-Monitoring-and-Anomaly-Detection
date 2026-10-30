@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     device_token: str = "default_token"
     log_level: str = "INFO"
 
-    # SQA thresholds
     hr_min: float = 30.0
     hr_max: float = 220.0
     spo2_min: float = 70.0
@@ -29,7 +28,6 @@ class Settings(BaseSettings):
     sqa_good_threshold: float = 0.7
     max_hr_jump: float = 40.0
 
-    # Anomaly detection params
     persistent_anomaly_count: int = 3
     sliding_window_size: int = 15
 

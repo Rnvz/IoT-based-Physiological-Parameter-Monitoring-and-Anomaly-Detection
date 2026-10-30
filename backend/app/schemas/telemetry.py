@@ -49,9 +49,8 @@ class TelemetryPayload(BaseModel):
     hum: Optional[float] = None
     room_temp: Optional[float] = None
     finger: bool = False
-    status: Optional[str] = "NORMAL"  # firmware status (fw_status)
+    status: Optional[str] = "NORMAL"
 
-    # Legacy attributes for backward compatibility
     timestamp: Optional[int] = None
     sequence_id: Optional[int] = None
     raw_sensors: Optional[RawSensors] = None
@@ -64,7 +63,6 @@ class TelemetryPayload(BaseModel):
         if not isinstance(data, dict):
             return data
         
-        # Support legacy nested format if encountered
         if "telemetry" in data and isinstance(data["telemetry"], dict):
             t = data["telemetry"]
             data.setdefault("hr", t.get("heart_rate"))

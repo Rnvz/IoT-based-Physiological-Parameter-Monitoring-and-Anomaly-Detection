@@ -19,7 +19,6 @@ mqtt_service: Optional[MQTTService] = None
 async def lifespan(app: FastAPI):
     global mqtt_service
 
-    # Security check: Refuse to start if API_KEY is empty
     configured_key = settings.api_key.strip() if settings.api_key else ""
     if not configured_key:
         raise RuntimeError("API_KEY must not be empty. Server refusing to start with unsecured routes.")
@@ -45,7 +44,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Physio Monitor Backend", lifespan=lifespan)
 
-# CORS Configuration (strictly from CORS_ORIGINS, never "*")
 allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -55,13 +53,11 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
-# Global exception handler to prevent leaking stack traces
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled server error on {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
-# Wire API Routers
 app.include_router(health_router)
 app.include_router(telemetry_router)
 app.include_router(actuator_router)

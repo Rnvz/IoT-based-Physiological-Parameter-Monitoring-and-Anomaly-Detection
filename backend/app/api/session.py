@@ -9,7 +9,6 @@ from app.api.deps import verify_api_key, verify_read_api_key
 
 router = APIRouter(prefix="/session", tags=["session"])
 
-# Strict benign scenarios only: never add scenarios implying provoked abnormal physiology
 ScenarioType = Literal[
     "REST",
     "TYPING",

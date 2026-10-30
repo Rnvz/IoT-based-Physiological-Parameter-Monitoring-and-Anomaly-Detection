@@ -53,7 +53,6 @@ async def get_actuator_status(_auth: Optional[str] = Depends(verify_read_api_key
         except Exception:
             pass
 
-    # Default fallback shape
     return {
         "mode": "AUTO",
         "led": {"color": "GREEN", "brightness": 40},

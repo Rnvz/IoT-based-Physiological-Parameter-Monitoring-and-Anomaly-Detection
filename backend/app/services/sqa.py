@@ -31,7 +31,6 @@ class SignalQualityAssessor:
 
         sensors = telemetry.raw_sensors
         
-        # Check 1: Physiological range
         if not (self.hr_min <= sensors.heart_rate <= self.hr_max):
             score -= 0.3
             reasons.append("HR out of range")
@@ -44,17 +43,15 @@ class SignalQualityAssessor:
             score -= 0.2
             reasons.append("Temperature out of range")
             
-        # Check 2: Sudden jump detection (if previous exists)
         if previous:
-            time_diff = (telemetry.timestamp - previous.timestamp) / 1000.0  # seconds
+            time_diff = (telemetry.timestamp - previous.timestamp) / 1000.0
             if time_diff > 0:
                 hr_jump = abs(sensors.heart_rate - previous.raw_sensors.heart_rate)
                 if hr_jump > self.max_hr_jump:
                     score -= 0.4
                     reasons.append("Sudden HR jump")
                     
-        # Check 3: PPG amplitude threshold
-        if telemetry.sensor_status.ppg_amplitude < 100:  # arbitrary minimum valid threshold
+        if telemetry.sensor_status.ppg_amplitude < 100:
             score -= 0.5
             reasons.append("Low PPG amplitude")
 

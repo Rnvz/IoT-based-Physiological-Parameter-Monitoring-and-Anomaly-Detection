@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 class ReadingRecord(BaseModel):
-    ts: str  # ISO 8601 UTC string
+    ts: str
     device_id: str
     hr: Optional[float] = None
     spo2: Optional[float] = None
@@ -14,7 +14,7 @@ class ReadingRecord(BaseModel):
     fw_status: Optional[str] = "NORMAL"
 
 class PredictionRecord(BaseModel):
-    ts: str  # ISO 8601 UTC string
+    ts: str
     device_id: str
     rule_severity: Optional[int] = None
     ml_severity: Optional[int] = None
@@ -26,13 +26,13 @@ class PredictionRecord(BaseModel):
     model_version: str = "if_v1"
 
 class ActuatorEventRecord(BaseModel):
-    ts: str  # ISO 8601 UTC string
-    kind: str  # "cmd" or "status"
+    ts: str
+    kind: str
     seq: Optional[int] = None
     payload_json: str
 
 class ScenarioEventRecord(BaseModel):
-    ts: str  # ISO 8601 UTC string
+    ts: str
     scenario: str
     note: Optional[str] = None
 

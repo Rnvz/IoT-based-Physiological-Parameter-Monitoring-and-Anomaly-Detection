@@ -11,14 +11,14 @@ class AnomalyResult(BaseModel):
     anomaly_score: float
     is_anomaly: bool
     baseline_anomaly: bool
-    severity: str = "NORMAL"  # "NORMAL", "LOW DEVIATION", or "HIGH DEVIATION"
+    severity: str = "NORMAL"
 
 class PersistentResult(BaseModel):
     persistent_count: int
     is_persistent_anomaly: bool
     should_buzz: bool
-    severity: str = "NORMAL"   # "NORMAL", "LOW DEVIATION", "LOW DEVIATION (SUSTAINED)", "HIGH DEVIATION", "HIGH DEVIATION (SUSTAINED)"
-    oled_status: str = "NORMAL" # "NORMAL", "LOW DEV", "LOW DEV (S)", "HIGH DEV", "HIGH DEV (S)"
+    severity: str = "NORMAL"
+    oled_status: str = "NORMAL"
 
 class AnomalyDetector:
     """
@@ -66,9 +66,7 @@ class AnomalyDetector:
                 resolved_thr = next((p for p in thr_candidate_paths if os.path.exists(p)), None)
                 if resolved_thr:
                     self.thresholds = joblib.load(resolved_thr)
-                    # Operating point terkunci: Target FPR 13% dari thresholds.joblib
                     self.anomaly_threshold = float(self.thresholds.get(0.13, 0.0629))
-                    # High deviation threshold: Target FPR 5% dari thresholds.joblib
                     self.high_threshold = float(self.thresholds.get(0.05, -0.0280))
                     logger.info(f"Calibrated thresholds: LOW/ANOMALY={self.anomaly_threshold:.4f} (FPR 13%), HIGH={self.high_threshold:.4f} (FPR 5%)")
                 else:
@@ -113,7 +111,6 @@ class AnomalyDetector:
                 threshold = getattr(self, 'anomaly_threshold', 0.0629)
                 high_threshold = getattr(self, 'high_threshold', -0.0280)
                 
-                # Klasifikasi murni berdasarkan skor model ML
                 if anomaly_score >= threshold:
                     is_anomaly = False
                     severity = "NORMAL"
@@ -147,14 +144,14 @@ class PersistentAnomalyEvaluator:
     - HIGH DEVIATION (SUSTAINED): deviasi tinggi bertahan >= 10 sampel
     """
     def __init__(self, threshold: int = settings.persistent_anomaly_count, sustained_threshold: int = 10):
-        self.threshold = threshold          # Default 3 sampel untuk aktivasi buzzer
-        self.sustained_threshold = sustained_threshold # Default 10 sampel untuk status SUSTAINED
+        self.threshold = threshold
+        self.sustained_threshold = sustained_threshold
         self.count = 0
         self.current_base_severity = "NORMAL"
 
     def evaluate(self, is_anomaly: bool, base_severity: str = "LOW DEVIATION") -> PersistentResult:
         if not is_anomaly:
-            self.count = 0  # Strict Reset: counter langsung reset ke 0 saat sampel normal terdeteksi
+            self.count = 0
             self.current_base_severity = "NORMAL"
             return PersistentResult(
                 persistent_count=0,
