@@ -33,8 +33,8 @@ class CSVRepository(BaseRepository):
         self._seen_readings: Set[Tuple[str, str]] = set()
         self._seen_predictions: Set[Tuple[str, str]] = set()
 
-        self._latest_reading: Optional[ReadingRecord] = None
-        self._latest_prediction: Optional[PredictionRecord] = None
+        self._latest_readings: dict = {}
+        self._latest_predictions: dict = {}
         self._latest_actuator: Optional[ActuatorEventRecord] = None
 
         self._init_files()
@@ -91,7 +91,7 @@ class CSVRepository(BaseRepository):
                 return False  # Duplicate ignored
 
             self._seen_readings.add(key)
-            self._latest_reading = reading
+            self._latest_readings[reading.device_id] = reading
 
             try:
                 with open(self.readings_file, "a", newline="", encoding="utf-8") as f:
@@ -115,16 +115,37 @@ class CSVRepository(BaseRepository):
 
     async def get_latest_reading(self, device_id: str) -> Optional[ReadingRecord]:
         async with self._lock:
-            if self._latest_reading and self._latest_reading.device_id == device_id:
-                return self._latest_reading
+            if device_id in self._latest_readings:
+                return self._latest_readings[device_id]
         
-        # Fallback reading backwards from file
+        # Fallback reading backwards with deque
         try:
             with open(self.readings_file, "r", encoding="utf-8") as f:
-                rows = list(csv.DictReader(f))
-                for row in reversed(rows):
-                    if row.get("device_id") == device_id:
-                        return self._row_to_reading(row)
+                reader = csv.DictReader(f)
+                matched = [row for row in reader if row.get("device_id") == device_id]
+                if matched:
+                    rec = self._row_to_reading(matched[-1])
+                    async with self._lock:
+                        self._latest_readings[device_id] = rec
+                    return rec
+        except Exception:
+            pass
+        return None
+
+    async def get_latest_prediction(self, device_id: str) -> Optional[PredictionRecord]:
+        async with self._lock:
+            if device_id in self._latest_predictions:
+                return self._latest_predictions[device_id]
+
+        try:
+            with open(self.predictions_file, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                matched = [row for row in reader if row.get("device_id") == device_id]
+                if matched:
+                    rec = self._row_to_prediction(matched[-1])
+                    async with self._lock:
+                        self._latest_predictions[device_id] = rec
+                    return rec
         except Exception:
             pass
         return None
@@ -158,7 +179,7 @@ class CSVRepository(BaseRepository):
                 return False
 
             self._seen_predictions.add(key)
-            self._latest_prediction = prediction
+            self._latest_predictions[prediction.device_id] = prediction
 
             try:
                 with open(self.predictions_file, "a", newline="", encoding="utf-8") as f:
@@ -180,18 +201,17 @@ class CSVRepository(BaseRepository):
                 return False
 
     async def get_predictions(self, device_id: str, limit: int = 100) -> List[PredictionRecord]:
-        results = []
+        from collections import deque
+        results = deque(maxlen=limit)
         try:
             with open(self.predictions_file, "r", encoding="utf-8") as f:
-                rows = list(csv.DictReader(f))
-                for row in reversed(rows):
+                reader = csv.DictReader(f)
+                for row in reader:
                     if row.get("device_id") == device_id:
                         results.append(self._row_to_prediction(row))
-                        if len(results) >= limit:
-                            break
         except Exception as e:
             print(f"[CSVRepository] Error reading predictions: {e}")
-        return list(reversed(results))
+        return list(results)
 
     async def save_actuator_event(self, event: ActuatorEventRecord) -> bool:
         async with self._lock:

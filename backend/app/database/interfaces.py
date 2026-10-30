@@ -42,6 +42,11 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_latest_prediction(self, device_id: str) -> Optional[PredictionRecord]:
+        """Fetch the most recent prediction for a given device."""
+        pass
+
+    @abstractmethod
     async def get_history(self, device_id: str, minutes: int = 30) -> List[ReadingRecord]:
         """Fetch readings history for a given device within the last N minutes."""
         pass

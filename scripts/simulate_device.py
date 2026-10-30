@@ -185,12 +185,12 @@ def run_fast_1200(client: mqtt.Client, topic: str, device_id: str):
     elapsed = time.time() - start_time
     print(f"\n[✓] Selesai mengirim {total_records} rekor dalam {elapsed:.2f} detik (~{total_records/elapsed:.1f} msg/s)!\n")
 
-def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str):
+def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, duration_s: int = 60):
     """
-    Menjalankan 4 skenario terstruktur @ 1 Hz untuk pengujian fungsional interaktif.
+    Menjalankan 5 skenario terstruktur @ 1 Hz selama ~60 detik untuk pengujian normal.
     """
-    print("\n--- [SKENARIO 1] Data Normal (16 Sampel -> Warmup ML Buffer 15 Sampel) ---")
-    for i in range(16):
+    print(f"\n--- [SKENARIO 1] Data Normal (35 Sampel -> Melampaui ML Warmup 15 Sampel) ---")
+    for i in range(35):
         send_data_packet(
             client, topic, device_id,
             hr=75.0 + (i % 3), spo2=98.0, temp=36.5,
@@ -199,17 +199,17 @@ def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str):
         )
         time.sleep(1.0)
 
-    print("\n--- [SKENARIO 2] Finger Off / Sensor Lepas (3 Sampel -> Reset Buffer, No /result) ---")
-    for i in range(3):
+    print("\n--- [SKENARIO 2] Finger Off / Sensor Lepas (5 Sampel -> Reset Buffer, No /result) ---")
+    for i in range(5):
         send_data_packet(
             client, topic, device_id,
             hr=0.0, spo2=0.0, temp=36.5,
             hum=62.0, room_temp=28.5, finger=False,
-            status="MENUNGGU SENSOR", desc="Finger OFF"
+            status="MENUNGGU SENSOR", desc=f"Finger OFF #{i+1}"
         )
         time.sleep(1.0)
 
-    print("\n--- [SKENARIO 3] Anomali Transien 1 Detik (Uji Strict Reset Debounce) ---")
+    print("\n--- [SKENARIO 3] Anomali Transien 1 Detik & Pemulihan (5 Sampel) ---")
     send_data_packet(
         client, topic, device_id,
         hr=145.0, spo2=88.0, temp=39.0,
@@ -217,23 +217,32 @@ def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str):
         desc="Spike 1 Detik"
     )
     time.sleep(1.0)
+    for i in range(4):
+        send_data_packet(
+            client, topic, device_id,
+            hr=75.0 + i, spo2=98.0, temp=36.5,
+            hum=60.0, room_temp=28.5, finger=True,
+            desc=f"Normal Pulih #{i+1}"
+        )
+        time.sleep(1.0)
 
-    # Kembali normal
-    send_data_packet(
-        client, topic, device_id,
-        hr=75.0, spo2=98.0, temp=36.5,
-        hum=60.0, room_temp=28.5, finger=True,
-        desc="Normal Kembali"
-    )
-    time.sleep(1.0)
-
-    print("\n--- [SKENARIO 4] Anomali Kritis Berkelanjutan (5 Sampel -> Severity 2) ---")
-    for i in range(5):
+    print("\n--- [SKENARIO 4] Anomali Kritis Berkelanjutan (10 Sampel -> Severity 2) ---")
+    for i in range(10):
         send_data_packet(
             client, topic, device_id,
             hr=150.0 + i * 2, spo2=85.0, temp=39.5,
             hum=60.0, room_temp=28.5, finger=True,
             desc=f"Critical Anomaly #{i+1}"
+        )
+        time.sleep(1.0)
+
+    print("\n--- [SKENARIO 5] Pemulihan Kembali Normal (5 Sampel) ---")
+    for i in range(5):
+        send_data_packet(
+            client, topic, device_id,
+            hr=76.0, spo2=98.0, temp=36.5,
+            hum=62.0, room_temp=28.5, finger=True,
+            desc=f"Recovery #{i+1}"
         )
         time.sleep(1.0)
 
