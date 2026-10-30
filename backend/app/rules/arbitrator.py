@@ -11,6 +11,7 @@ class ArbitrationResult(BaseModel):
     published_label: str
     published_score: Optional[float] = None
     decision_mode: str
+    decision_source: str
     is_fallback: bool = False
 
 def arbitrate(
@@ -41,6 +42,7 @@ def arbitrate(
                 published_label=ml_result.label,
                 published_score=ml_score,
                 decision_mode="ML",
+                decision_source="ML",
                 is_fallback=False
             )
         else:
@@ -54,6 +56,7 @@ def arbitrate(
                 published_label=rule_label,
                 published_score=None,
                 decision_mode="ML",
+                decision_source="RULE_FALLBACK",
                 is_fallback=True
             )
     else:
@@ -66,5 +69,6 @@ def arbitrate(
             published_label=rule_label,
             published_score=ml_score,
             decision_mode="RULE",
+            decision_source="RULE",
             is_fallback=False
         )

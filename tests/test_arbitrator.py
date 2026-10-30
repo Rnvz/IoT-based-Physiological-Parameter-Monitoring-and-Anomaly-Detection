@@ -19,6 +19,7 @@ def test_arbitrator_rule_mode():
         mode="RULE"
     )
     assert res.decision_mode == "RULE"
+    assert res.decision_source == "RULE"
     assert res.published_severity == 2
     assert res.published_label == "ANOMALY"
     assert res.rule_severity == 2
@@ -43,6 +44,7 @@ def test_arbitrator_ml_mode_available():
         mode="ML"
     )
     assert res.decision_mode == "ML"
+    assert res.decision_source == "ML"
     assert res.published_severity == 2
     assert res.published_label == "ANOMALY"
     assert res.rule_severity == 0
@@ -64,6 +66,7 @@ def test_arbitrator_ml_mode_fallback_on_warmup():
         mode="ML"
     )
     assert res.decision_mode == "ML"
+    assert res.decision_source == "RULE_FALLBACK"
     assert res.published_severity == 1
     assert res.published_label == "ANOMALY"
     assert res.rule_severity == 1
@@ -79,6 +82,7 @@ def test_arbitrator_ml_mode_fallback_on_none():
         mode="ML"
     )
     assert res.decision_mode == "ML"
+    assert res.decision_source == "RULE_FALLBACK"
     assert res.published_severity == 2
     assert res.published_label == "ANOMALY"
     assert res.is_fallback is True

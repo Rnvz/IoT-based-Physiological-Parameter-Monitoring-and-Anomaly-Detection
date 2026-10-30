@@ -24,6 +24,28 @@ def verify_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
         )
     return x_api_key
 
+def verify_read_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
+    """
+    Enforces X-API-Key on read (GET) endpoints only when READ_AUTH_REQUIRED=true.
+    When READ_AUTH_REQUIRED=false (default), read endpoints are publicly accessible.
+    """
+    if not settings.read_auth_required:
+        return x_api_key
+    return verify_api_key(x_api_key)
+
+def get_client_ip(request: Request) -> str:
+    """
+    Extracts client IP address.
+    ONLY trusts CF-Connecting-IP if the direct socket peer is loopback (127.0.0.1, ::1, or testclient).
+    Otherwise, uses the direct socket peer IP to prevent IP spoofing by untrusted clients.
+    """
+    peer_ip = request.client.host if request.client else "unknown"
+    if peer_ip in ("127.0.0.1", "::1", "localhost", "testclient"):
+        cf_ip = request.headers.get("CF-Connecting-IP") or request.headers.get("cf-connecting-ip")
+        if cf_ip:
+            return cf_ip.strip()
+    return peer_ip
+
 class InMemoryRateLimiter:
     """
     Sliding window in-memory rate limiter per client IP.
@@ -36,7 +58,7 @@ class InMemoryRateLimiter:
         self.requests = defaultdict(deque)
 
     def check_rate_limit(self, request: Request):
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_client_ip(request)
         now = time.time()
         window = self.requests[client_ip]
 

@@ -120,6 +120,7 @@ async def test_csv_repo_predictions(temp_csv_repo):
     assert len(preds) == 1
     assert preds[0].rule_severity == 1
     assert preds[0].ml_score == 0.1500
+    assert preds[0].decision_source == "RULE"
 
 @pytest.mark.anyio
 async def test_csv_repo_actuator_events(temp_csv_repo):

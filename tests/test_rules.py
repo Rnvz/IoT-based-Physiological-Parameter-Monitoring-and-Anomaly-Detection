@@ -20,7 +20,7 @@ def test_rules_missing_values_return_no_data():
     assert sev == 0
     assert label == "NO_DATA"
 
-def test_rules_severity_1_warning_band():
+def test_rules_severity_1_warning_band(mocker):
     # HR in warning band [50..55] or [95..100]
     sev, _ = evaluate_rules(hr=53.0, spo2=98.0, temp=36.5)
     assert sev == 1
@@ -32,14 +32,16 @@ def test_rules_severity_1_warning_band():
     sev, _ = evaluate_rules(hr=75.0, spo2=92.0, temp=36.5)
     assert sev == 1
 
-    # Skin temp in warning band [37.5..38.0] or [35.0..35.5]
+    # Skin temp in high warning band [37.5..38.0]
     sev, _ = evaluate_rules(hr=75.0, spo2=98.0, temp=37.7)
     assert sev == 1
 
-    sev, _ = evaluate_rules(hr=75.0, spo2=98.0, temp=35.2)
+    # Low skin temp warning band when enabled
+    mocker.patch.object(settings, "rule_temp_low_warn", 32.0)
+    sev, _ = evaluate_rules(hr=75.0, spo2=98.0, temp=31.8)
     assert sev == 1
 
-def test_rules_severity_2_critical_alert():
+def test_rules_severity_2_critical_alert(mocker):
     # HR critical (< 50 or > 100)
     sev, label = evaluate_rules(hr=45.0, spo2=98.0, temp=36.5)
     assert sev == 2
@@ -54,14 +56,30 @@ def test_rules_severity_2_critical_alert():
     assert sev == 2
     assert label == "ANOMALY"
 
-    # Skin temp critical (>= 38.0 or <= 35.0)
+    # Skin temp critical high (>= 38.0)
     sev, label = evaluate_rules(hr=75.0, spo2=98.0, temp=38.5)
     assert sev == 2
     assert label == "ANOMALY"
 
-    sev, label = evaluate_rules(hr=75.0, spo2=98.0, temp=34.5)
+    # Low skin temp alert when enabled
+    mocker.patch.object(settings, "rule_temp_low_alert", 30.0)
+    sev, label = evaluate_rules(hr=75.0, spo2=98.0, temp=29.5)
     assert sev == 2
     assert label == "ANOMALY"
+
+def test_rules_realistic_skin_temperature_regression():
+    """
+    Regression test: realistic skin temperatures (31.0 - 34.5 C) on healthy fingers
+    must NOT constantly trigger false alarms when low-temp rules are disabled by default.
+    """
+    assert settings.rule_temp_low_alert is None
+    assert settings.rule_temp_low_warn is None
+
+    realistic_temperatures = [31.5, 32.0, 32.5, 33.0, 33.5, 34.0, 34.5]
+    for t in realistic_temperatures:
+        sev, label = evaluate_rules(hr=75.0, spo2=98.0, temp=t)
+        assert sev == 0, f"Expected severity 0 for realistic skin temp {t}°C, got {sev}"
+        assert label == "NORMAL"
 
 def test_rules_boundary_precedence():
     """Severity 2 (critical) must take precedence over Severity 1 (warning)."""

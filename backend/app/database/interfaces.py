@@ -21,6 +21,7 @@ class PredictionRecord(BaseModel):
     ml_score: Optional[float] = None
     published_severity: int = 0
     decision_mode: str = "RULE"
+    decision_source: str = "RULE"
     label: str = "NORMAL"
     model_version: str = "if_v1"
 
@@ -69,4 +70,9 @@ class BaseRepository(ABC):
     @abstractmethod
     async def get_latest_actuator_event(self, kind: Optional[str] = None) -> Optional[ActuatorEventRecord]:
         """Fetch the most recent actuator event."""
+        pass
+
+    @abstractmethod
+    def stream_dataset_export(self):
+        """Stream complete dataset export with as-of join for research/course submission."""
         pass

@@ -1,9 +1,10 @@
 import os
 import csv
 import json
+import bisect
 import asyncio
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Set, Tuple
+from typing import Optional, List, Set, Tuple, Dict, Any, Generator
 from app.database.interfaces import (
     BaseRepository,
     ReadingRecord,
@@ -64,7 +65,7 @@ class CSVRepository(BaseRepository):
                 writer = csv.writer(f)
                 writer.writerow([
                     "ts", "device_id", "rule_severity", "ml_severity", "ml_score",
-                    "published_severity", "decision_mode", "label", "model_version"
+                    "published_severity", "decision_mode", "decision_source", "label", "model_version"
                 ])
         else:
             try:
@@ -192,6 +193,7 @@ class CSVRepository(BaseRepository):
                         "" if prediction.ml_score is None else f"{prediction.ml_score:.4f}",
                         prediction.published_severity,
                         prediction.decision_mode,
+                        prediction.decision_source,
                         prediction.label,
                         prediction.model_version
                     ])
@@ -300,6 +302,154 @@ class CSVRepository(BaseRepository):
             ml_score=parse_float(row.get("ml_score")),
             published_severity=int(row.get("published_severity", 0)),
             decision_mode=row.get("decision_mode", "RULE"),
+            decision_source=row.get("decision_source", row.get("decision_mode", "RULE")),
             label=row.get("label", "NORMAL"),
             model_version=row.get("model_version", "if_v1")
         )
+
+    def stream_dataset_export(self) -> Generator[str, None, None]:
+        """
+        Streams one row per reading joined with prediction and last known actuator state as of reading ts.
+        Header:
+        ts,hr,spo2,temp,hum,room_temp,finger,fw_status,rule_severity,ml_severity,published_severity,decision_mode,mode,led_color,brightness,buzzer_test,source
+        """
+        # 1. Load predictions lookup
+        pred_lookup: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        if os.path.exists(self.predictions_file):
+            try:
+                with open(self.predictions_file, "r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        dev = row.get("device_id", "")
+                        ts = row.get("ts", "")
+                        pred_lookup[(dev, ts)] = row
+            except Exception as e:
+                print(f"[CSVRepository] Error reading predictions for export: {e}")
+
+        # 2. Load actuator events timeline
+        actuator_timeline: List[Tuple[str, Dict[str, Any]]] = []
+        if os.path.exists(self.actuator_file):
+            try:
+                with open(self.actuator_file, "r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        ts = row.get("ts", "")
+                        parsed = parse_actuator_payload(row.get("payload_json", "{}"))
+                        actuator_timeline.append((ts, parsed))
+            except Exception as e:
+                print(f"[CSVRepository] Error reading actuator events for export: {e}")
+
+        actuator_timeline.sort(key=lambda x: x[0])
+        actuator_ts_list = [x[0] for x in actuator_timeline]
+        default_actuator = {
+            "mode": "AUTO",
+            "led_color": "OFF",
+            "brightness": 100,
+            "buzzer_test": False,
+            "source": "BOOT"
+        }
+
+        # 3. Stream output CSV
+        header = [
+            "ts", "hr", "spo2", "temp", "hum", "room_temp", "finger", "fw_status",
+            "rule_severity", "ml_severity", "published_severity", "decision_mode",
+            "mode", "led_color", "brightness", "buzzer_test", "source"
+        ]
+        import io
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(header)
+        yield buf.getvalue()
+
+        if not os.path.exists(self.readings_file):
+            return
+
+        with open(self.readings_file, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                ts = row.get("ts", "")
+                dev = row.get("device_id", "")
+                pred = pred_lookup.get((dev, ts), {})
+                act = as_of_join_actuator(ts, actuator_timeline, actuator_ts_list, default_actuator)
+
+                buf = io.StringIO()
+                writer = csv.writer(buf)
+                writer.writerow([
+                    ts,
+                    row.get("hr", ""),
+                    row.get("spo2", ""),
+                    row.get("temp", ""),
+                    row.get("hum", ""),
+                    row.get("room_temp", ""),
+                    row.get("finger", "False"),
+                    row.get("fw_status", "NORMAL"),
+                    pred.get("rule_severity", ""),
+                    pred.get("ml_severity", ""),
+                    pred.get("published_severity", ""),
+                    pred.get("decision_mode", ""),
+                    act["mode"],
+                    act["led_color"],
+                    act["brightness"],
+                    act["buzzer_test"],
+                    act["source"]
+                ])
+                yield buf.getvalue()
+
+
+def parse_actuator_payload(payload_json: str) -> Dict[str, Any]:
+    """Parse actuator payload handling both flat and nested JSON schemas."""
+    try:
+        data = json.loads(payload_json)
+    except Exception:
+        data = {}
+
+    mode = data.get("mode", "AUTO")
+
+    # Handle nested {"led": {"color": "...", "brightness": ...}} or flat keys
+    if isinstance(data.get("led"), dict):
+        led_color = data["led"].get("color", "OFF")
+        brightness = data["led"].get("brightness", 100)
+    else:
+        led_color = data.get("led_color", "OFF")
+        brightness = data.get("brightness", 100)
+
+    # Handle nested {"buzzer": {"test": bool}} or flat keys
+    if isinstance(data.get("buzzer"), dict):
+        buzzer_test = data["buzzer"].get("test", False)
+    else:
+        buzzer_test = data.get("buzzer_test", False)
+
+    source = data.get("source", "BOOT")
+
+    return {
+        "mode": mode,
+        "led_color": led_color,
+        "brightness": brightness,
+        "buzzer_test": buzzer_test,
+        "source": source
+    }
+
+
+def as_of_join_actuator(
+    reading_ts: str,
+    actuator_timeline: List[Tuple[str, Dict[str, Any]]],
+    actuator_ts_list: List[str],
+    default_actuator: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Finds the latest actuator state whose timestamp <= reading_ts.
+    If no prior actuator event exists, returns default_actuator.
+    """
+    if default_actuator is None:
+        default_actuator = {
+            "mode": "AUTO",
+            "led_color": "OFF",
+            "brightness": 100,
+            "buzzer_test": False,
+            "source": "BOOT"
+        }
+    idx = bisect.bisect_right(actuator_ts_list, reading_ts) - 1
+    if idx >= 0:
+        return actuator_timeline[idx][1]
+    return default_actuator
+

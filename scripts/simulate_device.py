@@ -126,19 +126,18 @@ def send_data_packet(
     desc_str = f" ({desc})" if desc else ""
     print(f"[*] 🚀 [SEND /data] HR={hr_str} | SpO2={spo2_str} | Temp={temp_str} | Finger={'YES' if finger else 'NO '}{desc_str}")
 
-def run_fast_1200(client: mqtt.Client, topic: str, device_id: str):
+def run_fast_1200(client: mqtt.Client, topic: str, device_id: str, base_temp: float = 33.0):
     """
     Mengirim 1.200 sampel data fisiologis dengan variasi realistis.
     Memenuhi kebutuhan minimal 1.000 baris dataset untuk skripsi.
     """
     total_records = 1200
     print("\n" + "=" * 75)
-    print(f"  MODE CEPAT: MENGIRIM {total_records} SAMPEL KE {topic}")
+    print(f"  MODE CEPAT: MENGIRIM {total_records} SAMPEL KE {topic} (Suhu Kulit Dasar: {base_temp}°C)")
     print("=" * 75)
 
     base_hr = 75.0
     base_spo2 = 98.0
-    base_temp = 36.6
     base_hum = 60.0
     base_room = 28.5
 
@@ -147,7 +146,7 @@ def run_fast_1200(client: mqtt.Client, topic: str, device_id: str):
         # 1. 90% waktu: data fisiologis normal dengan sedikit variasi alami
         if i % 100 in range(85, 90):
             # 5 sampel jari lepas (finger=False)
-            hr, spo2, temp = 0.0, 0.0, 36.5
+            hr, spo2, temp = 0.0, 0.0, 0.0
             finger = False
             status = "NO_FINGER"
         elif i % 100 in range(50, 53):
@@ -185,15 +184,16 @@ def run_fast_1200(client: mqtt.Client, topic: str, device_id: str):
     elapsed = time.time() - start_time
     print(f"\n[✓] Selesai mengirim {total_records} rekor dalam {elapsed:.2f} detik (~{total_records/elapsed:.1f} msg/s)!\n")
 
-def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, duration_s: int = 60):
+def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, base_temp: float = 33.0, duration_s: int = 60):
     """
     Menjalankan 5 skenario terstruktur @ 1 Hz selama ~60 detik untuk pengujian normal.
     """
     print(f"\n--- [SKENARIO 1] Data Normal (35 Sampel -> Melampaui ML Warmup 15 Sampel) ---")
     for i in range(35):
+        t_noise = round(base_temp + (i % 3) * 0.1, 1)
         send_data_packet(
             client, topic, device_id,
-            hr=75.0 + (i % 3), spo2=98.0, temp=36.5,
+            hr=75.0 + (i % 3), spo2=98.0, temp=t_noise,
             hum=62.0, room_temp=28.5, finger=True,
             desc=f"Sampel #{i+1}"
         )
@@ -203,7 +203,7 @@ def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, d
     for i in range(5):
         send_data_packet(
             client, topic, device_id,
-            hr=0.0, spo2=0.0, temp=36.5,
+            hr=0.0, spo2=0.0, temp=0.0,
             hum=62.0, room_temp=28.5, finger=False,
             status="MENUNGGU SENSOR", desc=f"Finger OFF #{i+1}"
         )
@@ -220,7 +220,7 @@ def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, d
     for i in range(4):
         send_data_packet(
             client, topic, device_id,
-            hr=75.0 + i, spo2=98.0, temp=36.5,
+            hr=75.0 + i, spo2=98.0, temp=base_temp,
             hum=60.0, room_temp=28.5, finger=True,
             desc=f"Normal Pulih #{i+1}"
         )
@@ -240,7 +240,7 @@ def run_interactive_scenarios(client: mqtt.Client, topic: str, device_id: str, d
     for i in range(5):
         send_data_packet(
             client, topic, device_id,
-            hr=76.0, spo2=98.0, temp=36.5,
+            hr=76.0, spo2=98.0, temp=base_temp,
             hum=62.0, room_temp=28.5, finger=True,
             desc=f"Recovery #{i+1}"
         )
@@ -252,6 +252,7 @@ def main():
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Port broker (default: {DEFAULT_PORT})")
     parser.add_argument("--prefix", default=DEFAULT_PREFIX, help=f"Topic prefix (default: {DEFAULT_PREFIX})")
     parser.add_argument("--device-id", default=DEVICE_ID, help=f"Device ID (default: {DEVICE_ID})")
+    parser.add_argument("--base-temp", type=float, default=33.0, help="Suhu dasar kulit realistis (default: 33.0 C)")
     parser.add_argument("--fast-1200", action="store_true", help="Kirim 1.200 sampel cepat untuk verifikasi dataset")
     args = parser.parse_args()
 
@@ -263,6 +264,7 @@ def main():
     print(f"  Broker   : {args.host}:{args.port}")
     print(f"  Data     : {topic}")
     print(f"  Device   : {args.device_id}")
+    print(f"  Base Temp: {args.base_temp}°C")
     print("=" * 75)
 
     try:
@@ -276,9 +278,9 @@ def main():
 
     try:
         if args.fast_1200:
-            run_fast_1200(client, topic, args.device_id)
+            run_fast_1200(client, topic, args.device_id, base_temp=args.base_temp)
         else:
-            run_interactive_scenarios(client, topic, args.device_id)
+            run_interactive_scenarios(client, topic, args.device_id, base_temp=args.base_temp)
     except KeyboardInterrupt:
         print("\n[*] Simulasi dihentikan pengguna.")
     finally:

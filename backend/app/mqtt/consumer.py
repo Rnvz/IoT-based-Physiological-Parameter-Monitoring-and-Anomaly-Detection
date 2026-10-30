@@ -162,6 +162,7 @@ class MQTTService:
             ml_score=arb.ml_score,
             published_severity=arb.published_severity,
             decision_mode=arb.decision_mode,
+            decision_source=arb.decision_source,
             label=arb.published_label,
             model_version=settings.model_version
         )

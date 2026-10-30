@@ -132,6 +132,7 @@ async def test_api_populated_responses_and_shapes(client_and_repo):
     assert p_data["items"][0]["rule_severity"] == 0
     assert p_data["items"][0]["ml_severity"] == 0
     assert p_data["items"][0]["decision_mode"] == "RULE"
+    assert p_data["items"][0]["decision_source"] == "RULE"
 
 @pytest.mark.anyio
 async def test_api_history_filtering_and_validation(client_and_repo):
@@ -276,3 +277,146 @@ def test_api_export_readings_csv(client_and_repo):
     assert "text/csv" in res_auth.headers["content-type"]
     assert "attachment; filename=readings.csv" in res_auth.headers["content-disposition"]
     assert "ts,device_id,hr,spo2" in res_auth.text
+
+def test_rate_limiter_client_ip_resolution():
+    from app.api.deps import get_client_ip
+    from starlette.datastructures import Headers, Address
+
+    class DummyClient:
+        def __init__(self, host: str):
+            self.host = host
+
+    class DummyRequest:
+        def __init__(self, host: str, headers: dict):
+            self.client = DummyClient(host)
+            self.headers = Headers(headers)
+
+    # 1. Loopback 127.0.0.1 with CF-Connecting-IP -> trusts CF header
+    req_lb4 = DummyRequest("127.0.0.1", {"cf-connecting-ip": "203.0.113.19"})
+    assert get_client_ip(req_lb4) == "203.0.113.19"
+
+    # 2. Loopback ::1 with CF-Connecting-IP -> trusts CF header
+    req_lb6 = DummyRequest("::1", {"CF-Connecting-IP": "198.51.100.42"})
+    assert get_client_ip(req_lb6) == "198.51.100.42"
+
+    # 3. Direct external peer (e.g. 192.168.1.50) with spoofed CF-Connecting-IP -> IGNORES CF header!
+    req_ext = DummyRequest("192.168.1.50", {"CF-Connecting-IP": "8.8.8.8"})
+    assert get_client_ip(req_ext) == "192.168.1.50"
+
+    # 4. Loopback without CF header -> returns loopback IP
+    req_plain = DummyRequest("127.0.0.1", {})
+    assert get_client_ip(req_plain) == "127.0.0.1"
+
+def test_read_auth_required_toggle(client_and_repo):
+    client, _, _ = client_and_repo
+    from app.config import settings
+
+    orig = settings.read_auth_required
+    try:
+        # Default / Disabled: public GET
+        settings.read_auth_required = False
+        res_public = client.get("/latest")
+        assert res_public.status_code == 200
+
+        # Enabled: 401 if missing X-API-Key, 200 if provided
+        settings.read_auth_required = True
+        res_denied = client.get("/latest")
+        assert res_denied.status_code == 401
+
+        res_allowed = client.get("/latest", headers={"X-API-Key": "test_secret_key"})
+        assert res_allowed.status_code == 200
+    finally:
+        settings.read_auth_required = orig
+
+def test_as_of_join_actuator_unit():
+    from app.database.csv_repository import as_of_join_actuator
+
+    timeline = [
+        ("2026-10-29T10:01:00Z", {"mode": "AUTO", "led_color": "GREEN", "brightness": 50, "buzzer_test": False, "source": "RULE"}),
+        ("2026-10-29T10:05:00Z", {"mode": "MANUAL", "led_color": "RED", "brightness": 100, "buzzer_test": True, "source": "MANUAL"})
+    ]
+    ts_list = [x[0] for x in timeline]
+
+    # Reading before first event -> default BOOT state
+    res_before = as_of_join_actuator("2026-10-29T10:00:30Z", timeline, ts_list)
+    assert res_before["mode"] == "AUTO"
+    assert res_before["led_color"] == "OFF"
+    assert res_before["source"] == "BOOT"
+
+    # Reading between events -> first event state
+    res_mid = as_of_join_actuator("2026-10-29T10:03:00Z", timeline, ts_list)
+    assert res_mid["mode"] == "AUTO"
+    assert res_mid["led_color"] == "GREEN"
+    assert res_mid["source"] == "RULE"
+
+    # Reading at exact timestamp of second event -> second event state
+    res_exact = as_of_join_actuator("2026-10-29T10:05:00Z", timeline, ts_list)
+    assert res_exact["mode"] == "MANUAL"
+    assert res_exact["led_color"] == "RED"
+    assert res_exact["source"] == "MANUAL"
+
+    # Reading after second event -> second event state
+    res_after = as_of_join_actuator("2026-10-29T10:10:00Z", timeline, ts_list)
+    assert res_after["mode"] == "MANUAL"
+    assert res_after["led_color"] == "RED"
+    assert res_after["source"] == "MANUAL"
+
+@pytest.mark.anyio
+async def test_api_export_dataset_csv_as_of_join(client_and_repo):
+    import csv as py_csv
+    import io
+    client, repo, _ = client_and_repo
+
+    # 1. Unauthenticated request -> 401
+    res_unauth = client.get("/export/dataset.csv")
+    assert res_unauth.status_code == 401
+
+    # 2. Populate test data with timestamps:
+    # t0: Reading 1
+    t0 = "2026-10-29T10:00:00.000000+00:00"
+    await repo.save_reading(ReadingRecord(
+        ts=t0, device_id="esp32-01", hr=72.0, spo2=98.0, temp=36.5, finger=True, fw_status="NORMAL"
+    ))
+    await repo.save_prediction(PredictionRecord(
+        ts=t0, device_id="esp32-01", rule_severity=0, ml_severity=0, ml_score=0.31,
+        published_severity=0, decision_mode="RULE", decision_source="RULE", label="NORMAL"
+    ))
+
+    # t1: Actuator event (mode=MANUAL, led=RED)
+    t1 = "2026-10-29T10:01:00.000000+00:00"
+    await repo.save_actuator_event(ActuatorEventRecord(
+        ts=t1, kind="cmd", seq=101, payload_json='{"mode":"MANUAL","led":{"color":"RED","brightness":100},"buzzer":{"test":false},"source":"MANUAL"}'
+    ))
+
+    # t2: Reading 2 (finger=False, no prediction saved)
+    t2 = "2026-10-29T10:02:00.000000+00:00"
+    await repo.save_reading(ReadingRecord(
+        ts=t2, device_id="esp32-01", hr=None, spo2=None, temp=None, finger=False, fw_status="NO_FINGER"
+    ))
+
+    # 3. Call GET /export/dataset.csv with X-API-Key
+    res = client.get("/export/dataset.csv", headers={"X-API-Key": "test_secret_key"})
+    assert res.status_code == 200
+    assert "attachment; filename=dataset.csv" in res.headers["content-disposition"]
+
+    reader = list(py_csv.DictReader(io.StringIO(res.text)))
+    assert len(reader) == 2
+
+    # Check reading 1 (before actuator event t1): actuator should be default BOOT state
+    r1 = reader[0]
+    assert r1["ts"] == t0
+    assert float(r1["hr"]) == 72.0
+    assert r1["finger"] == "True"
+    assert r1["rule_severity"] == "0"
+    assert r1["mode"] == "AUTO"
+    assert r1["led_color"] == "OFF"
+    assert r1["source"] == "BOOT"
+
+    # Check reading 2 (after actuator event t1): actuator should be joined with t1 event state
+    r2 = reader[1]
+    assert r2["ts"] == t2
+    assert r2["finger"] == "False"
+    assert r2["rule_severity"] == ""  # No prediction saved
+    assert r2["mode"] == "MANUAL"
+    assert r2["led_color"] == "RED"
+    assert r2["source"] == "MANUAL"

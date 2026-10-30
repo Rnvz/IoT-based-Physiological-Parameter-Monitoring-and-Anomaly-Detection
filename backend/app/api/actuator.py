@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.config import settings
 from app.database.factory import get_repository
-from app.api.deps import verify_api_key, rate_limit_post
+from app.api.deps import verify_api_key, verify_read_api_key, rate_limit_post
 
 router = APIRouter(prefix="/actuator", tags=["actuator"])
 
@@ -31,7 +31,7 @@ def _get_publisher():
     return None
 
 @router.get("/status")
-async def get_actuator_status():
+async def get_actuator_status(_auth: Optional[str] = Depends(verify_read_api_key)):
     """
     Returns latest actuator status from ESP32.
     Shape: {"mode","led":{"color","brightness"},"buzzer":{"test":bool},"source","ack_seq","manual_left_s"}
