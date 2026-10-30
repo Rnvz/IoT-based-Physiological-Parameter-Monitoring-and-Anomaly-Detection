@@ -1,260 +1,140 @@
+import json
 import pytest
-import numpy as np
-from app.main import process_telemetry, anomaly_detector, persistent_evaluator, feature_engine
-from app.services.anomaly_model import AnomalyDetector
+from unittest.mock import MagicMock
+from app.mqtt.consumer import MQTTService
+from app.config import settings
 
-@pytest.fixture(autouse=True)
-def setup_detector():
-    import app.main as main_mod
-    if main_mod.anomaly_detector is None:
-        main_mod.anomaly_detector = AnomalyDetector()
-    main_mod.persistent_evaluator.reset()
-    main_mod.feature_engine.reset()
+@pytest.fixture
+def mock_mqtt_service(tmp_path, mocker):
+    # Set isolated csv dir for test
+    csv_dir = str(tmp_path / "mqtt_test_csv")
+    mocker.patch.object(settings, "csv_dir", csv_dir)
+    mocker.patch.object(settings, "topic_prefix", "physiomonitor/test")
 
-def test_pipeline_normal_stream():
-    # Send 16 normal samples to fill the feature buffer (size 15)
-    for i in range(16):
-        sample = {
-            "device_id": "test_esp32",
-            "sequence_id": i + 1,
-            "timestamp_ms": 1000 + i * 1000,
-            "telemetry": {
-                "heart_rate": 75.0,
-                "spo2": 98.0,
-                "temperature": 36.5,
-                "ppg_amplitude": 2500.0,
-                "finger_detected": True
-            },
-            "status": "normal"
-        }
-        feedback, dash = process_telemetry(sample, publish_mqtt=False)
+    from app.database.csv_repository import CSVRepository
+    repo = CSVRepository(csv_dir=csv_dir)
+    mocker.patch("app.mqtt.consumer.get_repository", return_value=repo)
+    mocker.patch("app.mqtt.publisher.get_repository", return_value=repo)
 
-    assert feedback.device_id == "test_esp32"
-    assert feedback.status == "NORMAL"
-    assert feedback.display.line_status == "NORMAL"
-    assert feedback.buzzer_active is False
-    assert feedback.sqa_status == "GOOD"
+    service = MQTTService()
+    # Mock network client publish so we don't need live HiveMQ broker
+    service.client = MagicMock()
+    service.publisher.client = service.client
+    return service, repo
 
-def test_pipeline_sqa_finger_off_triggers_signal_quality_low():
-    sample = {
-        "device_id": "test_esp32",
-        "sequence_id": 99,
-        "timestamp_ms": 50000,
-        "telemetry": {
-            "heart_rate": 0.0,
-            "spo2": 0.0,
-            "temperature": 36.5,
-            "ppg_amplitude": 0.0,
-            "finger_detected": False
-        },
-        "status": "normal"
-    }
-    feedback, dash = process_telemetry(sample, publish_mqtt=False)
-    assert feedback.status == "SIGNAL QUALITY LOW"
-    assert feedback.display.line_status == "SIG QUAL LOW"
-    assert feedback.buzzer_active is False
-    assert feedback.sqa_status == "POOR_QUALITY"
-
-def test_pipeline_persistent_anomaly_buzzes():
-    # Pre-fill feature buffer (15 samples) and advance count
-    # Samples 1-14: buffer filling (features is None)
-    # Sample 15: count = 1
-    # Sample 18: count = 4 (>= 3 -> buzzer active, < 10 -> HIGH DEVIATION)
-    # Sample 25: count = 11 (>= 10 -> HIGH DEVIATION (SUSTAINED))
-    for i in range(25):
-        sample = {
-            "device_id": "test_esp32_anom",
-            "sequence_id": i + 1,
-            "timestamp_ms": 10000 + i * 1000,
-            "telemetry": {
-                "heart_rate": 160.0 + (i % 3) * 5.0, # High tachycardia with dynamics
-                "spo2": 82.0,        # Severe Hypoxia
-                "temperature": 39.5, # High Fever
-                "ppg_amplitude": 1500.0,
-                "finger_detected": True
-            },
-            "status": "normal"
-        }
-        feedback, dash = process_telemetry(sample, publish_mqtt=False)
-        if i == 17:  # Sample 18 (count = 4)
-            assert feedback.status == "HIGH DEVIATION"
-            assert feedback.display.line_status == "HIGH DEV"
-            assert feedback.buzzer_active is True
-        
-    # By sample 25 (count = 11 >= 10), status is HIGH DEVIATION (SUSTAINED) and buzzer active
-    assert feedback.status == "HIGH DEVIATION (SUSTAINED)"
-    assert feedback.display.line_status == "HIGH DEV (S)"
-    assert feedback.buzzer_active is True
-
-def test_pipeline_low_deviation_and_sustained():
-    # Pre-fill feature engine with 15 normal samples
-    for i in range(15):
-        sample = {
-            "device_id": "test_esp32_low",
-            "sequence_id": i + 1,
-            "timestamp_ms": 1000 + i * 1000,
-            "telemetry": {
-                "heart_rate": 75.0,
-                "spo2": 98.0,
-                "temperature": 36.5,
-                "ppg_amplitude": 2500.0,
-                "finger_detected": True
-            },
-            "status": "normal"
-        }
-        process_telemetry(sample, publish_mqtt=False)
-
-    # Send 4 mild anomaly samples (HR=88, SpO2=95, Temp=36.5) -> count=4 (>= 3 -> buzz=True, < 10 -> LOW DEVIATION)
-    for i in range(4):
-        sample = {
-            "device_id": "test_esp32_low",
-            "sequence_id": 20 + i,
-            "timestamp_ms": 20000 + i * 1000,
-            "telemetry": {
-                "heart_rate": 88.0,
-                "spo2": 95.0,
-                "temperature": 36.5,
-                "ppg_amplitude": 2500.0,
-                "finger_detected": True
-            },
-            "status": "normal"
-        }
-        fb4, _ = process_telemetry(sample, publish_mqtt=False)
-    assert fb4.status == "LOW DEVIATION"
-    assert fb4.display.line_status == "LOW DEV"
-    assert fb4.buzzer_active is True
-
-    # Send 6 more mild anomaly samples (total count = 10 -> LOW DEVIATION (SUSTAINED))
-    for i in range(6):
-        sample = {
-            "device_id": "test_esp32_low",
-            "sequence_id": 30 + i,
-            "timestamp_ms": 30000 + i * 1000,
-            "telemetry": {
-                "heart_rate": 88.0,
-                "spo2": 95.0,
-                "temperature": 36.5,
-                "ppg_amplitude": 2500.0,
-                "finger_detected": True
-            },
-            "status": "normal"
-        }
-        fb10, _ = process_telemetry(sample, publish_mqtt=False)
-    assert fb10.status == "LOW DEVIATION (SUSTAINED)"
-    assert fb10.display.line_status == "LOW DEV (S)"
-    assert fb10.buzzer_active is True
-
-    # Recovery stream (flush rolling buffer with normal readings) -> Strict Reset
-    for i in range(15):
-        recovery_sample = {
-            "device_id": "test_esp32_low",
-            "sequence_id": 40 + i,
-            "timestamp_ms": 40000 + i * 1000,
-            "telemetry": {
-                "heart_rate": 75.0,
-                "spo2": 98.0,
-                "temperature": 36.5,
-                "ppg_amplitude": 2500.0,
-                "finger_detected": True
-            },
-            "status": "normal"
-        }
-        fb_rec, _ = process_telemetry(recovery_sample, publish_mqtt=False)
-    assert fb_rec.status == "NORMAL"
-    assert fb_rec.display.line_status == "NORMAL"
-    assert fb_rec.buzzer_active is False
-
-def test_mqtt_feedback_payload_and_buzzer_logic(mocker):
-    import app.main as main_mod
-    import json
-
-    mock_client = mocker.MagicMock()
-    main_mod.mqtt_client = mock_client
-
-    # 1. Normal samples - buzzer_active must be False
-    sample_normal = {
-        "device_id": "test_esp_fb",
+@pytest.mark.anyio
+async def test_pipeline_normal_message_publishes_result_and_persists(mock_mqtt_service):
+    service, repo = mock_mqtt_service
+    topic = f"{settings.topic_prefix}/data"
+    payload = {
+        "device_id": "esp32-01",
         "hr": 75.0,
         "spo2": 98.0,
         "temp": 36.5,
+        "hum": 60.0,
+        "room_temp": 28.0,
+        "finger": True,
         "status": "NORMAL"
     }
-    process_telemetry(sample_normal)
-    assert mock_client.publish.called
-    call_topic, call_payload = mock_client.publish.call_args[0]
-    assert call_topic == "skripsi/physiomonitor/feedback"
-    parsed = json.loads(call_payload)
-    assert parsed["buzzer_active"] is False
-    assert parsed["severity"] == "NORMAL"
-    assert "anomaly_score" in parsed
-    assert "timestamp" in parsed
 
-    # 2. Feed 15 normal samples to fill buffer
-    for i in range(15):
-        s = {
-            "device_id": "test_esp_fb",
-            "sequence_id": i + 1,
-            "timestamp_ms": 1000 + i * 1000,
-            "telemetry": {
-                "heart_rate": 75.0,
-                "spo2": 98.0,
-                "temperature": 36.5,
-                "ppg_amplitude": 2500.0,
-                "finger_detected": True
-            },
-            "status": "normal"
-        }
-        process_telemetry(s)
+    await service.handle_message(topic, json.dumps(payload).encode("utf-8"))
 
-    # 3. Mild anomaly (LOW DEVIATION) for 4 samples: count >= 3 so should_buzz is True,
-    # but buzzer_active in MQTT feedback must remain False because it is NOT HIGH DEVIATION
-    mock_client.reset_mock()
-    for i in range(4):
-        s = {
-            "device_id": "test_esp_fb",
-            "sequence_id": 20 + i,
-            "timestamp_ms": 20000 + i * 1000,
-            "telemetry": {
-                "heart_rate": 88.0,
-                "spo2": 95.0,
-                "temperature": 36.5,
-                "ppg_amplitude": 2500.0,
-                "finger_detected": True
-            },
-            "status": "normal"
-        }
-        process_telemetry(s)
+    # 1. Persistence first: reading must be saved
+    latest_reading = await repo.get_latest_reading("esp32-01")
+    assert latest_reading is not None
+    assert latest_reading.hr == 75.0
+    assert latest_reading.finger is True
 
-    assert mock_client.publish.called
-    call_topic, call_payload = mock_client.publish.call_args[0]
-    parsed = json.loads(call_payload)
-    assert parsed["severity"] == "LOW DEVIATION"
-    assert parsed["buzzer_active"] is False  # Must be False for LOW DEVIATION
+    # 2. Result must be published to <prefix>/result
+    assert service.client.publish.called
+    call_topic, call_payload = service.client.publish.call_args[0]
+    assert call_topic == f"{settings.topic_prefix}/result"
+    
+    result_dict = json.loads(call_payload)
+    assert result_dict["label"] == "NORMAL"
+    assert result_dict["severity"] == 0
+    assert result_dict["model_version"] == settings.model_version
 
-    # 4. Severe anomaly (HIGH DEVIATION) for 4 samples: buzzer_active must be True
-    main_mod.feature_engine.reset()
-    main_mod.persistent_evaluator.reset()
-    mock_client.reset_mock()
-    for i in range(20):
-        s = {
-            "device_id": "test_esp_fb_high",
-            "sequence_id": i + 1,
-            "timestamp_ms": 30000 + i * 1000,
-            "telemetry": {
-                "heart_rate": 160.0 + (i % 3) * 5.0,
-                "spo2": 82.0,
-                "temperature": 39.5,
-                "ppg_amplitude": 1500.0,
-                "finger_detected": True
-            },
-            "status": "normal"
-        }
-        process_telemetry(s)
+    # 3. Prediction must be saved
+    preds = await repo.get_predictions("esp32-01", limit=1)
+    assert len(preds) == 1
+    assert preds[0].rule_severity == 0
 
-    call_topic, call_payload = mock_client.publish.call_args[0]
-    parsed = json.loads(call_payload)
-    assert parsed["severity"] in ("HIGH DEVIATION", "HIGH DEVIATION (SUSTAINED)")
-    assert parsed["buzzer_active"] is True
+@pytest.mark.anyio
+async def test_pipeline_finger_false_persists_raw_but_omits_result(mock_mqtt_service):
+    """
+    Requirement: finger:false means HR and SpO2 not valid.
+    Backend persists raw reading, resets window, and does NOT publish /result.
+    """
+    service, repo = mock_mqtt_service
+    topic = f"{settings.topic_prefix}/data"
+    payload = {
+        "device_id": "esp32-01",
+        "hr": 0.0,
+        "spo2": 0.0,
+        "temp": 36.5,
+        "finger": False,
+        "status": "NO_FINGER"
+    }
 
-    # Clean up mock
-    main_mod.mqtt_client = None
+    await service.handle_message(topic, json.dumps(payload).encode("utf-8"))
+
+    # Raw reading is persisted
+    latest = await repo.get_latest_reading("esp32-01")
+    assert latest is not None
+    assert latest.finger is False
+    assert latest.hr is None
+
+    # /result is NOT published
+    assert not service.client.publish.called
+
+@pytest.mark.anyio
+async def test_pipeline_critical_anomaly_publishes_severity_2(mock_mqtt_service):
+    service, repo = mock_mqtt_service
+    topic = f"{settings.topic_prefix}/data"
+    payload = {
+        "device_id": "esp32-01",
+        "hr": 140.0,  # Critical tachycardia
+        "spo2": 85.0,   # Critical hypoxia
+        "temp": 39.5,   # Critical fever
+        "finger": True,
+        "status": "NORMAL"
+    }
+
+    await service.handle_message(topic, json.dumps(payload).encode("utf-8"))
+
+    assert service.client.publish.called
+    call_topic, call_payload = service.client.publish.call_args[0]
+    result_dict = json.loads(call_payload)
+    assert result_dict["severity"] == 2
+    assert result_dict["label"] == "ANOMALY"
+
+@pytest.mark.anyio
+async def test_pipeline_malformed_json_gracefully_ignored(mock_mqtt_service):
+    service, repo = mock_mqtt_service
+    topic = f"{settings.topic_prefix}/data"
+    bad_payload = b"NOT_A_JSON_STRING{xyz"
+
+    # Should not raise exception
+    await service.handle_message(topic, bad_payload)
+    assert not service.client.publish.called
+
+@pytest.mark.anyio
+async def test_pipeline_actuator_message_saved(mock_mqtt_service):
+    service, repo = mock_mqtt_service
+    topic = f"{settings.topic_prefix}/actuator"
+    payload = {
+        "mode": "AUTO",
+        "led": {"color": "GREEN", "brightness": 40},
+        "buzzer": {"test": False},
+        "source": "ML_RESULT",
+        "ack_seq": 999,
+        "manual_left_s": 0
+    }
+
+    await service.handle_message(topic, json.dumps(payload).encode("utf-8"))
+
+    event = await repo.get_latest_actuator_event(kind="status")
+    assert event is not None
+    assert event.seq == 999
+    assert "ML_RESULT" in event.payload_json

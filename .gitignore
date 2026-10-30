@@ -122,6 +122,7 @@ Esp/
 *.sqlite3
 backend/data/*.db
 !backend/data/.gitkeep
+data/
 
 # ------------------------------------------------------------------------------
 # 6. Node.js & Dashboard / Frontend
@@ -140,6 +141,9 @@ pnpm-debug.log*
 logs/
 temp/
 tmp/
+*.pdf
+*.docx
+/NOTE_BACKEND_ML_DB*.md
 
 # ------------------------------------------------------------------------------
 # 8. IDE & Operating System
