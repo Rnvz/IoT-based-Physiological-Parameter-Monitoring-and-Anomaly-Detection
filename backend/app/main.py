@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.mqtt.consumer import MQTTService
-from app.api import health_router, telemetry_router, actuator_router
+from app.api import health_router, telemetry_router, actuator_router, session_router
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger(__name__)
@@ -65,3 +65,4 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(health_router)
 app.include_router(telemetry_router)
 app.include_router(actuator_router)
+app.include_router(session_router)

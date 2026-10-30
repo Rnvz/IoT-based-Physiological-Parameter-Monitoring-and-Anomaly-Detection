@@ -9,7 +9,8 @@ from app.database.interfaces import (
     BaseRepository,
     ReadingRecord,
     PredictionRecord,
-    ActuatorEventRecord
+    ActuatorEventRecord,
+    ScenarioEventRecord
 )
 
 class CSVRepository(BaseRepository):
@@ -19,6 +20,7 @@ class CSVRepository(BaseRepository):
       - readings.csv
       - predictions.csv
       - actuator_events.csv
+      - scenario_events.csv
     Handles deduplication on (device_id, ts).
     """
 
@@ -29,6 +31,7 @@ class CSVRepository(BaseRepository):
         self.readings_file = os.path.join(self.csv_dir, "readings.csv")
         self.predictions_file = os.path.join(self.csv_dir, "predictions.csv")
         self.actuator_file = os.path.join(self.csv_dir, "actuator_events.csv")
+        self.scenario_file = os.path.join(self.csv_dir, "scenario_events.csv")
 
         self._lock = asyncio.Lock()
         self._seen_readings: Set[Tuple[str, str]] = set()
@@ -37,6 +40,7 @@ class CSVRepository(BaseRepository):
         self._latest_readings: dict = {}
         self._latest_predictions: dict = {}
         self._latest_actuator: Optional[ActuatorEventRecord] = None
+        self._current_scenario: Optional[ScenarioEventRecord] = None
 
         self._init_files()
 
@@ -84,6 +88,25 @@ class CSVRepository(BaseRepository):
             with open(self.actuator_file, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(["ts", "kind", "seq", "payload_json"])
+
+        # 4. scenario_events.csv
+        if not os.path.exists(self.scenario_file):
+            with open(self.scenario_file, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["ts", "scenario", "note"])
+        else:
+            try:
+                with open(self.scenario_file, "r", encoding="utf-8") as f:
+                    rows = list(csv.DictReader(f))
+                    if rows:
+                        last = rows[-1]
+                        self._current_scenario = ScenarioEventRecord(
+                            ts=last.get("ts", ""),
+                            scenario=last.get("scenario", "UNLABELED"),
+                            note=last.get("note") or None
+                        )
+            except Exception:
+                pass
 
     async def save_reading(self, reading: ReadingRecord) -> bool:
         key = (reading.device_id, reading.ts)
@@ -253,6 +276,41 @@ class CSVRepository(BaseRepository):
             pass
         return None
 
+    async def save_scenario_event(self, event: ScenarioEventRecord) -> bool:
+        async with self._lock:
+            self._current_scenario = event
+            try:
+                with open(self.scenario_file, "a", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow([event.ts, event.scenario, event.note or ""])
+                return True
+            except Exception as e:
+                print(f"[CSVRepository] Error writing scenario event: {e}")
+                return False
+
+    async def get_current_scenario(self) -> ScenarioEventRecord:
+        async with self._lock:
+            if self._current_scenario is not None:
+                return self._current_scenario
+
+        try:
+            with open(self.scenario_file, "r", encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
+                if rows:
+                    last = rows[-1]
+                    rec = ScenarioEventRecord(
+                        ts=last.get("ts", ""),
+                        scenario=last.get("scenario", "UNLABELED"),
+                        note=last.get("note") or None
+                    )
+                    async with self._lock:
+                        self._current_scenario = rec
+                    return rec
+        except Exception:
+            pass
+
+        return ScenarioEventRecord(ts="", scenario="UNLABELED", note=None)
+
     def _row_to_reading(self, row: dict) -> ReadingRecord:
         def parse_float(val):
             if val is None or val == "":
@@ -349,11 +407,28 @@ class CSVRepository(BaseRepository):
             "source": "BOOT"
         }
 
-        # 3. Stream output CSV
+        # 3. Load scenario events timeline
+        scenario_timeline: List[Tuple[str, str]] = []
+        if os.path.exists(self.scenario_file):
+            try:
+                with open(self.scenario_file, "r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        ts = row.get("ts", "")
+                        sc = row.get("scenario", "UNLABELED")
+                        if ts:
+                            scenario_timeline.append((ts, sc))
+            except Exception as e:
+                print(f"[CSVRepository] Error reading scenario events for export: {e}")
+
+        scenario_timeline.sort(key=lambda x: x[0])
+        scenario_ts_list = [x[0] for x in scenario_timeline]
+
+        # 4. Stream output CSV
         header = [
             "ts", "hr", "spo2", "temp", "hum", "room_temp", "finger", "fw_status",
             "rule_severity", "ml_severity", "published_severity", "decision_mode",
-            "mode", "led_color", "brightness", "buzzer_test", "source"
+            "scenario", "mode", "led_color", "brightness", "buzzer_test", "source"
         ]
         import io
         buf = io.StringIO()
@@ -371,6 +446,7 @@ class CSVRepository(BaseRepository):
                 dev = row.get("device_id", "")
                 pred = pred_lookup.get((dev, ts), {})
                 act = as_of_join_actuator(ts, actuator_timeline, actuator_ts_list, default_actuator)
+                sc_val = as_of_join_scenario(ts, scenario_timeline, scenario_ts_list, default_scenario="UNLABELED")
 
                 buf = io.StringIO()
                 writer = csv.writer(buf)
@@ -387,6 +463,7 @@ class CSVRepository(BaseRepository):
                     pred.get("ml_severity", ""),
                     pred.get("published_severity", ""),
                     pred.get("decision_mode", ""),
+                    sc_val,
                     act["mode"],
                     act["led_color"],
                     act["brightness"],
@@ -452,4 +529,21 @@ def as_of_join_actuator(
     if idx >= 0:
         return actuator_timeline[idx][1]
     return default_actuator
+
+
+def as_of_join_scenario(
+    reading_ts: str,
+    scenario_timeline: List[Tuple[str, str]],
+    scenario_ts_list: List[str],
+    default_scenario: str = "UNLABELED"
+) -> str:
+    """
+    Finds the latest scenario tag whose timestamp <= reading_ts.
+    If no prior scenario event exists, returns default_scenario.
+    """
+    idx = bisect.bisect_right(scenario_ts_list, reading_ts) - 1
+    if idx >= 0:
+        return scenario_timeline[idx][1]
+    return default_scenario
+
 

@@ -138,3 +138,33 @@ async def test_csv_repo_actuator_events(temp_csv_repo):
     assert latest is not None
     assert latest.seq == 501
     assert latest.kind == "cmd"
+
+@pytest.mark.anyio
+async def test_csv_repo_scenario_events(temp_csv_repo):
+    from app.database.interfaces import ScenarioEventRecord
+    repo = temp_csv_repo
+
+    # Initial scenario defaults to UNLABELED
+    init_sc = await repo.get_current_scenario()
+    assert init_sc.scenario == "UNLABELED"
+    assert init_sc.note is None
+
+    # Save a new scenario
+    t1 = datetime.now(timezone.utc).isoformat()
+    rec1 = ScenarioEventRecord(ts=t1, scenario="REST", note="resting baseline")
+    assert await repo.save_scenario_event(rec1) is True
+
+    curr1 = await repo.get_current_scenario()
+    assert curr1.scenario == "REST"
+    assert curr1.note == "resting baseline"
+    assert curr1.ts == t1
+
+    # Save second scenario
+    t2 = datetime.now(timezone.utc).isoformat()
+    rec2 = ScenarioEventRecord(ts=t2, scenario="TYPING", note="laptop typing")
+    assert await repo.save_scenario_event(rec2) is True
+
+    curr2 = await repo.get_current_scenario()
+    assert curr2.scenario == "TYPING"
+    assert curr2.note == "laptop typing"
+    assert curr2.ts == t2

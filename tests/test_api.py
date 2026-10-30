@@ -408,6 +408,7 @@ async def test_api_export_dataset_csv_as_of_join(client_and_repo):
     assert float(r1["hr"]) == 72.0
     assert r1["finger"] == "True"
     assert r1["rule_severity"] == "0"
+    assert r1["scenario"] == "UNLABELED"
     assert r1["mode"] == "AUTO"
     assert r1["led_color"] == "OFF"
     assert r1["source"] == "BOOT"
@@ -417,6 +418,131 @@ async def test_api_export_dataset_csv_as_of_join(client_and_repo):
     assert r2["ts"] == t2
     assert r2["finger"] == "False"
     assert r2["rule_severity"] == ""  # No prediction saved
+    assert r2["scenario"] == "UNLABELED"
     assert r2["mode"] == "MANUAL"
     assert r2["led_color"] == "RED"
     assert r2["source"] == "MANUAL"
+
+def test_session_scenario_validation_and_auth(client_and_repo):
+    client, _, _ = client_and_repo
+    from app.config import settings
+
+    # 1. Unauthenticated POST -> 401
+    res_unauth = client.post("/session/scenario", json={"scenario": "REST"})
+    assert res_unauth.status_code == 401
+
+    headers = {"X-API-Key": "test_secret_key"}
+
+    # 2. Invalid scenario (e.g. provoking physiological anomaly) -> 422
+    res_invalid_sc = client.post("/session/scenario", json={"scenario": "HYPOXIA_INDUCED"}, headers=headers)
+    assert res_invalid_sc.status_code == 422
+
+    # 3. Note exceeding 200 characters -> 422
+    long_note = "A" * 201
+    res_long_note = client.post("/session/scenario", json={"scenario": "REST", "note": long_note}, headers=headers)
+    assert res_long_note.status_code == 422
+
+    # 4. Extra fields forbidden -> 422
+    res_extra = client.post("/session/scenario", json={"scenario": "REST", "extra": "forbidden"}, headers=headers)
+    assert res_extra.status_code == 422
+
+    # 5. Valid benign scenarios accepted
+    valid_scenarios = ["REST", "TYPING", "LIGHT_ACTIVITY", "MOTION", "FINGER_SHIFT", "SENSOR_OFF", "OTHER"]
+    for sc in valid_scenarios:
+        res_ok = client.post("/session/scenario", json={"scenario": sc, "note": f"Testing {sc}"}, headers=headers)
+        assert res_ok.status_code == 200
+        assert res_ok.json()["status"] == "ok"
+        assert res_ok.json()["scenario"] == sc
+        assert res_ok.json()["note"] == f"Testing {sc}"
+
+    # 6. GET /session/scenario returns last active scenario
+    res_get = client.get("/session/scenario")
+    assert res_get.status_code == 200
+    assert res_get.json()["scenario"] == "OTHER"
+    assert res_get.json()["note"] == "Testing OTHER"
+
+    # 7. GET /session/scenario respects READ_AUTH_REQUIRED
+    orig = settings.read_auth_required
+    try:
+        settings.read_auth_required = True
+        res_get_unauth = client.get("/session/scenario")
+        assert res_get_unauth.status_code == 401
+
+        res_get_auth = client.get("/session/scenario", headers=headers)
+        assert res_get_auth.status_code == 200
+        assert res_get_auth.json()["scenario"] == "OTHER"
+    finally:
+        settings.read_auth_required = orig
+
+def test_as_of_join_scenario_unit():
+    from app.database.csv_repository import as_of_join_scenario
+
+    timeline = [
+        ("2026-10-29T10:01:00Z", "REST"),
+        ("2026-10-29T10:05:00Z", "TYPING"),
+    ]
+    ts_list = [x[0] for x in timeline]
+
+    # Before first event -> default UNLABELED
+    assert as_of_join_scenario("2026-10-29T10:00:30Z", timeline, ts_list) == "UNLABELED"
+
+    # Between events -> REST
+    assert as_of_join_scenario("2026-10-29T10:03:00Z", timeline, ts_list) == "REST"
+
+    # Exact event match -> TYPING
+    assert as_of_join_scenario("2026-10-29T10:05:00Z", timeline, ts_list) == "TYPING"
+
+    # After last event -> TYPING
+    assert as_of_join_scenario("2026-10-29T10:15:00Z", timeline, ts_list) == "TYPING"
+
+@pytest.mark.anyio
+async def test_dataset_export_includes_scenario_column_with_as_of_join(client_and_repo):
+    import csv as py_csv
+    import io
+    client, repo, _ = client_and_repo
+    from app.database.interfaces import ScenarioEventRecord
+
+    headers = {"X-API-Key": "test_secret_key"}
+
+    # t0: Reading 1 before any scenario event
+    t0 = "2026-10-29T11:00:00.000000+00:00"
+    await repo.save_reading(ReadingRecord(
+        ts=t0, device_id="esp32-01", hr=70.0, spo2=99.0, temp=33.1, finger=True
+    ))
+
+    # t1: Scenario event 1 -> REST
+    t1 = "2026-10-29T11:01:00.000000+00:00"
+    await repo.save_scenario_event(ScenarioEventRecord(ts=t1, scenario="REST", note="baseline"))
+
+    # t2: Reading 2 -> should be REST
+    t2 = "2026-10-29T11:02:00.000000+00:00"
+    await repo.save_reading(ReadingRecord(
+        ts=t2, device_id="esp32-01", hr=71.0, spo2=98.5, temp=33.2, finger=True
+    ))
+
+    # t3: Scenario event 2 -> MOTION
+    t3 = "2026-10-29T11:03:00.000000+00:00"
+    await repo.save_scenario_event(ScenarioEventRecord(ts=t3, scenario="MOTION", note="arm movement"))
+
+    # t4: Reading 3 -> should be MOTION
+    t4 = "2026-10-29T11:04:00.000000+00:00"
+    await repo.save_reading(ReadingRecord(
+        ts=t4, device_id="esp32-01", hr=85.0, spo2=97.0, temp=33.3, finger=True
+    ))
+
+    # Export dataset
+    res = client.get("/export/dataset.csv", headers=headers)
+    assert res.status_code == 200
+
+    reader = list(py_csv.DictReader(io.StringIO(res.text)))
+    assert len(reader) == 3
+
+    assert "scenario" in reader[0]
+    assert reader[0]["ts"] == t0
+    assert reader[0]["scenario"] == "UNLABELED"
+
+    assert reader[1]["ts"] == t2
+    assert reader[1]["scenario"] == "REST"
+
+    assert reader[2]["ts"] == t4
+    assert reader[2]["scenario"] == "MOTION"

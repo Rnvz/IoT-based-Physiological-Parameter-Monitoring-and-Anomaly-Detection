@@ -31,6 +31,11 @@ class ActuatorEventRecord(BaseModel):
     seq: Optional[int] = None
     payload_json: str
 
+class ScenarioEventRecord(BaseModel):
+    ts: str  # ISO 8601 UTC string
+    scenario: str
+    note: Optional[str] = None
+
 class BaseRepository(ABC):
     @abstractmethod
     async def save_reading(self, reading: ReadingRecord) -> bool:
@@ -75,4 +80,14 @@ class BaseRepository(ABC):
     @abstractmethod
     def stream_dataset_export(self):
         """Stream complete dataset export with as-of join for research/course submission."""
+        pass
+
+    @abstractmethod
+    async def save_scenario_event(self, event: ScenarioEventRecord) -> bool:
+        """Save scenario tag change."""
+        pass
+
+    @abstractmethod
+    async def get_current_scenario(self) -> ScenarioEventRecord:
+        """Fetch the current active scenario event."""
         pass
