@@ -1,5 +1,3 @@
-import os
-import json
 import pytest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock
@@ -251,7 +249,7 @@ def test_api_export_readings_csv(client_and_repo):
 
 def test_rate_limiter_client_ip_resolution():
     from app.api.deps import get_client_ip
-    from starlette.datastructures import Headers, Address
+    from starlette.datastructures import Headers
 
     class DummyClient:
         def __init__(self, host: str):
@@ -517,4 +515,64 @@ def test_api_disabled_when_api_key_empty(client_and_repo, monkeypatch):
     )
     assert res_export.status_code == 500
     assert res_export.json()["detail"] == "API_KEY is not configured on server"
+
+def test_session_scenario_rate_limiter(client_and_repo):
+    """
+    POST /session/scenario must be rate-limited by rate_limit_post (20 req / 10s per IP).
+    """
+    client, _, _ = client_and_repo
+    headers = {"X-API-Key": "test_secret_key"}
+
+    from app.api.deps import rate_limiter
+    rate_limiter.requests.clear()
+
+    for _ in range(20):
+        r = client.post("/session/scenario", json={"scenario": "REST"}, headers=headers)
+        assert r.status_code == 200
+
+    r_over = client.post("/session/scenario", json={"scenario": "REST"}, headers=headers)
+    assert r_over.status_code == 429
+    assert "Rate limit exceeded" in r_over.json()["detail"]
+
+    rate_limiter.requests.clear()
+
+def test_cors_configuration(client_and_repo):
+    """
+    CORS must disallow 'null' origin, permit configured origins,
+    and have allow_credentials=False.
+    """
+    client, _, _ = client_and_repo
+
+    # 1. Allowed origin preflight
+    res_allowed = client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:8080",
+            "Access-Control-Request-Method": "GET"
+        }
+    )
+    assert res_allowed.headers.get("access-control-allow-origin") == "http://localhost:8080"
+    # allow_credentials=False means access-control-allow-credentials header is not 'true'
+    assert res_allowed.headers.get("access-control-allow-credentials") is None
+
+    # 2. 'null' origin must be rejected
+    res_null = client.options(
+        "/health",
+        headers={
+            "Origin": "null",
+            "Access-Control-Request-Method": "GET"
+        }
+    )
+    assert "access-control-allow-origin" not in res_null.headers
+
+    # 3. Disallowed origin
+    res_disallowed = client.options(
+        "/health",
+        headers={
+            "Origin": "http://unauthorized-evil.com",
+            "Access-Control-Request-Method": "GET"
+        }
+    )
+    assert "access-control-allow-origin" not in res_disallowed.headers
+
 

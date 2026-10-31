@@ -3,6 +3,7 @@ import csv
 import json
 import bisect
 import asyncio
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Set, Tuple, Dict, Any, Generator
 from app.database.interfaces import (
@@ -12,6 +13,8 @@ from app.database.interfaces import (
     ActuatorEventRecord,
     ScenarioEventRecord
 )
+
+logger = logging.getLogger(__name__)
 
 class CSVRepository(BaseRepository):
     """
@@ -128,7 +131,7 @@ class CSVRepository(BaseRepository):
                     ])
                 return True
             except Exception as e:
-                print(f"[CSVRepository] Error writing reading: {e}")
+                logger.error(f"[CSVRepository] Error writing reading: {e}")
                 return False
 
     async def get_latest_reading(self, device_id: str) -> Optional[ReadingRecord]:
@@ -186,7 +189,7 @@ class CSVRepository(BaseRepository):
                     except Exception:
                         results.append(self._row_to_reading(row))
         except Exception as e:
-            print(f"[CSVRepository] Error reading history: {e}")
+            logger.error(f"[CSVRepository] Error reading history: {e}")
         return results
 
     async def save_prediction(self, prediction: PredictionRecord) -> bool:
@@ -215,7 +218,7 @@ class CSVRepository(BaseRepository):
                     ])
                 return True
             except Exception as e:
-                print(f"[CSVRepository] Error writing prediction: {e}")
+                logger.error(f"[CSVRepository] Error writing prediction: {e}")
                 return False
 
     async def get_predictions(self, device_id: str, limit: int = 100) -> List[PredictionRecord]:
@@ -228,7 +231,7 @@ class CSVRepository(BaseRepository):
                     if row.get("device_id") == device_id:
                         results.append(self._row_to_prediction(row))
         except Exception as e:
-            print(f"[CSVRepository] Error reading predictions: {e}")
+            logger.error(f"[CSVRepository] Error reading predictions: {e}")
         return list(results)
 
     async def save_actuator_event(self, event: ActuatorEventRecord) -> bool:
@@ -245,7 +248,7 @@ class CSVRepository(BaseRepository):
                     ])
                 return True
             except Exception as e:
-                print(f"[CSVRepository] Error writing actuator event: {e}")
+                logger.error(f"[CSVRepository] Error writing actuator event: {e}")
                 return False
 
     async def get_latest_actuator_event(self, kind: Optional[str] = None) -> Optional[ActuatorEventRecord]:
@@ -278,7 +281,7 @@ class CSVRepository(BaseRepository):
                     writer.writerow([event.ts, event.scenario, event.note or ""])
                 return True
             except Exception as e:
-                print(f"[CSVRepository] Error writing scenario event: {e}")
+                logger.error(f"[CSVRepository] Error writing scenario event: {e}")
                 return False
 
     async def get_current_scenario(self) -> ScenarioEventRecord:
@@ -374,7 +377,7 @@ class CSVRepository(BaseRepository):
                         ts = row.get("ts", "")
                         pred_lookup[(dev, ts)] = row
             except Exception as e:
-                print(f"[CSVRepository] Error reading predictions for export: {e}")
+                logger.error(f"[CSVRepository] Error reading predictions for export: {e}")
 
         actuator_timeline: List[Tuple[str, Dict[str, Any]]] = []
         if os.path.exists(self.actuator_file):
@@ -386,7 +389,7 @@ class CSVRepository(BaseRepository):
                         parsed = parse_actuator_payload(row.get("payload_json", "{}"))
                         actuator_timeline.append((ts, parsed))
             except Exception as e:
-                print(f"[CSVRepository] Error reading actuator events for export: {e}")
+                logger.error(f"[CSVRepository] Error reading actuator events for export: {e}")
 
         actuator_timeline.sort(key=lambda x: x[0])
         actuator_ts_list = [x[0] for x in actuator_timeline]
@@ -409,7 +412,7 @@ class CSVRepository(BaseRepository):
                         if ts:
                             scenario_timeline.append((ts, sc))
             except Exception as e:
-                print(f"[CSVRepository] Error reading scenario events for export: {e}")
+                logger.error(f"[CSVRepository] Error reading scenario events for export: {e}")
 
         scenario_timeline.sort(key=lambda x: x[0])
         scenario_ts_list = [x[0] for x in scenario_timeline]

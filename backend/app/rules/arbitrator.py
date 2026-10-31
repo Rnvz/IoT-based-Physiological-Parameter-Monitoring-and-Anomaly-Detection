@@ -1,7 +1,10 @@
+import logging
 from pydantic import BaseModel
 from typing import Optional
 from app.config import settings
 from app.ml.inference import MLInferenceResult
+
+logger = logging.getLogger(__name__)
 
 class ArbitrationResult(BaseModel):
     rule_severity: int
@@ -45,7 +48,7 @@ def arbitrate(
                 is_fallback=False
             )
         else:
-            print(f"[Arbitrator] ML result unavailable ({getattr(ml_result, 'label', 'None')}). Falling back to RULE severity {rule_severity}.")
+            logger.info(f"[Arbitrator] ML result unavailable ({getattr(ml_result, 'label', 'None')}). Falling back to RULE severity {rule_severity}.")
             return ArbitrationResult(
                 rule_severity=rule_severity,
                 ml_severity=ml_sev,

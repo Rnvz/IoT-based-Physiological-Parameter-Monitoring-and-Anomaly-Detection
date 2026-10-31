@@ -24,7 +24,7 @@ import sys
 import csv
 import argparse
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 import statistics
 
 TARGET_VALID_ROWS = 1000

@@ -1,7 +1,10 @@
 import os
 import joblib
-from typing import Dict, Tuple, Optional
+import logging
+from typing import Dict, Tuple
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 class ThresholdEvaluator:
     """
@@ -36,7 +39,7 @@ class ThresholdEvaluator:
                 self.thr_013 = float(self.thresholds.get(0.13, 0.252450))
                 self.thr_005 = float(self.thresholds.get(0.05, 0.097345))
             except Exception as e:
-                print(f"[ThresholdEvaluator] Error loading thresholds from {resolved}: {e}")
+                logger.error(f"[ThresholdEvaluator] Error loading thresholds from {resolved}: {e}")
 
     def score_to_raw_severity(self, score: float) -> Tuple[int, str]:
         if score >= self.thr_013:

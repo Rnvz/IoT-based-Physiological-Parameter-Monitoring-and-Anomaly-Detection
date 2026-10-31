@@ -1,5 +1,4 @@
-import pytest
-from app.rules.arbitrator import arbitrate, ArbitrationResult
+from app.rules.arbitrator import arbitrate
 from app.ml.inference import MLInferenceResult
 
 def test_arbitrator_rule_mode():

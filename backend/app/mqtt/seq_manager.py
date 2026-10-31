@@ -2,7 +2,10 @@ import os
 import json
 import random
 import threading
+import logging
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 class SequenceManager:
     """
@@ -34,7 +37,7 @@ class SequenceManager:
             with open(self.filepath, "w", encoding="utf-8") as f:
                 json.dump({"seq": seq}, f)
         except Exception as e:
-            print(f"[SequenceManager] Error saving sequence counter: {e}")
+            logger.error(f"[SequenceManager] Error saving sequence counter: {e}")
 
     def next_seq(self) -> int:
         with self._lock:

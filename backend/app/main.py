@@ -45,11 +45,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Physio Monitor Backend", lifespan=lifespan)
 
-allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip() and o.strip().lower() != "null"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )

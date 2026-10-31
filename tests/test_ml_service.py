@@ -1,6 +1,5 @@
-import pytest
 from app.ml.severity import ThresholdEvaluator, DevicePersistentEvaluator
-from app.ml.inference import MLService, get_ml_service
+from app.ml.inference import MLService
 
 def test_threshold_evaluator_sign_convention_and_mapping():
     evaluator = ThresholdEvaluator()

@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timezone
-from typing import Optional, List
-from fastapi import APIRouter, Query, Depends, HTTPException, status
+from typing import Optional
+from fastapi import APIRouter, Query, Depends
 from fastapi.responses import StreamingResponse
 
 from app.config import settings

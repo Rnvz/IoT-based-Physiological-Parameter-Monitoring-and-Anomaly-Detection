@@ -1,4 +1,3 @@
-import pytest
 from app.rules.engine import evaluate_rules
 from app.config import settings
 

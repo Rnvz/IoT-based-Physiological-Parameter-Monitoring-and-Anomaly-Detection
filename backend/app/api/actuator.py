@@ -3,7 +3,6 @@ from typing import Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.config import settings
 from app.database.factory import get_repository
 from app.api.deps import verify_api_key, verify_read_api_key, rate_limit_post
 
