@@ -6,6 +6,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Set, Tuple, Dict, Any, Generator
+from app.config import settings
 from app.database.interfaces import (
     BaseRepository,
     ReadingRecord,
@@ -67,10 +68,13 @@ class CSVRepository(BaseRepository):
         if not os.path.exists(self.predictions_file):
             with open(self.predictions_file, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow([
+                header = [
                     "ts", "device_id", "rule_severity", "ml_severity", "ml_score",
                     "published_severity", "decision_mode", "decision_source", "label", "model_version"
-                ])
+                ]
+                if getattr(settings, "model_kind", "ml").lower() == "dl":
+                    header.extend(["dl_score", "dl_severity", "inference_ms"])
+                writer.writerow(header)
         else:
             try:
                 with open(self.predictions_file, "r", encoding="utf-8") as f:
@@ -202,9 +206,21 @@ class CSVRepository(BaseRepository):
             self._latest_predictions[prediction.device_id] = prediction
 
             try:
+                file_has_dl = False
+                if os.path.exists(self.predictions_file):
+                    try:
+                        with open(self.predictions_file, "r", encoding="utf-8") as f_hdr:
+                            first_line = f_hdr.readline()
+                            if "dl_score" in first_line:
+                                file_has_dl = True
+                    except Exception:
+                        pass
+                else:
+                    file_has_dl = getattr(settings, "model_kind", "ml").lower() == "dl" or prediction.dl_score is not None
+
                 with open(self.predictions_file, "a", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
-                    writer.writerow([
+                    row = [
                         prediction.ts,
                         prediction.device_id,
                         "" if prediction.rule_severity is None else prediction.rule_severity,
@@ -215,7 +231,14 @@ class CSVRepository(BaseRepository):
                         prediction.decision_source,
                         prediction.label,
                         prediction.model_version
-                    ])
+                    ]
+                    if file_has_dl:
+                        row.extend([
+                            "" if prediction.dl_score is None else f"{prediction.dl_score:.6f}",
+                            "" if prediction.dl_severity is None else prediction.dl_severity,
+                            "" if prediction.inference_ms is None else f"{prediction.inference_ms:.2f}"
+                        ])
+                    writer.writerow(row)
                 return True
             except Exception as e:
                 logger.error(f"[CSVRepository] Error writing prediction: {e}")
@@ -358,7 +381,10 @@ class CSVRepository(BaseRepository):
             decision_mode=row.get("decision_mode", "RULE"),
             decision_source=row.get("decision_source", row.get("decision_mode", "RULE")),
             label=row.get("label", "NORMAL"),
-            model_version=row.get("model_version", "if_v1")
+            model_version=row.get("model_version", "if_v1"),
+            dl_score=parse_float(row.get("dl_score")),
+            dl_severity=parse_int(row.get("dl_severity")),
+            inference_ms=parse_float(row.get("inference_ms"))
         )
 
     def stream_dataset_export(self) -> Generator[str, None, None]:

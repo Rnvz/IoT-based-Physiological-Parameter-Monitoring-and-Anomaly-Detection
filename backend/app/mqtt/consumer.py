@@ -63,7 +63,11 @@ class MQTTService:
         self.client.on_message = self._on_message
 
         self.publisher = MQTTPublisher(self.client)
-        self.ml_service = get_ml_service()
+        if getattr(settings, "model_kind", "ml").lower() == "dl":
+            from app.ml.dl_service import get_dl_service
+            self.ml_service = get_dl_service()
+        else:
+            self.ml_service = get_ml_service()
         self.repo = get_repository()
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
@@ -174,6 +178,7 @@ class MQTTService:
             mode=settings.decision_mode
         )
 
+        model_ver = getattr(self.ml_service, "model_version", settings.model_version)
         pred_record = PredictionRecord(
             ts=ts,
             device_id=device_id,
@@ -184,7 +189,10 @@ class MQTTService:
             decision_mode=arb.decision_mode,
             decision_source=arb.decision_source,
             label=arb.published_label,
-            model_version=settings.model_version
+            model_version=model_ver,
+            dl_score=arb.dl_score,
+            dl_severity=arb.dl_severity,
+            inference_ms=arb.inference_ms
         )
         try:
             await self.repo.save_prediction(pred_record)
@@ -195,7 +203,7 @@ class MQTTService:
             label=arb.published_label,
             severity=arb.published_severity,
             score=arb.published_score,
-            model_version=settings.model_version
+            model_version=model_ver
         )
         self.publisher.publish_result(result_payload)
 
