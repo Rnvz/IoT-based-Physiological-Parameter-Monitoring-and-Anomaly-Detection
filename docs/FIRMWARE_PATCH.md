@@ -25,7 +25,7 @@ Saat ini:
 > [!WARNING]
 > **Karakteristik Deteksi Hipoksia DenseAE v2 (DL)**:
 > - **Rule Engine Demo**: Ambang kritis (Severity 2) ditetapkan pada $\text{SpO}_2 < 90\%$.
-> - **DenseAE v2 (DL)**: Karena fungsi penalti rekonstruksi kuadratik (*mean squared error* pada fitur ternormalisasi), DenseAE v2 memicu ambang kritis (Severity 2) pada **$\text{SpO}_2 = 93,0\%$** (baseline HR 72 BPM) hingga $93,1\%$ pada sapuan 1D kontinu.
+> - **DenseAE v2 (DL)**: Terobservasi bahwa DenseAE v2 memicu ambang kritis (Severity 2) pada **$\text{SpO}_2 = 93,0\%$** (baseline HR 72 BPM) hingga $93,1\%$ pada sapuan 1D kontinu (penyebab belum dianalisis).
 > - **Implikasi**: Ambang DL lebih agresif ($\text{SpO}_2 = 93,0\%$ pada HR 72 vs rule $90\%$), namun belum terbukti lebih baik.
 
 ---

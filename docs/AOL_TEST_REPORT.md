@@ -207,7 +207,7 @@ Ambang batas internal model:
 | **HR Low Critical** | **52,4 BPM** | 50,0 BPM | Transisi cepat dari warn ke crit pada bradikardia |
 | **HR High Critical** | **104,7 BPM** | 100,0 BPM | Transisi bertahap pada takikardia berat |
 | **SpO2 Low Warning** | **93,3%** | 94,0% | Selaras sangat dekat (~0,7% selisih) dengan ambang batas demo |
-| **SpO2 Low Critical**| **93,1%** | 90,0% | Penalti rekonstruksi kuadratik melonjak tajam begitu SpO2 < 93% |
+| **SpO2 Low Critical**| **93,1%** | 90,0% | Terobservasi skor melonjak melampaui ambang kritis begitu SpO2 < 93,1% (penyebab belum dianalisis) |
 
 ### 6c. Injeksi Bertingkat (Graded Anomaly Injections, 20 Episode per Level)
 
@@ -226,13 +226,14 @@ Ambang batas internal model:
 
 > [!WARNING]
 > **LABEL: BUKAN HASIL TEST**
-> Pengujian ini dilakukan dengan mengalirkan input konstan $\ge 3$ sampel berurutan ($N=3$) pada model `DenseAE (v2)` dan `Rule Engine` default untuk memetakan $\text{SpO}_2$ tertinggi yang memicu Severity 1 (Warning) dan Severity 2 (Critical Alert) pada berbagai level Heart Rate ($HR \in \{50, 60, 72, 90, 100, 120\}$, rentang $\text{SpO}_2 \in [90,0\%, 99,0\%]$ dengan langkah $0,5\%$):
+> Pengujian ini dilakukan dengan mengalirkan input konstan $\ge 3$ sampel berurutan ($N=3$) pada model representatif satu seed (`DenseAE v2` Seed 42; seed lain belum diukur) dan `Rule Engine` default untuk memetakan $\text{SpO}_2$ tertinggi yang memicu Severity 1 (Warning) dan Severity 2 (Critical Alert) pada berbagai level Heart Rate ($HR \in \{50, 60, 72, 90, 100, 120\}$, rentang $\text{SpO}_2 \in [90,0\%, 99,0\%]$ dengan langkah $0,5\%$).
+> - **Catatan Respon HR 50**: Pada HR 50 BPM, terobservasi bahwa model DL langsung memicu Severity 2 (Critical Alert) pada seluruh rentang $\text{SpO}_2$ ($90,0\%\dots 99,0\%$) (penyebab respon ini belum dianalisis).
 
 | HR (BPM) | SpO2 Tertinggi DL Sev 1 | SpO2 Tertinggi DL Sev 2 | SpO2 Tertinggi Rule Sev 1 | SpO2 Tertinggi Rule Sev 2 | Karakteristik Perbandingan DL vs Rule |
 | :---: | :---: | :---: | :---: | :---: | :--- |
-| **50** | **99,0%** | **99,0%** | 99,0% | Tidak Terpicu | HR=50 (bradikardia berat) memicu anomali multivariat DL di seluruh rentang SpO2; Rule memicu warning di semua SpO2 ($50 \le HR < 55$). |
+| **50** | **99,0%** | **99,0%** | 99,0% | Tidak Terpicu | Terobservasi DL memicu Severity 2 pada HR=50 di seluruh rentang SpO2 (penyebab belum dianalisis); Rule memicu warning di semua SpO2 ($50 \le HR < 55$). |
 | **60** | **95,0%** | **94,5%** | 93,5% | Tidak Terpicu | DL memicu warning pada 95,0% dan critical pada 94,5%; Rule default baru memicu warning pada SpO2 $\le 94\%$ (93,5%). |
-| **72** (Baseline) | **93,0%** | **93,0%** | 93,5% | Tidak Terpicu | Pada HR baseline normal, DL langsung memicu Sev 2 pada 93,0% karena penalti kuadratik melonjak tajam; Rule Sev 2 tidak terpicu pada rentang ini (butuh $<90\%$). |
+| **72** (Baseline) | **93,0%** | **93,0%** | 93,5% | Tidak Terpicu | Pada HR baseline normal, terobservasi DL memicu Sev 2 pada SpO2 93,0% (penyebab belum dianalisis); Rule Sev 2 tidak terpicu pada rentang ini (butuh $<90\%$). |
 | **90** | **94,5%** | **92,0%** | 93,5% | Tidak Terpicu | Warning DL aktif pada 94,5%, alert kritis pada 92,0%; Rule default Sev 1 pada 93,5%. |
 | **100** | **96,0%** | **95,0%** | 99,0% | Tidak Terpicu | Rule memicu warning di semua SpO2 karena HR=100 ($95 < HR \le 100$); DL memicu warning pada 96,0% dan alert pada 95,0%. |
 | **120** | **98,5%** | **96,5%** | 99,0% | 99,0% | Rule memicu alert kritis di semua SpO2 ($HR > 100$); DL memicu warning pada 98,5% dan alert kritis pada 96,5%. |
