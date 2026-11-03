@@ -222,6 +222,21 @@ Ambang batas internal model:
 | **SPO2_DROP ($\to 91\%$)** | HR $\approx 72$, SpO2 $\approx 91$ | **1,0** (100%) | 2 detik | **1,00** (100%) | **0 detik** | **1,0** (100%) | 2 detik |
 | **SPO2_DROP ($\to 89\%$)** | HR $\approx 72$, SpO2 $\approx 89$ | **1,0** (100%) | 2 detik | **1,00** (100%) | **0 detik** | **1,0** (100%) | 2 detik |
 
+### 6d. Peta Alarm Sintetis pada Aliran Konstan (BUKAN Hasil Test)
+
+> [!WARNING]
+> **LABEL: BUKAN HASIL TEST**
+> Pengujian ini dilakukan dengan mengalirkan input konstan $\ge 3$ sampel berurutan ($N=3$) pada model `DenseAE (v2)` dan `Rule Engine` default untuk memetakan $\text{SpO}_2$ tertinggi yang memicu Severity 1 (Warning) dan Severity 2 (Critical Alert) pada berbagai level Heart Rate ($HR \in \{50, 60, 72, 90, 100, 120\}$, rentang $\text{SpO}_2 \in [90,0\%, 99,0\%]$ dengan langkah $0,5\%$):
+
+| HR (BPM) | SpO2 Tertinggi DL Sev 1 | SpO2 Tertinggi DL Sev 2 | SpO2 Tertinggi Rule Sev 1 | SpO2 Tertinggi Rule Sev 2 | Karakteristik Perbandingan DL vs Rule |
+| :---: | :---: | :---: | :---: | :---: | :--- |
+| **50** | **99,0%** | **99,0%** | 99,0% | Tidak Terpicu | HR=50 (bradikardia berat) memicu anomali multivariat DL di seluruh rentang SpO2; Rule memicu warning di semua SpO2 ($50 \le HR < 55$). |
+| **60** | **95,0%** | **94,5%** | 93,5% | Tidak Terpicu | DL memicu warning pada 95,0% dan critical pada 94,5%; Rule default baru memicu warning pada SpO2 $\le 94\%$ (93,5%). |
+| **72** (Baseline) | **93,0%** | **93,0%** | 93,5% | Tidak Terpicu | Pada HR baseline normal, DL langsung memicu Sev 2 pada 93,0% karena penalti kuadratik melonjak tajam; Rule Sev 2 tidak terpicu pada rentang ini (butuh $<90\%$). |
+| **90** | **94,5%** | **92,0%** | 93,5% | Tidak Terpicu | Warning DL aktif pada 94,5%, alert kritis pada 92,0%; Rule default Sev 1 pada 93,5%. |
+| **100** | **96,0%** | **95,0%** | 99,0% | Tidak Terpicu | Rule memicu warning di semua SpO2 karena HR=100 ($95 < HR \le 100$); DL memicu warning pada 96,0% dan alert pada 95,0%. |
+| **120** | **98,5%** | **96,5%** | 99,0% | 99,0% | Rule memicu alert kritis di semua SpO2 ($HR > 100$); DL memicu warning pada 98,5% dan alert kritis pada 96,5%. |
+
 ---
 
 ## 7. Fakta Lingkungan Eksekusi & Uji Paritas Numerik
