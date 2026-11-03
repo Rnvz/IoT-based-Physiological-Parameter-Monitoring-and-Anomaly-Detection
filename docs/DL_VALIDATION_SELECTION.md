@@ -40,8 +40,12 @@ Sesuai Pasal 7 pra-registrasi ([`docs/DL_PREREGISTRATION.md`](DL_PREREGISTRATION
 
 ## 3. Catatan Pertimbangan Seleksi Final
 
-1. **Besaran Selisih PR-AUC Validasi vs Variabilitas Seed**:
-   Selisih PR-AUC validasi antara `DenseAE (v2)` ($0,7511$) dan `DenseVAE (v3)` ($0,7410$) adalah sebesar $+0,0101$ ($1,01\%$). Selisih ini **lebih kecil daripada standar deviasi antar-seed** pada `DenseAE (v2)` ($\pm 0,0636$).
-2. **Dasar Pemilihan Varian v2**:
-   Meskipun varian tri-kanal v3 (`DenseVAE v3`) memiliki metrik validasi yang bersaing ketat dan deviasi antar-seed yang lebih rendah ($\pm 0,0168$), varian v3 gagal total pada kriteria kelayakan pakai hardware akibat pergeseran distribusi suhu inti tubuh klinis vs suhu kontak kulit perangkat IoT (98,75%–99,50% alarm palsu pada 33 °C).
-   Oleh karena itu, `DenseAE (v2)` dipilih sebagai pemenang pra-registrasi definitif berdasarkan pemenuhan **kriteria layak pakai** (*deployment criterion*) bebas bias suhu perifer.
+1. **Hasil PR-AUC Validasi (Praktis Seri)**:
+   Varian v2 (`DenseAE v2`) meraih PR-AUC validasi tertinggi di antara seluruh varian DL ($0,7511$ vs `DenseVAE v3` $0,7410$). Selisih sebesar $+0,0101$ ($1,01\%$) **lebih kecil daripada standar deviasi antar-seed** pada `DenseAE (v2)` ($\pm 0,0636$), sehingga performa validasi keduanya secara statistik praktis seri.
+2. **Kriteria 33 °C sebagai Syarat Tambahan**:
+   Kriteria kelayakan pasang 33 °C menjadi syarat tambahan yang secara mutlak menyingkirkan `DenseAE (v3)` (karena alarm palsu $99,50\%$) serta `DenseVAE (v3)` (alarm palsu $98,75\%$) akibat ketidakmampuan beradaptasi dengan suhu kontak perifer tanpa kalibrasi.
+3. **Pencatatan Log untuk Seluruh Varian**:
+   Hasil kriteria 33 °C untuk `DenseVAE (v2)` dan `DenseVAE (v3)` tercatat di log eksekusi `task-790.log`:
+   - `DenseVAE (v3)`: Alarm% @ 33 °C = **98,75%** $\to$ **FAIL (Non-Deployable)**.
+   - `DenseVAE (v2)`: Alarm% @ 33 °C = **0,00%** $\to$ **PASS (Deployable)**.
+   Dengan demikian, `DenseAE (v2)` Seed 42 ditetapkan sebagai pemenang pra-registrasi definitif.
