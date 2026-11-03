@@ -37,7 +37,7 @@ Berikut adalah patch persis untuk fungsi `updateBuzzer()` (sekitar baris 1314–
 ```diff
 --- a/firmware/physio_monitor/physio_monitor.ino
 +++ b/firmware/physio_monitor/physio_monitor.ino
-@@ -1331,10 +1331,23 @@ void updateBuzzer() {
+@@ -1331,7 +1331,22 @@
      }
    }
  
@@ -58,18 +58,14 @@ Berikut adalah patch persis untuk fungsi `updateBuzzer()` (sekitar baris 1314–
 +  }
 +
 +  if (!isCriticalAlarm) {
+ 
      digitalWrite(BUZZER_PIN, BUZZER_MATI);
-     buzzerOffTime = 0;
-     return;
-   }
+ 
 ```
 
 ---
 
-## 4. Konfigurasi Backend Terkait
+## 4. Kebijakan Kendali Aktuator
 
-Pada backend (`backend/app/config.py` dan `backend/.env`), parameter konfigurasi telah disediakan:
-```bash
-BUZZER_FOLLOWS_RESULT=false
-```
-Nilai bawaan adalah `false` untuk menjaga kompatibilitas penuh dengan sistem eksisting. Jika diset `true`, backend mencatat kepatuhan aktuator terhadap hasil evaluasi severity 2.
+Aktuasi buzzer sepenuhnya diatur secara otonom oleh firmware ESP32 berdasarkan tingkat keparahan (`severity`) yang diterima pada topik MQTT `/result` (serta fallback otonom ke ambang batas lokal saat timeout > 10 detik). Backend tidak mengontrol pin buzzer secara langsung dan tidak memerlukan variabel konfigurasi khusus (backend tidak menyimpan status kepatuhan aktuator).
+

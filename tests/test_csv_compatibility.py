@@ -162,10 +162,25 @@ async def test_csv_repository_migrates_legacy_10_col_header_to_13_on_dl_write():
 
             assert len(lines[4]) == 13
             assert lines[4][10:] == ["0.089123", "2", "1.84"]
+        finally:
+            settings.model_kind = prev_kind
 
-            # Reverse scenario: repo initialized with model_kind="ml" on 13-col file
-            settings.model_kind = "ml"
-            repo_ml = CSVRepository(csv_dir=tmp_dir)
+@pytest.mark.anyio
+async def test_csv_repository_reads_and_writes_13_col_when_model_kind_ml():
+    """Verify 13-column predictions.csv compatibility when running with model_kind='ml'."""
+    from app.config import settings
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        csv_path = os.path.join(tmp_dir, "predictions.csv")
+        header = "ts,device_id,rule_severity,ml_severity,ml_score,published_severity,decision_mode,decision_source,label,model_version,dl_score,dl_severity,inference_ms\n"
+        row1 = "2026-11-03T10:00:00Z,dev1,0,0,0.1000,0,RULE,RULE,NORMAL,iso_forest_v1,,,\n"
+        row2 = "2026-11-03T10:00:02Z,dev1,0,0,0.0123,0,ML,DL,NORMAL,dense_ae_v2,0.012345,0,1.52\n"
+        with open(csv_path, "w", encoding="utf-8") as f:
+            f.write(header + row1 + row2)
+
+        prev_kind = settings.model_kind
+        settings.model_kind = "ml"
+        try:
+            repo = CSVRepository(csv_dir=tmp_dir)
 
             r = ReadingRecord(
                 ts="2026-11-03T10:00:02Z",
@@ -178,7 +193,7 @@ async def test_csv_repository_migrates_legacy_10_col_header_to_13_on_dl_write():
                 finger=True,
                 fw_status="NORMAL"
             )
-            assert await repo_ml.save_reading(r) is True
+            assert await repo.save_reading(r) is True
 
             p_ml = PredictionRecord(
                 ts="2026-11-03T10:00:04Z",
@@ -195,18 +210,19 @@ async def test_csv_repository_migrates_legacy_10_col_header_to_13_on_dl_write():
                 dl_severity=None,
                 inference_ms=None
             )
-            assert await repo_ml.save_prediction(p_ml) is True
+            assert await repo.save_prediction(p_ml) is True
 
-            preds = await repo_ml.get_predictions("dev1")
-            assert len(preds) == 5
+            preds = await repo.get_predictions("dev1")
+            assert len(preds) == 3
             assert preds[0].dl_score is None
-            assert preds[2].dl_score == 0.012345
-            assert preds[3].dl_severity == 2
-            assert preds[4].dl_score is None
+            assert preds[1].dl_score == 0.012345
+            assert preds[1].dl_severity == 0
+            assert preds[2].dl_score is None
 
-            export_stream = list(repo_ml.stream_dataset_export())
-            assert len(export_stream) == 2  # header + reading row
+            export_stream = list(repo.stream_dataset_export())
+            assert len(export_stream) == 2  # header + 1 reading row
             assert "75.0,98.0" in export_stream[1]
         finally:
             settings.model_kind = prev_kind
+
 
