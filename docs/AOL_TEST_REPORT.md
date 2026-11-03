@@ -150,7 +150,7 @@ Dihitung ulang dengan `scripts/aol_verify.py` pada seluruh 56.188 sampel test se
 
 ## 5. Audit Bootstrap Resampling pada `engrarri21`
 
-Hasil penelusuran kode pada `patient_group_bootstrap` ([`ml/dl/evaluate.py#L149-L165`](file:///home/ywenanta/Projects/IoT/ml/dl/evaluate.py#L149-L165)):
+Hasil penelusuran kode pada `patient_group_bootstrap` ([`ml/dl/evaluate.py#L149-L165`](../ml/dl/evaluate.py#L149-L165)):
 - Pada subset `engrarri21`, seluruh baris berasal dari satu pasien tunggal (`n_pts == 1`).
 - Eksekusi jatuh ke blok bootstrap deret waktu (blok 50 baris). Blok-blok ini di-resample dengan pengembalian dari dalam rekaman kontinu pasien yang sama.
 - **Audit Verdict**: Interval kepercayaan (CI) untuk `engrarri21` diberi label:

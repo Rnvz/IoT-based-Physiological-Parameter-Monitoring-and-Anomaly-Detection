@@ -8,12 +8,12 @@ Semua temuan di bawah ini mencantumkan nomor bukti, berkas sumber, dan perintah 
 
 ## 1. Penurunan Label Target (Ground Truth Label Derivation per Source)
 
-**Berkas Sumber**: [`ml_pipeline/src/clean_datasets.py`](file:///home/ywenanta/Projects/IoT/ml_pipeline/src/clean_datasets.py)
+**Berkas Sumber**: [`ml_pipeline/src/clean_datasets.py`](../ml_pipeline/src/clean_datasets.py)
 
 Label target `OUTPUT` (0 = Normal, 1 = Abnormal) pada dataset publik yang digunakan untuk melatih Isolation Forest tidak merepresentasikan anomali multivariat fisiologis yang terukur secara seragam:
 
 1. **`gourangomandal` (Synthetic IoT Healthcare Dataset)**:
-   - *Kode*: [`clean_datasets.py` baris 153-159](file:///home/ywenanta/Projects/IoT/ml_pipeline/src/clean_datasets.py#L153-L159)
+   - *Kode*: [`clean_datasets.py` baris 153-159](../ml_pipeline/src/clean_datasets.py#L153-L159)
    - *Mekanisme*: Kolom `OUTPUT` diturunkan secara deterministik dari aturan threshold biner kaku pada parameter individual:
      ```python
      is_normal = (hr_alert == 'NORMAL') & (spo2_alert == 'NORMAL') & (temp_alert == 'NORMAL')
@@ -22,7 +22,7 @@ Label target `OUTPUT` (0 = Normal, 1 = Abnormal) pada dataset publik yang diguna
    - *Keterbatasan*: Bukan dataset fisiologis nyata, melainkan data sintetis berbasis aturan *single-parameter threshold*. Melatih model machine learning pada dataset ini hanya mempelajari kembali aturan threshold sederhana.
 
 2. **`nasirayub2` (Human Vital Signs Dataset 2024)**:
-   - *Kode*: [`clean_datasets.py` baris 81-83](file:///home/ywenanta/Projects/IoT/ml_pipeline/src/clean_datasets.py#L81-L83)
+   - *Kode*: [`clean_datasets.py` baris 81-83](../ml_pipeline/src/clean_datasets.py#L81-L83)
    - *Mekanisme*: `OUTPUT` dipetakan dari kategori risiko klinis (`Risk Category == 'Low Risk' -> 0, else 1`).
    - *Keterbatasan*: Kategori risiko pada dataset aslinya ditentukan berdasarkan variabel yang **tidak diukur** oleh perangkat keras IoT (seperti tekanan darah sistolik dan diastolik). Akibatnya, distribusi tanda vital terukur (HR, SpO2, Temp) antara kelas normal dan abnormal saling tumpang tindih (*overlap* parah):
      - Mean HR: 75.05 BPM (normal) vs 83.58 BPM (abnormal)
@@ -30,7 +30,7 @@ Label target `OUTPUT` (0 = Normal, 1 = Abnormal) pada dataset publik yang diguna
      - Mean Temp: 36.75 °C (normal) vs 36.75 °C (abnormal)
 
 3. **`engrarri21` (Human Vital Signs R)**:
-   - *Kode*: [`clean_datasets.py` baris 51-53](file:///home/ywenanta/Projects/IoT/ml_pipeline/src/clean_datasets.py#L51-L53)
+   - *Kode*: [`clean_datasets.py` baris 51-53](../ml_pipeline/src/clean_datasets.py#L51-L53)
    - *Mekanisme*: Dipetakan langsung dari label teks kategori `OUTPUT` ('normal' -> 0, 'abnormal' -> 1).
    - *Keterbatasan*: Mean suhu tubuh pada kelas normal adalah **30.05 °C** (rentang 25.0 - 37.0 °C), sedangkan pada kelas abnormal adalah **38.61 °C**. Suhu normal yang sangat rendah ini tidak konsisten dengan data latih lainnya (lihat Bagian 3 dan 4).
 
@@ -38,7 +38,7 @@ Label target `OUTPUT` (0 = Normal, 1 = Abnormal) pada dataset publik yang diguna
 
 ## 2. Fitur Temporal Konstan (Nol) pada Mayoritas Data Latih
 
-**Berkas Sumber**: [`ml_pipeline/src/feature_engineering.py` baris 30-49](file:///home/ywenanta/Projects/IoT/ml_pipeline/src/feature_engineering.py#L30-L49)
+**Berkas Sumber**: [`ml_pipeline/src/feature_engineering.py` baris 30-49](../ml_pipeline/src/feature_engineering.py#L30-L49)
 
 ### Verifikasi Statistik pada `features_train.csv` (Total 168.911 Baris)
 Perintah reproduksi:
@@ -134,7 +134,7 @@ Hasil terverifikasi:
 
 ## 5. Kalibrasi Ambang Batas pada Set Validasi (Percentile Artifact)
 
-**Berkas Sumber**: [`ml_pipeline/src/train_isolation_forest.py` baris 85-98](file:///home/ywenanta/Projects/IoT/ml_pipeline/src/train_isolation_forest.py#L85-L98)
+**Berkas Sumber**: [`ml_pipeline/src/train_isolation_forest.py` baris 85-98](../ml_pipeline/src/train_isolation_forest.py#L85-L98)
 
 Ambang batas anomali (`thresholds.joblib`) dihitung dengan rumus:
 ```python
@@ -150,7 +150,7 @@ Klaim bahwa *"model menghasilkan 87% Normal, 8% Warning, dan 5% Critical pada se
 
 ## 6. Partisi Data dan *Subject Leakage* (Patient Overlap)
 
-**Berkas Sumber**: [`ml_pipeline/src/feature_engineering.py` baris 57-82](file:///home/ywenanta/Projects/IoT/ml_pipeline/src/feature_engineering.py#L57-L82)
+**Berkas Sumber**: [`ml_pipeline/src/feature_engineering.py` baris 57-82](../ml_pipeline/src/feature_engineering.py#L57-L82)
 
 1. **`engrarri21`**:
    - Seluruh 21.523 baris berasal dari satu subjek/aliran sensor tunggal (`Patient_ID = 'engrarri21_stream'`).
@@ -164,8 +164,8 @@ Klaim bahwa *"model menghasilkan 87% Normal, 8% Warning, dan 5% Critical pada se
 ## 7. Risiko Penskalaan Ganda (*Double-Scaling Hazard*)
 
 **Berkas Terkait**:
-- [`ml_pipeline/src/feature_engineering.py` baris 100-112](file:///home/ywenanta/Projects/IoT/ml_pipeline/src/feature_engineering.py#L100-L112)
-- [`backend/app/ml/inference.py` baris 116-121](file:///home/ywenanta/Projects/IoT/backend/app/ml/inference.py#L116-L121)
+- [`ml_pipeline/src/feature_engineering.py` baris 100-112](../ml_pipeline/src/feature_engineering.py#L100-L112)
+- [`backend/app/ml/inference.py` baris 116-121](../backend/app/ml/inference.py#L116-L121)
 
 1. **Kondisi Berkas CSV**:
    Seluruh berkas fitur (`features_train.csv`, `features_val.csv`, `features_test.csv`) disimpan dalam kondisi **sudah dinormalisasi** oleh `RobustScaler`.
