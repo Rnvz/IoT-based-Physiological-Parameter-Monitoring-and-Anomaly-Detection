@@ -10,11 +10,18 @@ Specifications:
 
 from typing import Tuple, Dict, Any, Optional
 import numpy as np
-import torch
-import torch.nn as nn
+
+try:
+    import torch
+    import torch.nn as nn
+    _Module = nn.Module
+except ImportError:
+    torch = None
+    nn = None
+    _Module = object
 
 
-class DenseAutoencoder(nn.Module):
+class DenseAutoencoder(_Module):
     """
     Compact symmetric Autoencoder:
     Encoder: input_dim -> 16 -> 8 -> 2 (bottleneck)
@@ -66,7 +73,7 @@ class DenseAutoencoder(nn.Module):
         return mse
 
 
-class DenseVAE(nn.Module):
+class DenseVAE(_Module):
     """
     Compact Variational Autoencoder:
     Encoder: input_dim -> 16 -> 8 -> mu(2), logvar(2)

@@ -14,11 +14,15 @@ from sklearn.metrics import (
     precision_recall_curve,
     auc,
     roc_auc_score,
+    roc_curve,
     f1_score,
     precision_score,
     recall_score
 )
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None
 
 from ml.dl.models import DenseAutoencoder, DenseVAE, NumPyAutoencoderForward
 
@@ -59,14 +63,11 @@ def compute_metrics(
     prec_val = float(precision_score(y_true, preds, zero_division=0))
     rec_val = float(recall_score(y_true, preds, zero_division=0))
 
-    # 3. Recall at fixed 5% FPR on normal rows (y_true == 0)
-    normal_scores = scores[y_true == 0]
-    if len(normal_scores) > 0:
-        p95_norm_th = float(np.percentile(normal_scores, 95.0))
-        abnormal_scores = scores[y_true == 1]
-        rec_at_5pct = float(np.mean(abnormal_scores >= p95_norm_th)) if len(abnormal_scores) > 0 else None
-    else:
-        rec_at_5pct = None
+    # 3. Recall at fixed 5% FPR on normal rows (y_true == 0) without interpolation
+    # Robust to tied/discrete scores by selecting the ROC operating point with FPR <= 0.05
+    fpr_curve, tpr_curve, _ = roc_curve(y_true, scores)
+    valid_fpr_idx = np.where(fpr_curve <= 0.05 + 1e-9)[0]
+    rec_at_5pct = float(np.max(tpr_curve[valid_fpr_idx])) if len(valid_fpr_idx) > 0 else 0.0
 
     return {
         "pr_auc": pr_auc_val,

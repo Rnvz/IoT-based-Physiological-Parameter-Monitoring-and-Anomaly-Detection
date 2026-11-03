@@ -19,8 +19,12 @@ import tempfile
 import numpy as np
 import pandas as pd
 import pytest
-import torch
-import torch.nn as nn
+try:
+    import torch
+    import torch.nn as nn
+except ImportError:
+    torch = None
+    nn = None
 
 from ml_eval.public_split import split_public_dataset
 from ml.dl.models import DenseAutoencoder, DenseVAE, NumPyAutoencoderForward
@@ -178,6 +182,7 @@ def test_operating_threshold_selected_on_val_normal_only():
 # TEST 5 & 6: DETERMINISM & EARLY STOPPING
 # ==============================================================================
 
+@pytest.mark.skipif(torch is None, reason="PyTorch not installed")
 def test_determinism_across_seeds():
     """Verify training is bitwise deterministic for the same seed and differs across seeds."""
     rng = np.random.default_rng(0)
@@ -197,6 +202,7 @@ def test_determinism_across_seeds():
     assert weights_differ, "Models with different seeds must produce different weights"
 
 
+@pytest.mark.skipif(torch is None, reason="PyTorch not installed")
 def test_early_stopping_on_val_loss():
     """Verify early stopping halts training when validation loss stops improving."""
     X_tr = np.zeros((100, 2), dtype=np.float32)
@@ -217,6 +223,7 @@ def test_early_stopping_on_val_loss():
 # TEST 7 & 8: EXPORT PARITY & ANOMALY SCORING BEHAVIOR
 # ==============================================================================
 
+@pytest.mark.skipif(torch is None, reason="PyTorch not installed")
 def test_export_parity_torch_onnx_numpy():
     """Verify PyTorch, ONNX and NumPy inference produce identical outputs (< 1e-5 max diff)."""
     torch.manual_seed(42)
@@ -265,6 +272,7 @@ def test_export_parity_torch_onnx_numpy():
         shutil.rmtree(tmp_dir)
 
 
+@pytest.mark.skipif(torch is None, reason="PyTorch not installed")
 def test_anomaly_score_direction():
     """Verify anomaly score (reconstruction error) is strictly higher for abnormal input than normal."""
     torch.manual_seed(42)
@@ -315,3 +323,32 @@ def test_bootstrap_respects_patient_grouping():
     
     mean_pr, low_pr, high_pr = ci_dict["pr_auc"]
     assert 0.0 <= low_pr <= mean_pr <= high_pr <= 1.0 + 1e-6
+
+
+# ==============================================================================
+# TEST 10: TIED SCORES RECALL AT 5% FPR WITHOUT INTERPOLATION
+# ==============================================================================
+
+def test_compute_metrics_tied_scores_roc():
+    """
+    Verify compute_metrics handles discrete/tied scores (e.g. Rule Engine 0.0, 0.5, 1.0)
+    correctly by selecting ROC operating points where FPR <= 0.05 without collapsing to 100% recall.
+    """
+    # 1000 normal: 960 score 0.0, 30 score 0.5, 10 score 1.0 (4% FPR if threshold >= 0.5)
+    # 1000 abnormal: 200 score 0.0, 300 score 0.5, 500 score 1.0
+    y_true = np.array([0] * 960 + [0] * 30 + [0] * 10 + [1] * 200 + [1] * 300 + [1] * 500)
+    scores = np.array([0.0] * 960 + [0.5] * 30 + [1.0] * 10 + [0.0] * 200 + [0.5] * 300 + [1.0] * 500)
+
+    m = compute_metrics(y_true, scores, warn_threshold=0.5)
+
+    # At threshold 0.5, FPR is 40/1000 = 0.04 (<= 0.05), and TPR (Recall) is (300+500)/1000 = 0.80
+    assert m["recall_at_5pct_fpr"] is not None
+    assert abs(m["recall_at_5pct_fpr"] - 0.80) < 1e-5, f"Expected 0.80, got {m['recall_at_5pct_fpr']}"
+
+    # Verify that discrete scores where normal has >5% non-zero values correctly drops to next threshold
+    # 1000 normal: 900 score 0.0, 60 score 0.5, 40 score 1.0 (threshold 0.5 has FPR 10% > 5%, threshold 1.0 has FPR 4% <= 5%)
+    y_true2 = np.array([0] * 900 + [0] * 60 + [0] * 40 + [1] * 200 + [1] * 300 + [1] * 500)
+    scores2 = np.array([0.0] * 900 + [0.5] * 60 + [1.0] * 40 + [0.0] * 200 + [0.5] * 300 + [1.0] * 500)
+    m2 = compute_metrics(y_true2, scores2, warn_threshold=0.5)
+    # At threshold 1.0, FPR is 40/1000 = 0.04 (<= 0.05), TPR is 500/1000 = 0.50
+    assert abs(m2["recall_at_5pct_fpr"] - 0.50) < 1e-5, f"Expected 0.50, got {m2['recall_at_5pct_fpr']}"

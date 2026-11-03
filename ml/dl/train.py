@@ -18,10 +18,15 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
-from sklearn.svm import OneClassSVM
-import torch
-import torch.nn as nn
-from torch.utils.data import TensorDataset, DataLoader
+try:
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import TensorDataset, DataLoader
+except ImportError:
+    torch = None
+    nn = None
+    TensorDataset = None
+    DataLoader = None
 
 # Ensure backend rule engine is importable
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))

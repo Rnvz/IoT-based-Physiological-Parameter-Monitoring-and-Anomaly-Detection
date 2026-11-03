@@ -9,9 +9,14 @@ import json
 import platform
 from datetime import datetime, timezone
 from typing import Dict, Any, List
-import numpy as np
-import torch
-import onnx
+try:
+    import torch
+except ImportError:
+    torch = None
+try:
+    import onnx
+except ImportError:
+    onnx = None
 import onnxruntime as ort
 import sklearn
 
