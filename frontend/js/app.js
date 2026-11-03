@@ -18,6 +18,7 @@
     YELLOW: "#f59e0b",
     RED: "#ef4444",
     BLUE: "#3b82f6",
+    PURPLE: "#a855f7",
     WHITE: "#94a3b8",
     OFF: "#333333"
   };
@@ -26,7 +27,8 @@
     ML_RESULT: "model result",
     LOCAL_NO_FINGER: "finger not detected",
     NO_RESULT: "no model result yet",
-    MANUAL: "dashboard command"
+    MANUAL: "dashboard command",
+    NO_WIFI: "Wi-Fi not connected"
   };
 
   let selectedColor = "GREEN";
@@ -47,6 +49,11 @@
   }
 
   function getKey() {
+    const keyInput = $("api-key");
+    if (keyInput && keyInput.value && keyInput.value.trim()) {
+      saveKey(keyInput.value.trim());
+      return keyInput.value.trim();
+    }
     try {
       return sessionStorage.getItem(KEY_STORE) || "";
     } catch (e) {
@@ -337,7 +344,7 @@
 
   async function sendAction(path, body) {
     if (!getKey()) {
-      showBanner("Fill in the API key at the top to control the light.");
+      showBanner("Fill in the API key at the top to control the light/buzzer.");
       return;
     }
 
@@ -346,7 +353,7 @@
       hideBanner();
       renderActuator(await api("/actuator/status"));
     } catch (e) {
-      showBanner("Failed to send light command: " + e.message);
+      showBanner("Failed to send command: " + e.message);
     }
   }
 
@@ -364,6 +371,7 @@
     const keyInput = $("api-key");
 
     keyInput.value = getKey();
+    keyInput.addEventListener("input", () => saveKey(keyInput.value.trim()));
     keyInput.addEventListener("change", () => saveKey(keyInput.value.trim()));
 
     $("btn-auto").addEventListener("click", () => transport.lampAuto());
