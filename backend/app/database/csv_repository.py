@@ -138,11 +138,15 @@ class CSVRepository(BaseRepository):
                     new_rows.append(row)
 
             tmp_file = f"{self.predictions_file}.tmp"
+            bak_file = f"{self.predictions_file}.bak"
+            import shutil
+            shutil.copy2(self.predictions_file, bak_file)
+
             with open(tmp_file, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerows(new_rows)
             os.replace(tmp_file, self.predictions_file)
-            logger.info(f"[CSVRepository] Migrated {self.predictions_file} to 13-column DL header.")
+            logger.info(f"[CSVRepository] Migrated {self.predictions_file} to 13-column DL header (backup saved to {bak_file}).")
         except Exception as e:
             logger.error(f"[CSVRepository] Error migrating predictions header: {e}")
 

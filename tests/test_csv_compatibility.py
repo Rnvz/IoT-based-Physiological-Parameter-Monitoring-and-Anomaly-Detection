@@ -162,6 +162,12 @@ async def test_csv_repository_migrates_legacy_10_col_header_to_13_on_dl_write():
 
             assert len(lines[4]) == 13
             assert lines[4][10:] == ["0.089123", "2", "1.84"]
+
+            # Verify backup file was created before atomic replace and retains exact original content
+            bak_path = f"{csv_path}.bak"
+            assert os.path.exists(bak_path)
+            with open(bak_path, "r", encoding="utf-8") as f_bak:
+                assert f_bak.read() == (legacy_header + row1 + row2)
         finally:
             settings.model_kind = prev_kind
 
