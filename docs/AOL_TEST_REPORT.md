@@ -78,6 +78,10 @@ rec_at_5pct = float(np.max(tpr_curve[valid_fpr_idx])) if len(valid_fpr_idx) > 0 
 ```
 Untuk skor bertingkat, algoritma kini memilih ambang batas valid tertinggi yang menjamin $FPR \le 5\%$ secara empiris.
 
+> [!NOTE]
+> **Koreksi Metrik Post-Test (Bukan Tuning Model)**:
+> Koreksi formula Rec@5%FPR dilakukan secara *post-test* murni sebagai perbaikan bug (*bugfix*) perhitungan metrik pada skor bertingkat/diskret (*tied scores*), BUKAN penyesuaian (*tuning*) terhadap model, representasi fitur, maupun ambang batas deteksi. Seluruh bobot model dan ambang batas tetap beku sesuai pra-registrasi.
+
 ---
 
 ## 4. Tabel Metrik Uji Lengkap Terkalibrasi (Termasuk engrarri21 Unique)
@@ -164,10 +168,11 @@ Hasil penelusuran kode pada `patient_group_bootstrap` ([`ml/dl/evaluate.py#L149-
 > [!WARNING]
 > **LABEL: BUKAN HASIL TEST**
 > Pengujian ini adalah simulasi sensitivitas domain sintetis untuk mengevaluasi ketahanan terhadap pergeseran distribusi (*domain shift*) dan alarm palsu, bukan bagian dari evaluasi test set publik beku.
-> Dievaluasi dengan DUA perlakuan Rule:
-> 1. **Rule Mentah (*Raw Production*)**: Evaluasi instan tanpa persistensi ($N=1$), merefleksikan perilaku backend produksi riil saat ini.
-> 2. **Rule + Persistensi ($N=3$)**: Memerlukan 3 sampel berturut-turut di atas ambang batas.
-> 3. **DenseAE (v2) [Seed 42]**: Menggunakan filter persistensi $N=3$ sesuai pra-registrasi.
+> - **Kelulusan Mekanis/Trivial pada Tes Resting 33 °C**: Model varian v2 (`DenseAE v2`) secara sengaja membuang fitur suhu (`Temperature`) dari ruang inputnya (hanya memakai `Heart_Rate` dan `SpO2`). Akibatnya, penurunan suhu dari baseline core klinis (~37 °C) ke suhu kontak kulit perifer (~33 °C) tidak memengaruhi skor anomali model sama sekali. Kelulusan pada tes resting 33 °C ini (0,0% alarm) adalah kelulusan mekanis/trivial secara konstruksi fitur, dan ditegaskan sebagai **BUKAN HASIL TEST** empiris kemampuan adaptasi model terhadap variabilitas termal.
+> - **Dua Perlakuan Rule yang Dievaluasi**:
+>   1. **Rule Mentah (*Raw Production*)**: Evaluasi instan tanpa persistensi ($N=1$), merefleksikan perilaku backend produksi riil saat ini.
+>   2. **Rule + Persistensi ($N=3$)**: Memerlukan 3 sampel berturut-turut di atas ambang batas.
+>   3. **DenseAE (v2) [Seed 42]**: Menggunakan filter persistensi $N=3$ sesuai pra-registrasi.
 
 ### 6a. Grid Alarm Palsu (20 Seed Aliran x 400 Sampel = 8.000 Sampel per Sel)
 
@@ -245,3 +250,13 @@ Ambang batas internal model:
   - Maksimum Selisih Absolut: **$4,43 \times 10^{-7}$**.
   - Maksimum Selisih Relatif: **$2,18 \times 10^{-5}$** ($0,00218\%$).
 - Selisih paritas pada batas keputusan berada pada orde $\sim 10^{-7}$, jauh di bawah marjin toleransi ambang batas model, membuktikan kesepakatan klasifikasi 100% identik antara ONNX runtime dan NumPy runtime.
+
+### c. Cakupan Pengukuran Latensi Inferensi (0,17 ms)
+Angka latensi inferensi $\approx 0,17\text{ ms}$ ($\approx 170\text{--}200\text{ }\mu\text{s}$) yang dilaporkan pada ringkasan benchmark adalah durasi *raw forward pass* model matematika (`DenseAE v2`) secara lokal di CPU (komputasi matriks ONNX / NumPy array forward pass). Angka ini **BUKAN latensi end-to-end sistem telemetri IoT**, yang secara riil di lapangan didominasi oleh:
+1. Sampling fisik sensor I2C/1-Wire pada mikrokontroler ESP32 (~50–100 ms),
+2. Enkoding dan serialisasi string JSON pada firmware,
+3. Latensi transmisi jaringan TCP/MQTT via koneksi WiFi/hotspot ke broker (~10–50 ms),
+4. Antrean pemrosesan event loop asynchronous pada FastAPI backend,
+5. Penulisan persisten ke media penyimpanan disk (`predictions.csv`),
+6. Latensi refresh dan rendering visual pada browser web dashboard.
+
