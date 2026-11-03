@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     ml_use_debounce: bool = True
 
     decision_mode: str = "RULE"
+    model_kind: str = "ml"
+    model_dir: str = "ml/artifacts/dl_v1"
+    dl_max_gap_seconds: float = 5.0
+    buzzer_follows_result: bool = False
 
     # NOTE: Thresholds are demo values to be set from the user's own baseline recordings and are not clinical.
     rule_hr_low_alert: float = 50.0
