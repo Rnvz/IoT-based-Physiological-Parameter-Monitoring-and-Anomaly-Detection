@@ -14,7 +14,7 @@ Saat ini:
   - `lastSeverity == 0`: Hijau (40% brightness, `ML_RESULT`)
   - `lastSeverity == 1`: Kuning (70% brightness, `ML_RESULT`)
   - `lastSeverity == 2`: Merah (100% brightness, `ML_RESULT`)
-  - Jika koneksi terputus atau tidak ada hasil selama $>10$ detik (`RESULT_TIMEOUT = 10000UL`), lampu otomatis kembali ke status otonom lokal TinyML/rule.
+  - Jika koneksi terputus atau tidak ada hasil selama $>10$ detik (`RESULT_TIMEOUT = 10000UL`), lampu otomatis kembali ke status otonom ambang lokal firmware.
 - **Buzzer** saat ini hanya berbunyi jika status lokal firmware `statusSistem == "ANOMALI"`.
 - Dengan patch ini, buzzer akan mengikuti `lastSeverity == 2` dari payload `/result`, dan otomatis kembali (*fallback*) ke ambang lokal jika tidak ada hasil `/result` selama $>10$ detik.
 
@@ -26,7 +26,7 @@ Saat ini:
 > **Karakteristik Deteksi Hipoksia DenseAE v2 (DL)**:
 > - **Rule Engine Demo**: Ambang kritis (Severity 2) ditetapkan pada $\text{SpO}_2 < 90\%$.
 > - **DenseAE v2 (DL)**: Karena fungsi penalti rekonstruksi kuadratik (*mean squared error* pada fitur ternormalisasi), DenseAE v2 memicu ambang kritis (Severity 2) pada **$\text{SpO}_2 \approx 93,1\%$**.
-> - **Implikasi**: Model Deep Learning secara signifikan lebih sensitif dan agresif terhadap desaturasi oksigen dibandingkan aturan deterministik. Buzzer akan berbunyi lebih dini ketika terjadi penurunan $\text{SpO}_2$ di bawah $93\%$.
+> - **Implikasi**: Ambang DL lebih agresif ($\text{SpO}_2 \approx 93\%$ vs rule $90\%$), namun belum terbukti lebih baik secara klinis.
 
 ---
 
