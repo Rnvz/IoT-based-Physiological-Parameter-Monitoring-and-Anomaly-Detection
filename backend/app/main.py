@@ -64,8 +64,10 @@ app.include_router(telemetry_router)
 app.include_router(actuator_router)
 app.include_router(session_router)
 
-dashboard_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../Dashboard/files"))
-if os.path.isdir(dashboard_dir):
+frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend"))
+legacy_dashboard_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../Dashboard/files"))
+mount_dir = frontend_dir if os.path.isdir(frontend_dir) else legacy_dashboard_dir
+if os.path.isdir(mount_dir):
     from fastapi.staticfiles import StaticFiles
-    app.mount("/dashboard", StaticFiles(directory=dashboard_dir, html=True), name="dashboard")
+    app.mount("/dashboard", StaticFiles(directory=mount_dir, html=True), name="dashboard")
 

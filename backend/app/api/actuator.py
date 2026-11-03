@@ -37,29 +37,63 @@ async def get_actuator_status(_auth: Optional[str] = Depends(verify_read_api_key
     Shape: {"mode","led":{"color","brightness"},"buzzer":{"test":bool},"source","ack_seq","manual_left_s"}
     """
     repo = get_repository()
-    latest_event = await repo.get_latest_actuator_event(kind="status")
+    latest_status = await repo.get_latest_actuator_event(kind="status")
+    latest_cmd = await repo.get_latest_actuator_event(kind="cmd")
 
-    if latest_event and latest_event.payload_json:
+    status_data = {}
+    if latest_status and latest_status.payload_json:
         try:
-            data = json.loads(latest_event.payload_json)
-            return {
-                "mode": data.get("mode", "AUTO"),
-                "led": data.get("led", {"color": "GREEN", "brightness": 40}),
-                "buzzer": data.get("buzzer", {"test": False}),
-                "source": data.get("source", "ML_RESULT"),
-                "ack_seq": data.get("ack_seq"),
-                "manual_left_s": data.get("manual_left_s", 0)
-            }
+            status_data = json.loads(latest_status.payload_json)
         except Exception:
             pass
 
+    cmd_data = {}
+    if latest_cmd and latest_cmd.payload_json:
+        try:
+            cmd_data = json.loads(latest_cmd.payload_json)
+        except Exception:
+            pass
+
+    cmd_seq = latest_cmd.seq if latest_cmd else None
+    ack_seq = status_data.get("ack_seq")
+
+    cmd_is_newer = False
+    if latest_cmd:
+        if not latest_status:
+            cmd_is_newer = True
+        elif cmd_seq is not None and (ack_seq is None or cmd_seq > ack_seq):
+            cmd_is_newer = True
+
+    mode = status_data.get("mode", "AUTO")
+    led = dict(status_data.get("led", {"color": "GREEN", "brightness": 40}))
+    buzzer = dict(status_data.get("buzzer", {"test": False}))
+    source = status_data.get("source", "ML_RESULT" if latest_status else "NO_RESULT")
+    manual_left_s = status_data.get("manual_left_s", 0)
+
+    if cmd_is_newer and cmd_data:
+        if "mode" in cmd_data and cmd_data["mode"]:
+            mode = cmd_data["mode"]
+        if mode == "MANUAL":
+            source = "MANUAL"
+            manual_left_s = 300
+        elif mode == "AUTO":
+            source = "ML_RESULT"
+            manual_left_s = 0
+
+        if "color" in cmd_data and cmd_data["color"]:
+            led["color"] = cmd_data["color"]
+        if "brightness" in cmd_data and cmd_data["brightness"] is not None:
+            led["brightness"] = cmd_data["brightness"]
+        if "buzzer_test" in cmd_data and cmd_data["buzzer_test"] is not None:
+            buzzer["test"] = cmd_data["buzzer_test"]
+
     return {
-        "mode": "AUTO",
-        "led": {"color": "GREEN", "brightness": 40},
-        "buzzer": {"test": False},
-        "source": "NO_RESULT",
-        "ack_seq": None,
-        "manual_left_s": 0
+        "mode": mode,
+        "led": led,
+        "buzzer": buzzer,
+        "source": source,
+        "ack_seq": ack_seq,
+        "manual_left_s": manual_left_s
     }
 
 @router.post("/mode", dependencies=[Depends(rate_limit_post)])
