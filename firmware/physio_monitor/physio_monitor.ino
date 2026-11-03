@@ -15,6 +15,8 @@
 // 7. Mengendalikan lampu RGB: mode AUTO (mengikuti hasil model
 //    dari backend) dan mode MANUAL (perintah dari dashboard),
 //    lalu melaporkan status lampu ke backend.
+// 8. Selama WiFi belum/tidak terhubung, OLED menampilkan
+//    "Trying to connect to Wi-Fi..." dan lampu RGB berwarna ungu.
 //
 // Library tambahan yang dibutuhkan (Library Manager):
 // - DHT sensor library + Adafruit Unified Sensor
@@ -51,7 +53,7 @@ const char* WIFI_PASS = "password";
 // ============================================================
 // MQTT
 // TOPIC_PREFIX harus unik dan sama persis dengan konfigurasi
-// backend. Ganti GANTI-ID-UNIK dengan teks acak buatanmu.
+// backend dan dashboard.
 // ============================================================
 
 const char* MQTT_BROKER = "broker.hivemq.com";
@@ -240,7 +242,10 @@ const unsigned long DHT_INTERVAL = 2000;
 // Status lokal firmware ini tetap dipakai untuk OLED dan buzzer
 // (perilaku buzzer belum diubah). Keputusan anomali dari model
 // diterima lewat topik result dan dipakai oleh lampu.
-// Nilai: "MENUNGGU SENSOR", "MENDETEKSI", "NORMAL", "ANOMALI"
+// statusSistem tetap menyimpan 4 nilai ("MENUNGGU SENSOR",
+// "MENDETEKSI", "NORMAL", "ANOMALI") untuk buzzer dan payload MQTT.
+// Layar OLED hanya menampilkan "MENUNGGU SENSOR" atau "MENDETEKSI"
+// (lihat updateOLED).
 // ============================================================
 
 String statusSistem = "MENUNGGU SENSOR";
@@ -317,7 +322,8 @@ const NamedColor COLORS[] = {
   {"RED",    255, 0,   0},
   {"BLUE",   0,   0,   255},
   {"YELLOW", 255, 150, 0},
-  {"WHITE",  255, 255, 255}
+  {"WHITE",  255, 255, 255},
+  {"PURPLE", 180, 0,   255}
 };
 
 const int COLOR_COUNT = sizeof(COLORS) / sizeof(COLORS[0]);
@@ -347,9 +353,13 @@ char currentSource[20] = "";
 
 bool statusDirty = true;
 unsigned long lastActuatorPublish = 0;
+
+// Tes buzzer dari dashboard (toggle). Hanya untuk memastikan buzzer
+// berfungsi; otomatis mati setelah batas waktu agar tidak tertinggal.
 bool buzzerTest = false;
 unsigned long buzzerTestUntil = 0;
 const unsigned long BUZZER_TEST_TIMEOUT = 30000UL;
+
 
 // ============================================================
 // RESET VITALS
@@ -946,6 +956,7 @@ void actuatorOnMessage(
       return;
     }
 
+    // Tes buzzer (toggle): {"buzzer_test":true,"seq":n}
     bool hasBuzzer = doc["buzzer_test"].is<bool>();
 
     if (hasBuzzer) {
@@ -956,6 +967,7 @@ void actuatorOnMessage(
 
     const char* mode = doc["mode"] | "";
 
+    // Perintah yang hanya berisi tes buzzer, tanpa mode lampu
     if (mode[0] == '\0' && hasBuzzer) {
 
       lastCmdSeq = seq;
@@ -972,7 +984,8 @@ void actuatorOnMessage(
 
       const char* color = doc["color"] | manualColor;
 
-      // Tolak warna di luar daftar
+      // Tolak warna di luar daftar (PURPLE sekarang boleh dipilih
+      // manual, selain dipakai otomatis saat WiFi belum terhubung)
       if (findColor(color) == nullptr) {
 
         Serial.println("CMD ditolak: warna tidak dikenal");
@@ -1049,7 +1062,14 @@ void actuatorUpdate() {
   const char* source;
 
 
-  if (ledMode == MODE_MANUAL) {
+  if (WiFi.status() != WL_CONNECTED) {
+
+    // WiFi belum/tidak terhubung: lampu ungu (prioritas tertinggi)
+    color = "PURPLE";
+    brightness = 50;
+    source = "NO_WIFI";
+
+  } else if (ledMode == MODE_MANUAL) {
 
     color = manualColor;
     brightness = manualBrightness;
@@ -1280,16 +1300,26 @@ void updateBuzzer() {
 
   unsigned long now = millis();
 
+
+  // ----------------------------------------------------------
+  // Tes buzzer dari dashboard
+  // Selama aktif, buzzer menyala terus. Berhenti jika dimatikan
+  // atau melewati BUZZER_TEST_TIMEOUT. Setelah itu logika alarm
+  // normal di bawah berjalan seperti biasa.
+  // ----------------------------------------------------------
+
   if (buzzerTest) {
 
     if ((long)(now - buzzerTestUntil) >= 0) {
 
       buzzerTest = false;
+
       statusDirty = true;
 
     } else {
 
       digitalWrite(BUZZER_PIN, BUZZER_NYALA);
+
       buzzerOffTime = 0;
 
       return;
@@ -1326,6 +1356,8 @@ void updateBuzzer() {
 // ============================================================
 // OLED - refresh setiap 200 ms
 // Layout: judul, HR, SpO2, suhu tubuh, kelembapan, status.
+// Suhu tubuh tampil "--" selama jari belum menempel di MAX30102.
+// Saat WiFi belum terhubung, layar hanya menampilkan pesan koneksi.
 // ============================================================
 
 void updateOLED() {
@@ -1345,6 +1377,18 @@ void updateOLED() {
   // Title
   display.setCursor(0, 0);
   display.println("PHYSIO MONITOR");
+
+  // WiFi belum/tidak terhubung: tampilkan pesan saja
+  if (WiFi.status() != WL_CONNECTED) {
+
+    display.setCursor(0, 28);
+    display.println("Trying to connect to");
+    display.println("Wi-Fi...");
+
+    display.display();
+
+    return;
+  }
 
   // HR
   display.setCursor(0, 11);
@@ -1372,7 +1416,7 @@ void updateOLED() {
   display.setCursor(0, 31);
   display.print("Temp: ");
 
-  if (suhuValid) {
+  if (fingerPresent && suhuValid) {
     display.print(suhuAktual, 1);
     display.println(" C");
   } else {
@@ -1392,7 +1436,7 @@ void updateOLED() {
 
   // Status
   display.setCursor(0, 54);
-  display.print(statusSistem);
+  display.print(fingerPresent ? "MENDETEKSI" : "MENUNGGU SENSOR");
 
   display.display();
 }

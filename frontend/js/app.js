@@ -18,6 +18,7 @@
     YELLOW: "#f59e0b",
     RED: "#ef4444",
     BLUE: "#3b82f6",
+    PURPLE: "#a855f7",
     WHITE: "#94a3b8",
     OFF: "#333333"
   };
@@ -26,7 +27,8 @@
     ML_RESULT: "model result",
     LOCAL_NO_FINGER: "finger not detected",
     NO_RESULT: "no model result yet",
-    MANUAL: "dashboard command"
+    MANUAL: "dashboard command",
+    NO_WIFI: "Wi-Fi not connected"
   };
 
   let selectedColor = "GREEN";
