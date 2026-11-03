@@ -244,7 +244,7 @@ Ambang batas internal model:
 
 ### a. Status dan Rekam Jejak Lingkungan Virtual (`.venv`)
 1. **Kehilangan `.venv` Lama (Python 3.12 via `uv`)**:
-   - Direktori virtual environment awal `.venv` yang dibuat menggunakan `uv` merujuk ke path eksekutor binary `/home/ywenanta/.local/share/uv/python/cpython-3.12-linux-x86_64-gnu/bin/python3.12`.
+   - Direktori virtual environment awal `.venv` yang dibuat menggunakan `uv` merujuk ke path eksekutor binary `~/.local/share/uv/python/cpython-3.12-linux-x86_64-gnu/bin/python3.12`.
    - **Penyebab**: Executable `uv` dan direktori `~/.local/share/uv/python` tidak tersedia pada sistem operasi (Arch Linux/CachyOS), sehingga symlink python pada `.venv` lama rusak (*broken symlink*) dan tidak dapat dieksekusi.
 2. **Rekonstruksi & Keadaan Sekarang**:
    - `.venv` proyek dibuat ulang menggunakan Python sistem (`Python 3.14.8`).
