@@ -82,6 +82,7 @@ htmlcov/
 *.pt
 *.pth
 *.onnx
+!ml/artifacts/dl_v1/model.onnx
 
 # Kecualikan folder models tetapi ignore isinya kecuali .gitkeep
 !ml_pipeline/models/
