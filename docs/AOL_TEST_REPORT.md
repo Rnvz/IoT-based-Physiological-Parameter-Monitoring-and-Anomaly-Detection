@@ -52,7 +52,7 @@ Dihitung langsung dari `ml_pipeline/data/harmonized_vitals.csv` + `splits/public
 
 ### c. Rekonsiliasi & Penghapusan Angka Hitungan Lama
 
-Seluruh tabel dan angka hitungan $N$ sementara pada draf laporan terdahulu—termasuk kemunculan angka seperti `896` atau `2.897` pada `engrarri21`, serta `22.596`, `23.605`, atau `20.627` pada partisi POOLED—telah sepenuhnya dihapus dan dibersihkan dari dokumen ini. Angka-angka tersebut adalah artefak klerikal dari skrip perantara sebelum jeda isolasi kronologis (*purge gap* 120 baris) dan deduplikasi biologis dihitung secara terpadu, sehingga tidak cocok dengan isi file nyata `ml_pipeline/data/harmonized_vitals.csv` dan `splits/public_split.json`. Tabel definitif yang berlaku mutlak adalah tabel pada Bagian 2a di atas (POOLED Train: 71.315 normal / 97.611 abnormal; Val: 25.128 normal / 31.181 abnormal; Test: 22.641 normal / 33.547 abnormal; Total: 281.543 baris). Persentase kesepakatan nyata antara aturan default `evaluate_rules` dengan label `OUTPUT` dataset adalah 95,46% (`gourangomandal`), 79,83% (`engrarri21`), dan 57,61% (`nasirayub2`).
+Seluruh tabel dan angka hitungan lama pada draf laporan terdahulu—termasuk kemunculan angka seperti `896` atau `2.897` pada `engrarri21`, serta `22.596`, `23.605`, atau `20.627` pada partisi POOLED—telah sepenuhnya dihapus dan dibersihkan dari dokumen ini. Angka-angka tersebut tidak cocok dengan data riil pada `ml_pipeline/data/harmonized_vitals.csv` dan `splits/public_split.json`, asalnya tidak dapat direkonstruksi dari pipeline saat ini, dan angka-angka tersebut tidak boleh digunakan. Tabel definitif yang berlaku mutlak adalah tabel pada Bagian 2a di atas (POOLED Train: 71.315 normal / 97.611 abnormal; Val: 25.128 normal / 31.181 abnormal; Test: 22.641 normal / 33.547 abnormal; Total: 281.543 baris). Persentase kesepakatan nyata antara aturan default `evaluate_rules` dengan label `OUTPUT` dataset adalah 95,46% (`gourangomandal`), 79,83% (`engrarri21`), dan 57,61% (`nasirayub2`).
 
 ---
 
@@ -132,6 +132,20 @@ Dihitung ulang dengan `scripts/aol_verify.py` pada seluruh 56.188 sampel test se
 | DenseAE (v2) [Seed 42] | *engrarri21_unique* | 0.8977 | 0.9582 | +0.0605 | 0.7156 | 0.2800 | 0.6498 |
 | DenseAE (v2) [Seed 42] | gourangomandal | 0.6990 | 0.9614 | +0.2624 | 0.8994 | 0.7277 | 0.8399 |
 
+> [!NOTE]
+> **Catatan Analisis Rec@5%FPR Rule = 0,0000 & Ketidakstabilan pada 57 Baris Normal `engrarri21_unique`**:
+> - **Distribusi Keputusan Rule pada 57 Baris Normal**:
+>   - *Rule v3* (`HR, SpO2, Temp`): Severity 0 = 51 baris, Severity 1 = 3 baris, Severity 2 = 3 baris.
+>   - *Rule v2* (`HR, SpO2, Temp=36.5`): Severity 0 = 51 baris, Severity 1 = 3 baris, Severity 2 = 3 baris.
+> - **Titik-titik Kurva ROC Rule dengan $\text{FPR} \le 0,05$**:
+>   - Ambang batas $\infty$ (skor $> 1,0$): $\text{FPR} = 0/57 = 0,0000$, $\text{Recall} = 0,0000$.
+>   - Ambang batas $1,0$ (skor $\ge 1,0$, Severity 2): $\text{FPR} = 3/57 = 0,052632$ ($5,26\% > 5,0\%$), $\text{Recall} = 0,9120$ (v3) / $0,4940$ (v2).
+>   - Ambang batas $0,5$ (skor $\ge 0,5$, Severity $\ge 1$): $\text{FPR} = 6/57 = 0,105263$ ($10,53\%$).
+> - **Mengapa Rec@5%FPR Rule bernilai 0,0000**:
+>   Dengan hanya 57 baris normal, batas $\text{FPR} \le 0,05$ membatasi toleransi alarm palsu maksimal $\lfloor 57 \times 0,05 \rfloor = 2$ baris ($\text{FPR} \le 3,51\%$). Karena Rule Engine memicu 3 baris false alarm bahkan pada tingkat keparahan tertinggi (Severity 2), titik diskret pertama kurva ROC langsung melonjak ke $5,26\%$ ($> 5\%$). Tanpa interpolasi buatan, satu-satunya titik valid yang memenuhi syarat $\text{FPR} \le 0,05$ adalah threshold $\infty$ ($\text{FPR}=0,0000$), yang menghasilkan $\text{Recall} = 0,0000$.
+> - **Ketidakstabilan Statistik**:
+>   Pada ukuran sampel normal sekecil $N=57$, 1 baris sampel merepresentasikan $\sim 1,75\%$ bobot FPR. Pergeseran hanya 1 baris sampel (antara 2 dan 3 alarm palsu) memicu perpindahan ekstrem dari $\text{Recall} > 91\%$ menjadi $\text{Recall} = 0,0000$. Oleh karena itu, metrik Rec@5%FPR ini sangat sensitif dan tidak stabil secara statistik (*statistically unstable*) pada subset 57 baris normal dan tidak boleh diinterpretasikan sebagai ketiadaan kemampuan deteksi.
+
 ---
 
 ## 5. Audit Bootstrap Resampling pada `engrarri21`
@@ -141,11 +155,9 @@ Hasil penelusuran kode pada `patient_group_bootstrap` ([`ml/dl/evaluate.py#L149-
 - Eksekusi jatuh ke blok bootstrap deret waktu (blok 50 baris). Blok-blok ini di-resample dengan pengembalian dari dalam rekaman kontinu pasien yang sama.
 - **Audit Verdict**: Interval kepercayaan (CI) untuk `engrarri21` diberi label:
   > **[!] CI TIDAK VALID: 1 SUBJEK, 86% DUPLIKAT**
-  > Resampling blok dalam satu individu yang memiliki 86% duplikasi baris tidak dapat mengestimasi variabilitas antar-pasien klinis nyata. Metrik pada baris unik (`engrarri21_unique`) di atas menunjukkan penurunan performa wajar (misal: PR-AUC DenseAE v2 turun dari 0,9843 menjadi 0,9221 dan Rec@5%FPR turun dari 39,41% menjadi 22,75%).
+  > Resampling blok dalam satu individu yang memiliki 86% duplikasi baris tidak dapat mengestimasi variabilitas antar-pasien klinis nyata. Metrik pada baris unik (`engrarri21_unique`) di atas menunjukkan penurunan performa wajar (misal: PR-AUC DenseAE v2 turun dari 0,9843 menjadi 0,9582 dan Rec@5%FPR turun dari 39,41% menjadi 28,00%).
 
 ---
-
-## 6. Uji Sensitivitas Domain (Label: "BUKAN hasil test")
 
 ## 6. Uji Sensitivitas Domain & Robustness (BUKAN Hasil Test)
 
