@@ -29,13 +29,22 @@
 - **Detailed Test Verification**: See [AOL_TEST_REPORT.md](../../docs/AOL_TEST_REPORT.md) for full metrics, bootstrap CIs, and domain sensitivity injection testing.
 
 ## Parity Verification
-- **PyTorch vs ONNX Max Absolute Difference**: Verified $< 10^{-5}$
-- **PyTorch vs NumPy Forward Max Absolute Difference**: Verified $< 10^{-5}$
-- **ONNX vs NumPy Forward Parity (10,000 points)**:
+- **PyTorch vs ONNX Max Absolute Difference**: Verified $< 10^{-5}$ pada sampel uji standar.
+- **PyTorch vs NumPy Forward Max Absolute Difference**: Verified $< 10^{-5}$ pada sampel uji standar.
+- **ONNX vs NumPy Forward Parity (10.000 points)**:
   - **Max Absolute Difference ($\text{score} \le 10.0$)**: $4.77 \times 10^{-6}$
   - **Max Relative Difference (all points)**: $4.19 \times 10^{-4}$ ($0.0419\%$)
   - **Threshold Boundary Region ($[0.005, 0.05]$ covering $\text{warn}=0.0136$ & $\text{crit}=0.0248$)**:
     - Max Absolute Difference: $4.43 \times 10^{-7}$
     - Max Relative Difference: $2.18 \times 10^{-5}$ ($0.00218\%$)
-  - **Conclusion**: Parity difference around decision boundaries is $\approx 10^{-7}$, orders of magnitude below threshold margins, guaranteeing exact classification agreement between ONNX and NumPy runtimes.
+- **Evaluasi Paritas Grid Komprehensif (4.551 Titik: HR 40–150 $\times$ SpO2 80–100)**:
+  - **Selisih Maks Skor Terukur**:
+    - ONNX vs NumPy: $1,53 \times 10^{-5}$ ($1,5 \times 10^{-5}$)
+    - PyTorch vs ONNX: $1,14 \times 10^{-5}$
+    - PyTorch vs NumPy: $1,14 \times 10^{-5}$
+  - **Status Toleransi & Keputusan Severity**:
+    - Toleransi rencana $10^{-5}$ terlewati pada skor mentah ($1,5 \times 10^{-5}$ ONNX-NumPy dan $1,14 \times 10^{-5}$ PyTorch-ONNX).
+    - Keputusan severity antara backend produksi **ONNX vs NumPy adalah 100% SAMA** (0 dari 4.551 titik berbeda).
+    - Keputusan severity antara **PyTorch vs ONNX/NumPy BERBEDA pada 1 titik** (HR=111,0 BPM, SpO2=97,0%: skor PyTorch $0,02480478$ [Severity 2] vs ONNX $0,02480471$ [Severity 1], berjarak hanya $4,66 \times 10^{-8}$ dari batas kritis $0,02480476$).
+- **Conclusion**: Pada kedua runtime produksi yang dideploy (ONNX dan NumPy fallback), kesepakatan klasifikasi adalah 100% identik tanpa perbedaan severity sama sekali.
 
