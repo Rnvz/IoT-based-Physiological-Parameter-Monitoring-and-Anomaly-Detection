@@ -9,6 +9,7 @@ import json
 import platform
 from datetime import datetime, timezone
 from typing import Dict, Any, List
+import numpy as np
 try:
     import torch
 except ImportError:

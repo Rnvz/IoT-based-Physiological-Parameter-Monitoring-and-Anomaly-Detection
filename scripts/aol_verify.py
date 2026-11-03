@@ -123,8 +123,8 @@ def main():
 
     # Uniqueness in test engrarri21
     test_eng = harm[(harm["Source"] == "engrarri21") & (harm["row_id"].isin(set(test_idx)))]
-    vitals_cols = ["Heart_Rate", "Temperature"]
-    all_cols = ["Patient_ID", "Heart_Rate", "Temperature", "OUTPUT"]
+    vitals_cols = ["Heart_Rate", "SpO2", "Temperature"]
+    all_cols = ["Patient_ID", "Heart_Rate", "SpO2", "Temperature", "OUTPUT"]
 
     n_eng_tot = len(test_eng)
     n_eng_vitals_uniq = len(test_eng.drop_duplicates(subset=vitals_cols))
@@ -313,15 +313,17 @@ def main():
         for sp_m in spo2_means:
             ae_warn_shares = []
             ae_crit_shares = []
-            rule_warn_shares = []
-            rule_crit_shares = []
+            rule_raw_warn_shares = []
+            rule_raw_crit_shares = []
+            rule_n3_warn_shares = []
+            rule_n3_crit_shares = []
 
             for seed in range(20):
                 rng = np.random.default_rng(seed)
                 hr_seq = rng.normal(hr_m, 3.0, size=400)
                 spo2_seq = np.clip(rng.normal(sp_m, 0.5, size=400), 80.0, 100.0)
 
-                # DenseAE v2 inference with state tracking
+                # DenseAE v2 inference with state tracking (N=3)
                 ae_infer = EdgeAutoencoderInference(weights_path)
                 ae_sevs = []
                 for h_val, s_val in zip(hr_seq, spo2_seq):
@@ -331,13 +333,17 @@ def main():
                 ae_warn_shares.append(np.mean(np.array(ae_sevs) >= 1) * 100)
                 ae_crit_shares.append(np.mean(np.array(ae_sevs) == 2) * 100)
 
-                # Rule default with persistence N=3
+                # Rule Raw (Produksi tanpa persistensi) & Rule N=3
+                raw_sevs = []
+                n3_sevs = []
                 rule_crit_count = 0
                 rule_warn_count = 0
                 rule_active_sev = 0
-                rule_sevs = []
+
                 for h_val, s_val in zip(hr_seq, spo2_seq):
                     sev, _ = evaluate_rules(h_val, s_val, 36.5)
+                    raw_sevs.append(sev)
+
                     if sev == 2:
                         rule_crit_count += 1
                         rule_warn_count += 1
@@ -354,18 +360,22 @@ def main():
                         rule_active_sev = 1
                     elif rule_warn_count == 0:
                         rule_active_sev = 0
-                    rule_sevs.append(rule_active_sev)
+                    n3_sevs.append(rule_active_sev)
 
-                rule_warn_shares.append(np.mean(np.array(rule_sevs) >= 1) * 100)
-                rule_crit_shares.append(np.mean(np.array(rule_sevs) == 2) * 100)
+                rule_raw_warn_shares.append(np.mean(np.array(raw_sevs) >= 1) * 100)
+                rule_raw_crit_shares.append(np.mean(np.array(raw_sevs) == 2) * 100)
+                rule_n3_warn_shares.append(np.mean(np.array(n3_sevs) >= 1) * 100)
+                rule_n3_crit_shares.append(np.mean(np.array(n3_sevs) == 2) * 100)
 
             grid_results.append({
                 "HR_mean": hr_m,
                 "SpO2_mean": sp_m,
-                "DenseAE_Sev>=1_%": round(float(np.mean(ae_warn_shares)), 2),
-                "DenseAE_Sev2_%": round(float(np.mean(ae_crit_shares)), 2),
-                "Rule_Sev>=1_%": round(float(np.mean(rule_warn_shares)), 2),
-                "Rule_Sev2_%": round(float(np.mean(rule_crit_shares)), 2)
+                "DenseAE_N3_Sev>=1_%": round(float(np.mean(ae_warn_shares)), 2),
+                "DenseAE_N3_Sev2_%": round(float(np.mean(ae_crit_shares)), 2),
+                "Rule_Raw_Sev>=1_%": round(float(np.mean(rule_raw_warn_shares)), 2),
+                "Rule_Raw_Sev2_%": round(float(np.mean(rule_raw_crit_shares)), 2),
+                "Rule_N3_Sev>=1_%": round(float(np.mean(rule_n3_warn_shares)), 2),
+                "Rule_N3_Sev2_%": round(float(np.mean(rule_n3_crit_shares)), 2)
             })
 
     df_grid = pd.DataFrame(grid_results)
@@ -439,15 +449,17 @@ def main():
     for delta_hr in hr_spikes:
         ae_recalls = []
         ae_latencies = []
-        rule_recalls = []
-        rule_latencies = []
+        rule_raw_recalls = []
+        rule_raw_latencies = []
+        rule_n3_recalls = []
+        rule_n3_latencies = []
 
         for ep in range(20):
             rng = np.random.default_rng(ep + 100)
             base_hr = rng.normal(72.0, 2.0, size=20) + delta_hr
             base_spo2 = np.clip(rng.normal(98.0, 0.4, size=20), 80.0, 100.0)
 
-            # AE
+            # AE (N=3)
             ae_infer = EdgeAutoencoderInference(weights_path)
             ae_hits = []
             for h, s in zip(base_hr, base_spo2):
@@ -458,40 +470,52 @@ def main():
             if hit:
                 ae_latencies.append(ae_hits.index(True))
 
-            # Rule (with persistence 3)
-            rule_hits = []
+            # Rule Raw (tanpa persistensi / perilaku produksi) & Rule N=3
+            rule_raw_hits = []
+            rule_n3_hits = []
             c_w = 0
             for h, s in zip(base_hr, base_spo2):
                 sev, _ = evaluate_rules(h, s, 36.5)
+                rule_raw_hits.append(sev >= 1)
                 c_w = (c_w + 1) if sev >= 1 else 0
-                rule_hits.append(c_w >= 3)
-            r_hit = any(rule_hits)
-            rule_recalls.append(1.0 if r_hit else 0.0)
-            if r_hit:
-                rule_latencies.append(rule_hits.index(True))
+                rule_n3_hits.append(c_w >= 3)
+
+            r_raw_hit = any(rule_raw_hits)
+            rule_raw_recalls.append(1.0 if r_raw_hit else 0.0)
+            if r_raw_hit:
+                rule_raw_latencies.append(rule_raw_hits.index(True))
+
+            r_n3_hit = any(rule_n3_hits)
+            rule_n3_recalls.append(1.0 if r_n3_hit else 0.0)
+            if r_n3_hit:
+                rule_n3_latencies.append(rule_n3_hits.index(True))
 
         injection_records.append({
             "Type": f"HR_SPIKE (+{delta_hr:.0f} BPM)",
             "Target_Vitals": f"HR ~{72+delta_hr:.0f}, SpO2 ~98",
-            "DenseAE_Recall": round(float(np.mean(ae_recalls)), 2),
-            "DenseAE_Median_Lat": int(np.median(ae_latencies)) if len(ae_latencies) > 0 else "-",
-            "Rule_Recall": round(float(np.mean(rule_recalls)), 2),
-            "Rule_Median_Lat": int(np.median(rule_latencies)) if len(rule_latencies) > 0 else "-"
+            "DenseAE_N3_Recall": round(float(np.mean(ae_recalls)), 2),
+            "DenseAE_N3_Med_Lat": int(np.median(ae_latencies)) if len(ae_latencies) > 0 else "-",
+            "Rule_Raw_Recall": round(float(np.mean(rule_raw_recalls)), 2),
+            "Rule_Raw_Med_Lat": int(np.median(rule_raw_latencies)) if len(rule_raw_latencies) > 0 else "-",
+            "Rule_N3_Recall": round(float(np.mean(rule_n3_recalls)), 2),
+            "Rule_N3_Med_Lat": int(np.median(rule_n3_latencies)) if len(rule_n3_latencies) > 0 else "-"
         })
 
     # SpO2 Drop Graded Injections
     for target_sp in spo2_drops:
         ae_recalls = []
         ae_latencies = []
-        rule_recalls = []
-        rule_latencies = []
+        rule_raw_recalls = []
+        rule_raw_latencies = []
+        rule_n3_recalls = []
+        rule_n3_latencies = []
 
         for ep in range(20):
             rng = np.random.default_rng(ep + 200)
             base_hr = rng.normal(72.0, 2.0, size=20)
             base_spo2 = rng.normal(target_sp, 0.4, size=20)
 
-            # AE
+            # AE (N=3)
             ae_infer = EdgeAutoencoderInference(weights_path)
             ae_hits = []
             for h, s in zip(base_hr, base_spo2):
@@ -502,25 +526,35 @@ def main():
             if hit:
                 ae_latencies.append(ae_hits.index(True))
 
-            # Rule (with persistence 3)
-            rule_hits = []
+            # Rule Raw & Rule N=3
+            rule_raw_hits = []
+            rule_n3_hits = []
             c_w = 0
             for h, s in zip(base_hr, base_spo2):
                 sev, _ = evaluate_rules(h, s, 36.5)
+                rule_raw_hits.append(sev >= 1)
                 c_w = (c_w + 1) if sev >= 1 else 0
-                rule_hits.append(c_w >= 3)
-            r_hit = any(rule_hits)
-            rule_recalls.append(1.0 if r_hit else 0.0)
-            if r_hit:
-                rule_latencies.append(rule_hits.index(True))
+                rule_n3_hits.append(c_w >= 3)
+
+            r_raw_hit = any(rule_raw_hits)
+            rule_raw_recalls.append(1.0 if r_raw_hit else 0.0)
+            if r_raw_hit:
+                rule_raw_latencies.append(rule_raw_hits.index(True))
+
+            r_n3_hit = any(rule_n3_hits)
+            rule_n3_recalls.append(1.0 if r_n3_hit else 0.0)
+            if r_n3_hit:
+                rule_n3_latencies.append(rule_n3_hits.index(True))
 
         injection_records.append({
             "Type": f"SPO2_DROP (-> {target_sp:.0f}%)",
             "Target_Vitals": f"HR ~72, SpO2 ~{target_sp:.0f}",
-            "DenseAE_Recall": round(float(np.mean(ae_recalls)), 2),
-            "DenseAE_Median_Lat": int(np.median(ae_latencies)) if len(ae_latencies) > 0 else "-",
-            "Rule_Recall": round(float(np.mean(rule_recalls)), 2),
-            "Rule_Median_Lat": int(np.median(rule_latencies)) if len(rule_latencies) > 0 else "-"
+            "DenseAE_N3_Recall": round(float(np.mean(ae_recalls)), 2),
+            "DenseAE_N3_Med_Lat": int(np.median(ae_latencies)) if len(ae_latencies) > 0 else "-",
+            "Rule_Raw_Recall": round(float(np.mean(rule_raw_recalls)), 2),
+            "Rule_Raw_Med_Lat": int(np.median(rule_raw_latencies)) if len(rule_raw_latencies) > 0 else "-",
+            "Rule_N3_Recall": round(float(np.mean(rule_n3_recalls)), 2),
+            "Rule_N3_Med_Lat": int(np.median(rule_n3_latencies)) if len(rule_n3_latencies) > 0 else "-"
         })
 
     df_inj = pd.DataFrame(injection_records)

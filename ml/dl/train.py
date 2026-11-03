@@ -18,6 +18,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
+from sklearn.svm import OneClassSVM
 try:
     import torch
     import torch.nn as nn
