@@ -26,7 +26,7 @@ Label target `OUTPUT` (0 = Normal, 1 = Abnormal) pada dataset publik yang diguna
    - *Mekanisme*: `OUTPUT` dipetakan dari kategori risiko klinis (`Risk Category == 'Low Risk' -> 0, else 1`).
    - *Keterbatasan*: Kategori risiko pada dataset aslinya ditentukan berdasarkan variabel yang **tidak diukur** oleh perangkat keras IoT (seperti tekanan darah sistolik dan diastolik). Akibatnya, distribusi tanda vital terukur (HR, SpO2, Temp) antara kelas normal dan abnormal saling tumpang tindih (*overlap* parah):
      - Mean HR: 75.05 BPM (normal) vs 83.58 BPM (abnormal)
-     - Mean SpO2: 97.43% (normal) vs 96.84% (abnormal)
+     - Mean SpO2: 97.5054% (normal) vs 97.5035% (abnormal) (dihitung riil dari harmonized_vitals.csv)
      - Mean Temp: 36.75 °C (normal) vs 36.75 °C (abnormal)
 
 3. **`engrarri21` (Human Vital Signs R)**:

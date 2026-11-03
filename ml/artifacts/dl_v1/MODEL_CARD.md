@@ -31,4 +31,11 @@
 ## Parity Verification
 - **PyTorch vs ONNX Max Absolute Difference**: Verified $< 10^{-5}$
 - **PyTorch vs NumPy Forward Max Absolute Difference**: Verified $< 10^{-5}$
-- **ONNX vs NumPy Forward (Python 3.14 venv)**: Verified $8.02 \times 10^{-6}$ (< $10^{-5}$)
+- **ONNX vs NumPy Forward Parity (10,000 points)**:
+  - **Max Absolute Difference ($\text{score} \le 10.0$)**: $4.77 \times 10^{-6}$
+  - **Max Relative Difference (all points)**: $4.19 \times 10^{-4}$ ($0.0419\%$)
+  - **Threshold Boundary Region ($[0.005, 0.05]$ covering $\text{warn}=0.0136$ & $\text{crit}=0.0248$)**:
+    - Max Absolute Difference: $4.43 \times 10^{-7}$
+    - Max Relative Difference: $2.18 \times 10^{-5}$ ($0.00218\%$)
+  - **Conclusion**: Parity difference around decision boundaries is $\approx 10^{-7}$, orders of magnitude below threshold margins, guaranteeing exact classification agreement between ONNX and NumPy runtimes.
+

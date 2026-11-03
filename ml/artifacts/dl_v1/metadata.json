@@ -41,5 +41,13 @@
     "onnxruntime": "1.31.1",
     "scikit_learn": "1.9.1",
     "numpy": "2.5.4"
+  },
+  "parity_tolerances": {
+    "onnx_vs_numpy_max_abs_diff_scores_le_10": 4.77e-06,
+    "onnx_vs_numpy_max_rel_diff_all": 4.19e-04,
+    "onnx_vs_numpy_threshold_region_0_005_to_0_05": {
+      "max_abs_diff": 4.43e-07,
+      "max_rel_diff": 2.18e-05
+    }
   }
 }
