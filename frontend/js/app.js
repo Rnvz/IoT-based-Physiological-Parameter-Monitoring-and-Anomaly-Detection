@@ -145,15 +145,25 @@
       $("updated").textContent = "Last reading: " + new Date(reading.ts).toLocaleTimeString();
     }
 
+    const activeScore = prediction ? (prediction.dl_score != null ? prediction.dl_score : prediction.score) : null;
+    const activeMargin = prediction ? prediction.margin : null;
+    const activeSource = prediction ? (prediction.decision_source || prediction.decision_mode || "--") : "--";
+    const activeModel = prediction ? (prediction.model_version || "--") : "--";
+    const activeLatency = prediction && prediction.inference_ms != null ? prediction.inference_ms + " ms" : "--";
+
+    if ($("v-dl-score")) $("v-dl-score").textContent = activeScore != null ? Number(activeScore).toFixed(6) : "--";
+    if ($("v-dl-margin")) $("v-dl-margin").textContent = activeMargin != null ? (activeMargin > 0 ? "+" + Number(activeMargin).toFixed(2) : Number(activeMargin).toFixed(2)) : "--";
+    if ($("v-decision-source")) $("v-decision-source").textContent = activeSource;
+    if ($("v-model-version")) $("v-model-version").textContent = activeModel;
+    if ($("v-inference-ms")) $("v-inference-ms").textContent = activeLatency;
+
     if (!fingerOn) {
       setBand("NO_FINGER", "Place your finger on the MAX30102 sensor to start measuring.");
     } else if (data.local_status) {
       renderLocalBand(data.local_status);
     } else if (prediction && LABELS[prediction.label]) {
-      const score = prediction.score === null || prediction.score === undefined
-        ? ""
-        : " Anomaly score: " + fmt(prediction.score, 3) + ".";
-      setBand(prediction.label, "Model result indicates unusual data patterns, not a medical diagnosis." + score);
+      const scoreStr = activeScore != null ? ` Anomaly score: ${Number(activeScore).toFixed(6)} (margin: ${activeMargin != null ? (activeMargin > 0 ? "+" + Number(activeMargin).toFixed(2) : Number(activeMargin).toFixed(2)) : "--"}).` : "";
+      setBand(prediction.label, "Model result indicates unusual data patterns, not a medical diagnosis." + scoreStr);
     } else {
       setBand("NO_DATA", "Waiting for model result.");
     }
@@ -283,6 +293,130 @@
     charts.temp = createChart("chart-temp", "Skin Temp", "#f59e0b", "rgba(245, 158, 11, 0.15)", 30, 40);
     charts.room = createChart("chart-room", "Room Temp", "#8b5cf6", "rgba(139, 92, 246, 0.15)", 20, 35);
     charts.hum = createChart("chart-hum", "Humidity", "#10b981", "rgba(16, 185, 129, 0.15)", 40, 80);
+
+    const scoreCanvas = $("chart-score");
+    if (scoreCanvas) {
+      charts.score = new Chart(scoreCanvas, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Anomaly Score",
+              data: [],
+              borderColor: "#8b5cf6",
+              backgroundColor: "rgba(139, 92, 246, 0.15)",
+              borderWidth: 2,
+              tension: 0.2,
+              pointRadius: 2,
+              fill: false
+            },
+            {
+              label: "Warn Thresh (0.013571)",
+              data: [],
+              borderColor: "#f59e0b",
+              borderDash: [5, 5],
+              borderWidth: 1.5,
+              pointRadius: 0,
+              fill: false
+            },
+            {
+              label: "Crit Thresh (0.024805)",
+              data: [],
+              borderColor: "#ef4444",
+              borderDash: [5, 5],
+              borderWidth: 1.5,
+              pointRadius: 0,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              labels: { font: { size: 10 }, boxWidth: 12 }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { maxTicksLimit: 8, font: { size: 10 } },
+              grid: { display: false }
+            },
+            y: {
+              suggestedMin: 0.0,
+              suggestedMax: 0.035,
+              ticks: { font: { size: 10 } },
+              grid: { color: "rgba(150, 150, 150, 0.15)" }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  function renderPredictions(data) {
+    const items = (data && data.items) || [];
+    if (!items.length) {
+      return;
+    }
+
+    const sorted = [...items].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    const labels = sorted.map((p) => new Date(p.ts).toLocaleTimeString());
+    const scoreData = sorted.map((p) => (p.dl_score != null ? p.dl_score : p.score));
+    const warnData = sorted.map(() => 0.013571);
+    const critData = sorted.map(() => 0.024805);
+
+    if (charts.score) {
+      charts.score.data.labels = labels;
+      charts.score.data.datasets[0].data = scoreData;
+      charts.score.data.datasets[1].data = warnData;
+      charts.score.data.datasets[2].data = critData;
+      charts.score.update("none");
+    }
+
+    const tbody = $("timeline-tbody");
+    if (!tbody) return;
+
+    const recent = [...items].reverse().slice(0, 15);
+    if (!recent.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center muted">Belum ada riwayat keputusan</td></tr>';
+      return;
+    }
+
+    let rowsHtml = "";
+    recent.forEach((p) => {
+      const timeStr = new Date(p.ts).toLocaleTimeString();
+      const ruleSevBadge = p.rule_severity != null 
+        ? `<span class="sev-badge sev-${p.rule_severity}">Sev ${p.rule_severity}</span>`
+        : `<span class="muted">-</span>`;
+      
+      const dlVal = p.dl_severity != null ? p.dl_severity : p.ml_severity;
+      const dlSevBadge = dlVal != null
+        ? `<span class="sev-badge sev-${dlVal}">Sev ${dlVal}</span>`
+        : `<span class="muted">- (DL off)</span>`;
+
+      const pubSevBadge = `<span class="sev-badge sev-${p.severity}">Sev ${p.severity}</span>`;
+      const sourceStr = p.decision_source || p.decision_mode || "--";
+      const rawScoreStr = p.dl_score != null ? Number(p.dl_score).toFixed(6) : (p.score != null ? Number(p.score).toFixed(4) : "-");
+      const marginStr = p.margin != null ? (p.margin > 0 ? "+" + Number(p.margin).toFixed(2) : Number(p.margin).toFixed(2)) : "-";
+      const statusLabel = p.label || "NORMAL";
+
+      rowsHtml += `<tr>
+        <td>${timeStr}</td>
+        <td>${ruleSevBadge}</td>
+        <td>${dlSevBadge}</td>
+        <td><strong>${sourceStr}</strong></td>
+        <td>${pubSevBadge}</td>
+        <td><code>${rawScoreStr}</code></td>
+        <td>${marginStr}</td>
+        <td>${statusLabel}</td>
+      </tr>`;
+    });
+    tbody.innerHTML = rowsHtml;
   }
 
   function renderHistory(data) {
@@ -336,7 +470,12 @@
     try {
       renderHistory(await api("/history?minutes=" + cfg.HISTORY_MINUTES));
     } catch (e) {
-      return;
+      // ignore
+    }
+    try {
+      renderPredictions(await api("/predictions?limit=30"));
+    } catch (e) {
+      // ignore
     }
   }
 

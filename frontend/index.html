@@ -26,9 +26,34 @@
 
       <section id="status-band" class="band band-none" aria-live="polite">
         <div class="band-content">
-          <p class="band-label">Model result</p>
+          <div class="band-header-row">
+            <p class="band-label">Model result</p>
+            <span class="persistence-badge">DL memakai persistence N=3; RULE tanpa persistence</span>
+          </div>
           <p id="band-text" class="band-text">Waiting for data</p>
           <p id="band-sub" class="band-sub">Model result indicates unusual data patterns, not a medical diagnosis.</p>
+          <div class="dl-stats-grid">
+            <div class="dl-stat-item">
+              <span class="dl-stat-label">Anomaly Score</span>
+              <span id="v-dl-score" class="dl-stat-val">--</span>
+            </div>
+            <div class="dl-stat-item">
+              <span class="dl-stat-label">Margin</span>
+              <span id="v-dl-margin" class="dl-stat-val">--</span>
+            </div>
+            <div class="dl-stat-item">
+              <span class="dl-stat-label">Decision Source</span>
+              <span id="v-decision-source" class="dl-stat-val">--</span>
+            </div>
+            <div class="dl-stat-item">
+              <span class="dl-stat-label">Model Version</span>
+              <span id="v-model-version" class="dl-stat-val">--</span>
+            </div>
+            <div class="dl-stat-item">
+              <span class="dl-stat-label">Latency</span>
+              <span id="v-inference-ms" class="dl-stat-val">--</span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -88,6 +113,39 @@
           <h3 class="card-title">Humidity (%)</h3>
           <div class="chart-wrap"><canvas id="chart-hum"></canvas></div>
         </div>
+        <div class="chart-card chart-full">
+          <div class="card-head-flex">
+            <h3 class="card-title">DL Anomaly Score (DenseAE v2)</h3>
+            <span class="threshold-pill">Warn: 0.013571 | Crit: 0.024805</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chart-score"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel timeline-panel">
+      <div class="panel-head">
+        <h2>Riwayat Severity & Linimasa Rule vs DL (Berdampingan)</h2>
+        <span class="note-pill">DL memakai persistence N=3; RULE tanpa persistence</span>
+      </div>
+      <div class="table-wrap">
+        <table id="timeline-table" class="timeline-table">
+          <thead>
+            <tr>
+              <th>Waktu</th>
+              <th>Rule Sev</th>
+              <th>DL / ML Sev</th>
+              <th>Decision Source</th>
+              <th>Published Sev</th>
+              <th>Score Mentah</th>
+              <th>Margin</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="timeline-tbody">
+            <tr><td colspan="8" class="text-center muted">Belum ada riwayat keputusan</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
