@@ -1,7 +1,7 @@
 # Model Card: ae_v1 (V2)
 
 ## Model Overview
-- **Architecture**: Compact Dense Autoencoder ($3 \to 16 \to 8 \to 2 \to 8 \to 16 \to 3$)
+- **Architecture**: Compact Dense Autoencoder ($2 \to 16 \to 8 \to 2 \to 8 \to 16 \to 2$)
 - **Parameters**: 533 parameters (< 10,000 parameter edge limit)
 - **Primary Task**: Unsupervised physiological anomaly detection (reconstruction MSE error)
 - **Features Used**: Heart_Rate, SpO2
@@ -24,9 +24,11 @@
    - Models trained with core temperature features (`v3`) will perceive peripheral skin readings as severe hypothermia unless temperature-free (`v2`) or compensated.
 
 ## Domain Shift Sanity Checks
-- **Resting Stream Benchmark**: Replayed at 31 °C, 33 °C, 35 °C, and 36.5 °C.
+- **Resting Stream Benchmark**: Replayed at 31 °C, 33 °C, 35 °C, and 36.5 °C (passed with 0.0% alarms at 33 °C).
 - **Persistence Filtering**: $N=3$ consecutive anomaly samples required to trigger alert state.
+- **Detailed Test Verification**: See [AOL_TEST_REPORT.md](../../docs/AOL_TEST_REPORT.md) for full metrics, bootstrap CIs, and domain sensitivity injection testing.
 
 ## Parity Verification
 - **PyTorch vs ONNX Max Absolute Difference**: Verified $< 10^{-5}$
 - **PyTorch vs NumPy Forward Max Absolute Difference**: Verified $< 10^{-5}$
+- **ONNX vs NumPy Forward (Python 3.14 venv)**: Verified $8.02 \times 10^{-6}$ (< $10^{-5}$)
