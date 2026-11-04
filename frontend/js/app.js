@@ -9,6 +9,7 @@
     NORMAL: { text: "Normal", cls: "band-ok" },
     ANOMALY: { text: "Anomaly detected", cls: "band-bad" },
     NO_FINGER: { text: "Finger not detected", cls: "band-info" },
+    CALCULATING: { text: "Calculating", cls: "band-info dots-loading" },
     NO_DATA: { text: "No data", cls: "band-none" },
     SENSOR_ERROR: { text: "Sensor issue", cls: "band-warn" }
   };
@@ -157,7 +158,7 @@
         : " Anomaly score: " + fmt(prediction.score, 3) + ".";
       setBand(prediction.label, "Model result indicates unusual data patterns, not a medical diagnosis." + score);
     } else {
-      setBand("NO_DATA", "Waiting for model result.");
+      setBand("CALCULATING", "Collecting sensor data samples for model evaluation...");
     }
   }
 
@@ -203,11 +204,11 @@
     bb.textContent = buzzerOn ? "Buzzer: on (click to turn off)" : "Buzzer: off";
 
     /* --- UPDATE INDIKATOR CARD BARU --- */
-    
+
     // 1. Indikator Lampu (Glow effect berdasarkan brightness)
     const indLamp = $("ind-lamp");
     const indLampText = $("ind-lamp-text");
-    
+
     if (color === "OFF" || brightness === 0) {
       indLamp.style.background = "transparent";
       indLamp.style.borderColor = "var(--line)";
@@ -264,7 +265,7 @@
           legend: { display: false }
         },
         scales: {
-          x: { 
+          x: {
             ticks: { maxTicksLimit: 8, font: { size: 10 } },
             grid: { display: false }
           },
