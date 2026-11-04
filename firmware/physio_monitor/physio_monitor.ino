@@ -46,8 +46,8 @@
 // WIFI
 // ============================================================
 
-const char* WIFI_SSID = "iQOO 15R";
-const char* WIFI_PASS = "password";
+const char* WIFI_SSID = "iQOO 12";
+const char* WIFI_PASS = "Password123";
 
 
 // ============================================================
