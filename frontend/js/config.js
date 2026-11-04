@@ -1,6 +1,7 @@
 window.APP_CONFIG = {
   MODE: "api",
   API_BASE: "http://localhost:8000",
+  API_KEY: "6ovZWaBw5bLf87PwZPVspeSslmKBKyKQ",
   POLL_MS: 3000,
   HISTORY_MINUTES: 30,
   OFFLINE_AFTER_S: 15,

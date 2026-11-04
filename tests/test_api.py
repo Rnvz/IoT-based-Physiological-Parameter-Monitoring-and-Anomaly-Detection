@@ -195,8 +195,11 @@ def test_api_invalid_colour_brightness_and_mode(client_and_repo):
     client, _, _ = client_and_repo
     headers = {"X-API-Key": "test_secret_key"}
 
-    res_bad_col = client.post("/actuator/led", json={"color": "PURPLE", "brightness": 50}, headers=headers)
+    res_bad_col = client.post("/actuator/led", json={"color": "INVALID_COLOR", "brightness": 50}, headers=headers)
     assert res_bad_col.status_code == 422
+
+    res_purple = client.post("/actuator/led", json={"color": "PURPLE", "brightness": 50}, headers=headers)
+    assert res_purple.status_code == 200
 
     res_bad_b1 = client.post("/actuator/led", json={"color": "RED", "brightness": 120}, headers=headers)
     assert res_bad_b1.status_code == 422
