@@ -60,16 +60,23 @@ def arbitrate(
                 inference_ms=inf_ms
             )
         else:
-            logger.info(f"[Arbitrator] ML result unavailable ({getattr(ml_result, 'label', 'None')}). Falling back to RULE severity {rule_severity}.")
+            is_warmup = bool(ml_result and getattr(ml_result, 'is_warmup', False))
+            # Selama fase warm-up (mengumpulkan window 15 sampel awal), jangan bunyikan alarm buzzer (sev 2)
+            # dari detak awal transisi sensor. Tahan sebagai NORMAL (severity 0) hingga window stabil.
+            pub_sev = 0 if is_warmup else rule_severity
+            pub_label = "NORMAL" if is_warmup else rule_label
+            source = "WARMUP" if is_warmup else "RULE_FALLBACK"
+
+            logger.info(f"[Arbitrator] ML result unavailable ({getattr(ml_result, 'label', 'None')}, warmup={is_warmup}). Source={source}, severity={pub_sev}.")
             return ArbitrationResult(
                 rule_severity=rule_severity,
                 ml_severity=ml_sev,
                 ml_score=ml_score,
-                published_severity=rule_severity,
-                published_label=rule_label,
+                published_severity=pub_sev,
+                published_label=pub_label,
                 published_score=None,
                 decision_mode="ML",
-                decision_source="RULE_FALLBACK",
+                decision_source=source,
                 is_fallback=True,
                 dl_score=dl_score,
                 dl_severity=dl_sev,

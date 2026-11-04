@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Literal
 
-LedColor = Literal["OFF", "GREEN", "RED", "BLUE", "YELLOW", "WHITE"]
+LedColor = Literal["OFF", "GREEN", "RED", "BLUE", "PURPLE", "YELLOW", "WHITE"]
 
 class CommandPayload(BaseModel):
     """

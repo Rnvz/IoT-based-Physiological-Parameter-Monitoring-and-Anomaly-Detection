@@ -8,7 +8,7 @@ from app.api.deps import verify_api_key, verify_read_api_key, rate_limit_post
 
 router = APIRouter(prefix="/actuator", tags=["actuator"])
 
-LedColor = Literal["OFF", "GREEN", "RED", "BLUE", "YELLOW", "WHITE"]
+LedColor = Literal["OFF", "GREEN", "RED", "BLUE", "PURPLE", "YELLOW", "WHITE"]
 
 class ModeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")

@@ -110,7 +110,6 @@ splits/
 # Preserve test fixtures
 !tests/fixtures/
 !tests/fixtures/**
-
 # ------------------------------------------------------------------------------
 # 4. Embedded / PlatformIO / Arduino Firmware
 # ------------------------------------------------------------------------------

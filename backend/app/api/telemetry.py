@@ -40,26 +40,41 @@ async def get_latest(
 
     prediction_dict = None
     if prediction:
-        prediction_dict = {
-            "ts": prediction.ts,
-            "label": prediction.label,
-            "severity": prediction.published_severity,
-            "score": prediction.ml_score,
-        }
-        if prediction.dl_score is not None or getattr(settings, "model_kind", "ml").lower() == "dl":
-            prediction_dict["dl_score"] = prediction.dl_score
-            prediction_dict["dl_severity"] = prediction.dl_severity
-            prediction_dict["inference_ms"] = prediction.inference_ms
-            prediction_dict["model_version"] = prediction.model_version
-            prediction_dict["decision_mode"] = prediction.decision_mode
-            prediction_dict["decision_source"] = prediction.decision_source
-            prediction_dict["rule_severity"] = prediction.rule_severity
-            prediction_dict["ml_severity"] = prediction.ml_severity
-            if prediction.dl_score is not None:
-                denom = max(1e-9, 0.024805 - 0.013571)
-                prediction_dict["margin"] = round(float(np.clip((prediction.dl_score - 0.013571) / denom, -1.0, 2.0)), 4)
-            else:
-                prediction_dict["margin"] = None
+        # Jika sensor sedang tidak ada jari atau vitals belum terdeteksi (HR / SpO2 masih proses awal),
+        # jangan kembalikan record prediksi lama dari sesi sebelumnya agar dashboard tidak menampilkan false alarm.
+        has_fresh_vitals = bool(reading and reading.finger and (reading.hr is not None) and (reading.spo2 is not None))
+        
+        is_fresh = False
+        if has_fresh_vitals and reading and reading.ts and prediction.ts:
+            try:
+                r_ts = datetime.fromisoformat(reading.ts.replace("Z", "+00:00"))
+                p_ts = datetime.fromisoformat(prediction.ts.replace("Z", "+00:00"))
+                if abs((r_ts - p_ts).total_seconds()) <= 15:
+                    is_fresh = True
+            except Exception:
+                is_fresh = True
+
+        if is_fresh:
+            prediction_dict = {
+                "ts": prediction.ts,
+                "label": prediction.label,
+                "severity": prediction.published_severity,
+                "score": prediction.ml_score,
+            }
+            if prediction.dl_score is not None or getattr(settings, "model_kind", "ml").lower() == "dl":
+                prediction_dict["dl_score"] = prediction.dl_score
+                prediction_dict["dl_severity"] = prediction.dl_severity
+                prediction_dict["inference_ms"] = prediction.inference_ms
+                prediction_dict["model_version"] = prediction.model_version
+                prediction_dict["decision_mode"] = prediction.decision_mode
+                prediction_dict["decision_source"] = prediction.decision_source
+                prediction_dict["rule_severity"] = prediction.rule_severity
+                prediction_dict["ml_severity"] = prediction.ml_severity
+                if prediction.dl_score is not None:
+                    denom = max(1e-9, 0.024805 - 0.013571)
+                    prediction_dict["margin"] = round(float(np.clip((prediction.dl_score - 0.013571) / denom, -1.0, 2.0)), 4)
+                else:
+                    prediction_dict["margin"] = None
 
     return {
         "reading": reading_dict,

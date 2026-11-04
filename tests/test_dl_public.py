@@ -230,6 +230,19 @@ def test_export_parity_torch_onnx_numpy():
     model = DenseAutoencoder(input_dim=2, bottleneck_dim=2, dropout=0.0)
     model.eval()
     
+    np_forward = NumPyAutoencoderForward.from_torch_model(model)
+    test_x = np.random.uniform(-3.0, 3.0, size=(100, 2)).astype(np.float32)
+    with torch.no_grad():
+        py_out = model(torch.tensor(test_x)).numpy()
+    np_out = np_forward.forward(test_x)
+    diff_py_np = np.max(np.abs(py_out - np_out))
+    assert diff_py_np < 1e-5, f"PyTorch vs NumPy max diff: {diff_py_np}"
+
+    try:
+        import onnxscript
+    except ImportError:
+        pytest.skip("onnxscript not installed in current environment; skipping ONNX export portion")
+
     tmp_dir = tempfile.mkdtemp()
     try:
         onnx_path = os.path.join(tmp_dir, "test_model.onnx")
@@ -243,31 +256,11 @@ def test_export_parity_torch_onnx_numpy():
             dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}}
         )
         
-        np_forward = NumPyAutoencoderForward.from_torch_model(model)
-        
         import onnxruntime as ort
         ort_sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
-        
-        # Test 100 diverse inputs
-        test_x = np.random.uniform(-3.0, 3.0, size=(100, 2)).astype(np.float32)
-        
-        # PyTorch
-        with torch.no_grad():
-            py_out = model(torch.tensor(test_x)).numpy()
-            
-        # ONNX
         onnx_out = ort_sess.run(None, {"input": test_x})[0]
-        
-        # NumPy
-        np_out = np_forward.forward(test_x)
-        
-        # Verify max absolute diff < 1e-5
         diff_py_onnx = np.max(np.abs(py_out - onnx_out))
-        diff_py_np = np.max(np.abs(py_out - np_out))
-        
         assert diff_py_onnx < 1e-5, f"PyTorch vs ONNX max diff: {diff_py_onnx}"
-        assert diff_py_np < 1e-5, f"PyTorch vs NumPy max diff: {diff_py_np}"
-        
     finally:
         shutil.rmtree(tmp_dir)
 

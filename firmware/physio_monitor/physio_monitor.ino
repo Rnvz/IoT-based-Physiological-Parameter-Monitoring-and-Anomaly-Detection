@@ -15,6 +15,8 @@
 // 7. Mengendalikan lampu RGB: mode AUTO (mengikuti hasil model
 //    dari backend) dan mode MANUAL (perintah dari dashboard),
 //    lalu melaporkan status lampu ke backend.
+// 8. Selama WiFi belum/tidak terhubung, OLED menampilkan
+//    "Trying to connect to Wi-Fi..." dan lampu RGB berwarna ungu.
 //
 // Library tambahan yang dibutuhkan (Library Manager):
 // - DHT sensor library + Adafruit Unified Sensor
@@ -51,7 +53,7 @@ const char* WIFI_PASS = "password";
 // ============================================================
 // MQTT
 // TOPIC_PREFIX harus unik dan sama persis dengan konfigurasi
-// backend. Ganti GANTI-ID-UNIK dengan teks acak buatanmu.
+// backend dan dashboard.
 // ============================================================
 
 const char* MQTT_BROKER = "broker.hivemq.com";
@@ -237,23 +239,14 @@ const unsigned long DHT_INTERVAL = 2000;
 
 // ============================================================
 // STATUS
-// Status lokal firmware ini tetap dipakai untuk OLED dan buzzer
-// (perilaku buzzer belum diubah). Keputusan anomali dari model
-// diterima lewat topik result dan dipakai oleh lampu.
-// Nilai: "MENUNGGU SENSOR", "MENDETEKSI", "NORMAL", "ANOMALI"
+// Status lokal firmware ini menunjukkan kondisi pembacaan sensor:
+// "MENUNGGU SENSOR" jika jari belum terdeteksi, atau "MENDETEKSI"
+// jika sensor sedang mengumpulkan/membaca vitals.
+// Keputusan normal/anomali dan tingkat keparahan sepenuhnya
+// diterima dari model backend lewat topik /result.
 // ============================================================
 
 String statusSistem = "MENUNGGU SENSOR";
-
-
-// ============================================================
-// ANOMALY THRESHOLD (dipakai buzzer lokal)
-// ============================================================
-
-const float HR_LOW = 50.0;
-const float HR_HIGH = 100.0;
-const float SPO2_LOW = 90.0;
-const float TEMP_HIGH = 38.0;
 
 
 // ============================================================
@@ -317,7 +310,8 @@ const NamedColor COLORS[] = {
   {"RED",    255, 0,   0},
   {"BLUE",   0,   0,   255},
   {"YELLOW", 255, 150, 0},
-  {"WHITE",  255, 255, 255}
+  {"WHITE",  255, 255, 255},
+  {"PURPLE", 180, 0,   255}
 };
 
 const int COLOR_COUNT = sizeof(COLORS) / sizeof(COLORS[0]);
@@ -347,9 +341,13 @@ char currentSource[20] = "";
 
 bool statusDirty = true;
 unsigned long lastActuatorPublish = 0;
+
+// Tes buzzer dari dashboard (toggle). Hanya untuk memastikan buzzer
+// berfungsi; otomatis mati setelah batas waktu agar tidak tertinggal.
 bool buzzerTest = false;
 unsigned long buzzerTestUntil = 0;
 const unsigned long BUZZER_TEST_TIMEOUT = 30000UL;
+
 
 // ============================================================
 // RESET VITALS
@@ -385,6 +383,11 @@ void resetVitals() {
 
   firstBeatDetected = false;
   lastBeatSample = 0;
+
+  // Reset juga status hasil model & buzzer agar tidak membawa anomali dari sesi sebelumnya
+  haveResult = false;
+  lastSeverity = 0;
+  lastResultMs = 0;
 }
 
 
@@ -417,7 +420,12 @@ void addHR(float value) {
     total += hrHistory[i];
   }
 
-  bpmFiltered = total / hrHistoryCount;
+  // Butuh minimal 3 detak valid agar denyut jantung stabil dan tidak membaca noise awal
+  if (hrHistoryCount >= 3) {
+    bpmFiltered = total / hrHistoryCount;
+  } else {
+    bpmFiltered = 0.0;
+  }
 }
 
 
@@ -946,6 +954,7 @@ void actuatorOnMessage(
       return;
     }
 
+    // Tes buzzer (toggle): {"buzzer_test":true,"seq":n}
     bool hasBuzzer = doc["buzzer_test"].is<bool>();
 
     if (hasBuzzer) {
@@ -956,6 +965,7 @@ void actuatorOnMessage(
 
     const char* mode = doc["mode"] | "";
 
+    // Perintah yang hanya berisi tes buzzer, tanpa mode lampu
     if (mode[0] == '\0' && hasBuzzer) {
 
       lastCmdSeq = seq;
@@ -972,7 +982,8 @@ void actuatorOnMessage(
 
       const char* color = doc["color"] | manualColor;
 
-      // Tolak warna di luar daftar
+      // Tolak warna di luar daftar (PURPLE sekarang boleh dipilih
+      // manual, selain dipakai otomatis saat WiFi belum terhubung)
       if (findColor(color) == nullptr) {
 
         Serial.println("CMD ditolak: warna tidak dikenal");
@@ -1049,7 +1060,14 @@ void actuatorUpdate() {
   const char* source;
 
 
-  if (ledMode == MODE_MANUAL) {
+  if (WiFi.status() != WL_CONNECTED) {
+
+    // WiFi belum/tidak terhubung: lampu ungu (prioritas tertinggi)
+    color = "PURPLE";
+    brightness = 50;
+    source = "NO_WIFI";
+
+  } else if (ledMode == MODE_MANUAL) {
 
     color = manualColor;
     brightness = manualBrightness;
@@ -1229,7 +1247,7 @@ void serviceMQTT() {
 
 
 // ============================================================
-// STATUS (lokal, untuk OLED dan buzzer)
+// STATUS (lokal, untuk OLED dan indikator sensor)
 // ============================================================
 
 void updateStatus() {
@@ -1241,62 +1259,51 @@ void updateStatus() {
     return;
   }
 
-  if (bpmFiltered <= 0 || spo2Filtered <= 0) {
-
-    statusSistem = "MENDETEKSI";
-
-    return;
-  }
-
-  bool anomaly = false;
-
-  if (bpmFiltered < HR_LOW || bpmFiltered > HR_HIGH) {
-    anomaly = true;
-  }
-
-  if (spo2Filtered < SPO2_LOW) {
-    anomaly = true;
-  }
-
-  if (suhuValid && suhuAktual > TEMP_HIGH) {
-    anomaly = true;
-  }
-
-  if (anomaly) {
-    statusSistem = "ANOMALI";
-  } else {
-    statusSistem = "NORMAL";
-  }
+  statusSistem = "MENDETEKSI";
 }
 
 
 // ============================================================
-// BUZZER - beep 150 ms setiap 1000 ms saat ANOMALI
-// (perilaku belum diubah; menunggu keputusan apakah buzzer
-// mengikuti hasil model atau tetap ambang lokal)
+// BUZZER - Mengikuti keputusan model dari backend & manual test
+// Buzzer berbunyi beep 150 ms per 1000 ms jika model mendeteksi
+// anomali (lastSeverity >= 2), atau menyala terus jika buzzerTest aktif.
 // ============================================================
 
 void updateBuzzer() {
 
   unsigned long now = millis();
 
+  // ----------------------------------------------------------
+  // Tes buzzer dari dashboard
+  // Selama aktif, buzzer menyala terus. Berhenti jika dimatikan
+  // atau melewati BUZZER_TEST_TIMEOUT.
+  // ----------------------------------------------------------
+
   if (buzzerTest) {
 
     if ((long)(now - buzzerTestUntil) >= 0) {
 
       buzzerTest = false;
+
       statusDirty = true;
 
     } else {
 
       digitalWrite(BUZZER_PIN, BUZZER_NYALA);
+
       buzzerOffTime = 0;
 
       return;
     }
   }
 
-  if (statusSistem != "ANOMALI") {
+  // Jika tidak dalam kondisi test, buzzer hanya berbunyi jika:
+  // 1. Jari masih menempel di sensor
+  // 2. Hasil model valid dan belum timeout
+  // 3. Tingkat keparahan anomali kritis (lastSeverity >= 2)
+  bool isModelAnomaly = fingerPresent && haveResult && (now - lastResultMs <= RESULT_TIMEOUT) && (lastSeverity >= 2);
+
+  if (!isModelAnomaly) {
 
     digitalWrite(BUZZER_PIN, BUZZER_MATI);
 
@@ -1326,6 +1333,8 @@ void updateBuzzer() {
 // ============================================================
 // OLED - refresh setiap 200 ms
 // Layout: judul, HR, SpO2, suhu tubuh, kelembapan, status.
+// Suhu tubuh tampil "--" selama jari belum menempel di MAX30102.
+// Saat WiFi belum terhubung, layar hanya menampilkan pesan koneksi.
 // ============================================================
 
 void updateOLED() {
@@ -1345,6 +1354,18 @@ void updateOLED() {
   // Title
   display.setCursor(0, 0);
   display.println("PHYSIO MONITOR");
+
+  // WiFi belum/tidak terhubung: tampilkan pesan saja
+  if (WiFi.status() != WL_CONNECTED) {
+
+    display.setCursor(0, 28);
+    display.println("Trying to connect to");
+    display.println("Wi-Fi...");
+
+    display.display();
+
+    return;
+  }
 
   // HR
   display.setCursor(0, 11);
@@ -1372,7 +1393,7 @@ void updateOLED() {
   display.setCursor(0, 31);
   display.print("Temp: ");
 
-  if (suhuValid) {
+  if (fingerPresent && suhuValid) {
     display.print(suhuAktual, 1);
     display.println(" C");
   } else {
@@ -1392,7 +1413,7 @@ void updateOLED() {
 
   // Status
   display.setCursor(0, 54);
-  display.print(statusSistem);
+  display.print(fingerPresent ? "MENDETEKSI" : "MENUNGGU SENSOR");
 
   display.display();
 }
