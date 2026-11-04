@@ -40,15 +40,24 @@ Tabel pemetaan taksonomi label draft:
 
 ---
 
-## 3. Cara Pemisahan Sesi & Integritas Jeda Waktu
+## 3. Cara Pemisahan Sesi & Prosedur Antar-Sesi
 
-Protokol ini menyelaraskan dua batasan temporal:
-1. **Syarat Kualitas Sesi Aktif ([scripts/validate_recording.py](file:///home/ywenanta/Projects/IoT/scripts/validate_recording.py)):** Di dalam satu sesi aktif, jeda waktu antar sampel berurutan wajib $\le 3.0$ detik. Adanya celah $> 3.0$ detik mengindikasikan koneksi terputus dan menyebabkan sesi ditolak (`REJECT`).
-2. **Segmentasi Sesi Otomatis ([ml_eval/sessions.py](file:///home/ywenanta/Projects/IoT/ml_eval/sessions.py)):** Fungsi `segment_sessions()` otomatis memotong sesi baru jika mendeteksi selisih waktu antar baris $\Delta t > 600.0$ detik (10 menit).
+> [!WARNING]
+> **Temuan Kritis Arsitektur Penyimpanan Telemetri Idle:**  
+> Kode backend pada [`backend/app/mqtt/consumer.py` baris 125–139](file:///home/ywenanta/Projects/IoT/backend/app/mqtt/consumer.py#L125-L139) menunjukkan bahwa pemanggilan `await self.repo.save_reading(reading)` dieksekusi **SEBELUM** evaluasi kondisi jari pada baris 149 (`if not telemetry.finger`).  
+> Artinya, saat perangkat dalam kondisi menyala tetapi idle (jari dilepas, `finger=False`), ESP32 tetap mem-publish paket telemetri 1 Hz dan **backend terus menyimpan baris `finger=False` setiap detik ke dalam `readings.csv`**.  
+> **Konsekuensi:**  
+> 1. Tidak akan pernah terjadi jeda waktu $> 600\text{ s}$ di `readings.csv` selama perangkat menyala dan terhubung ke MQTT broker.
+> 2. Membiarkan backend dan perangkat terus menyala antar-sesi akan membanjiri `readings.csv` dengan baris `finger=False`, yang langsung menurunkan rasio `finger_true_pct` ke bawah batas minimum $95.0\%$, menyebabkan sesi **DITOLAK (`REJECT`)** oleh validator.
+> 3. Oleh karena itu, **DILARANG MENGANDALKAN JEDA 600 DETIK** untuk pemisahan sesi pada file tunggal!
 
-### Aturan Operasional Pemisahan Sesi:
-* **Pemisahan Fisik (Direktori Terpisah):** Setiap sesi direkam ke subfolder terpisah via `CSV_DIR` (misal: `data_sessions/session_001_rest/`). Dalam direktori ini, data direkam dari awal hingga akhir tanpa jeda $> 3.0$ s.
-* **Pemisahan Temporal (File Gabungan):** Jika sesi-sesi digabungkan ke dalam satu file dataset besar, jeda henti antar sesi **wajib minimal $> 600.0$ detik** (10 menit) dengan transmisi dimatikan (`SENSOR_OFF`), sehingga algoritma segmentasi `ml_eval` secara deterministik menetapkan ID sesi terpisah (`session_001`, `session_002`, dst.) tanpa memicu alarm jeda intra-sesi.
+### Prosedur Wajib Antar-Sesi (Isolasi Fisik):
+1. **Satu Direktori Terpisah per Sesi (`CSV_DIR` Baru):**
+   Setiap sesi perekaman wajib dijalankan dengan variabel lingkungan `CSV_DIR` yang baru dan unik (contoh: `CSV_DIR=./data_sessions/session_001_rest_pagi`).
+2. **Penghentian Backend Segera Setelah Sesi Selesai:**
+   Segera setelah target durasi sesi tercapai, matikan server backend (`Ctrl+C` pada terminal uvicorn) atau cabut daya perangkat ESP32 agar transmisi idle `finger=False` tidak tertulis ke file sesi.
+3. **Validasi Mandiri Sebelum Sesi Berikutnya:**
+   Jalankan `scripts/validate_recording.py` pada direktori sesi tersebut. Perekaman sesi berikutnya hanya boleh dimulai jika validator menghasilkan status `ACCEPT`.
 
 ---
 
