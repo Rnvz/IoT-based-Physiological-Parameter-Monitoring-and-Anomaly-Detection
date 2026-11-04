@@ -24,6 +24,9 @@ class PredictionRecord(BaseModel):
     decision_source: str = "RULE"
     label: str = "NORMAL"
     model_version: str = "if_v1"
+    dl_score: Optional[float] = None
+    dl_severity: Optional[int] = None
+    inference_ms: Optional[float] = None
 
 class ActuatorEventRecord(BaseModel):
     ts: str

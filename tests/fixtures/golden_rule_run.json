@@ -1,0 +1,121 @@
+{
+  "telemetries": [
+    [
+      {
+        "hr": 75.0,
+        "spo2": 98.0,
+        "temp": 36.5,
+        "finger": true,
+        "device_id": "esp32-01"
+      },
+      "2026-01-01T10:00:00+00:00"
+    ],
+    [
+      {
+        "hr": 96.0,
+        "spo2": 97.0,
+        "temp": 36.6,
+        "finger": true,
+        "device_id": "esp32-01"
+      },
+      "2026-01-01T10:00:01+00:00"
+    ],
+    [
+      {
+        "hr": 85.0,
+        "spo2": 88.0,
+        "temp": 36.5,
+        "finger": true,
+        "device_id": "esp32-01"
+      },
+      "2026-01-01T10:00:02+00:00"
+    ],
+    [
+      {
+        "hr": null,
+        "spo2": null,
+        "temp": null,
+        "finger": false,
+        "device_id": "esp32-01"
+      },
+      "2026-01-01T10:00:03+00:00"
+    ],
+    [
+      {
+        "hr": 72.0,
+        "spo2": 99.0,
+        "temp": 36.5,
+        "finger": true,
+        "device_id": "esp32-01"
+      },
+      "2026-01-01T10:00:04+00:00"
+    ]
+  ],
+  "readings_csv": "ts,device_id,hr,spo2,temp,hum,room_temp,finger,fw_status\n2026-01-01T10:00:00+00:00,esp32-01,75.0,98.0,36.5,,,True,NORMAL\n2026-01-01T10:00:01+00:00,esp32-01,96.0,97.0,36.6,,,True,NORMAL\n2026-01-01T10:00:02+00:00,esp32-01,85.0,88.0,36.5,,,True,NORMAL\n2026-01-01T10:00:03+00:00,esp32-01,,,,,,False,NORMAL\n2026-01-01T10:00:04+00:00,esp32-01,72.0,99.0,36.5,,,True,NORMAL\n",
+  "predictions_csv": "ts,device_id,rule_severity,ml_severity,ml_score,published_severity,decision_mode,decision_source,label,model_version\n2026-01-01T10:00:00+00:00,esp32-01,0,,,0,RULE,RULE,NORMAL,if_v1\n2026-01-01T10:00:01+00:00,esp32-01,1,,,1,RULE,RULE,ANOMALY,if_v1\n2026-01-01T10:00:02+00:00,esp32-01,2,,,2,RULE,RULE,ANOMALY,if_v1\n2026-01-01T10:00:04+00:00,esp32-01,0,,,0,RULE,RULE,NORMAL,if_v1\n",
+  "latest_response": {
+    "reading": {
+      "ts": "2026-01-01T10:00:04+00:00",
+      "hr": 72.0,
+      "spo2": 99.0,
+      "temp": 36.5,
+      "hum": null,
+      "room_temp": null,
+      "finger": true
+    },
+    "prediction": {
+      "ts": "2026-01-01T10:00:04+00:00",
+      "label": "NORMAL",
+      "severity": 0,
+      "score": null
+    }
+  },
+  "predictions_response": {
+    "items": [
+      {
+        "ts": "2026-01-01T10:00:00+00:00",
+        "label": "NORMAL",
+        "severity": 0,
+        "score": null,
+        "model_version": "if_v1",
+        "rule_severity": 0,
+        "ml_severity": null,
+        "decision_mode": "RULE",
+        "decision_source": "RULE"
+      },
+      {
+        "ts": "2026-01-01T10:00:01+00:00",
+        "label": "ANOMALY",
+        "severity": 1,
+        "score": null,
+        "model_version": "if_v1",
+        "rule_severity": 1,
+        "ml_severity": null,
+        "decision_mode": "RULE",
+        "decision_source": "RULE"
+      },
+      {
+        "ts": "2026-01-01T10:00:02+00:00",
+        "label": "ANOMALY",
+        "severity": 2,
+        "score": null,
+        "model_version": "if_v1",
+        "rule_severity": 2,
+        "ml_severity": null,
+        "decision_mode": "RULE",
+        "decision_source": "RULE"
+      },
+      {
+        "ts": "2026-01-01T10:00:04+00:00",
+        "label": "NORMAL",
+        "severity": 0,
+        "score": null,
+        "model_version": "if_v1",
+        "rule_severity": 0,
+        "ml_severity": null,
+        "decision_mode": "RULE",
+        "decision_source": "RULE"
+      }
+    ]
+  }
+}

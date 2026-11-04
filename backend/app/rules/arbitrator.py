@@ -16,6 +16,10 @@ class ArbitrationResult(BaseModel):
     decision_mode: str
     decision_source: str
     is_fallback: bool = False
+    dl_score: Optional[float] = None
+    dl_severity: Optional[int] = None
+    margin: Optional[float] = None
+    inference_ms: Optional[float] = None
 
 def arbitrate(
     rule_severity: int,
@@ -32,6 +36,10 @@ def arbitrate(
     mode_upper = mode.upper()
     ml_sev = ml_result.raw_severity if ml_result else None
     ml_score = ml_result.raw_score if ml_result else None
+    dl_score = getattr(ml_result, "dl_score", None)
+    dl_sev = getattr(ml_result, "dl_severity", None)
+    margin = getattr(ml_result, "margin", None)
+    inf_ms = getattr(ml_result, "inference_ms", None)
 
     if mode_upper == "ML":
         if ml_result is not None and ml_result.raw_severity is not None:
@@ -45,7 +53,11 @@ def arbitrate(
                 published_score=ml_score,
                 decision_mode="ML",
                 decision_source="ML",
-                is_fallback=False
+                is_fallback=False,
+                dl_score=dl_score,
+                dl_severity=dl_sev,
+                margin=margin,
+                inference_ms=inf_ms
             )
         else:
             is_warmup = bool(ml_result and getattr(ml_result, 'is_warmup', False))
@@ -65,7 +77,11 @@ def arbitrate(
                 published_score=None,
                 decision_mode="ML",
                 decision_source=source,
-                is_fallback=True
+                is_fallback=True,
+                dl_score=dl_score,
+                dl_severity=dl_sev,
+                margin=margin,
+                inference_ms=inf_ms
             )
     else:
         return ArbitrationResult(
@@ -77,5 +93,9 @@ def arbitrate(
             published_score=ml_score,
             decision_mode="RULE",
             decision_source="RULE",
-            is_fallback=False
+            is_fallback=False,
+            dl_score=dl_score,
+            dl_severity=dl_sev,
+            margin=margin,
+            inference_ms=inf_ms
         )

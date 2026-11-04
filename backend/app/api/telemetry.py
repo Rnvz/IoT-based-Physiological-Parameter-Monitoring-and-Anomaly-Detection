@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timezone
 from typing import Optional
+import numpy as np
 from fastapi import APIRouter, Query, Depends
 from fastapi.responses import StreamingResponse
 
@@ -60,6 +61,20 @@ async def get_latest(
                 "severity": prediction.published_severity,
                 "score": prediction.ml_score,
             }
+            if prediction.dl_score is not None or getattr(settings, "model_kind", "ml").lower() == "dl":
+                prediction_dict["dl_score"] = prediction.dl_score
+                prediction_dict["dl_severity"] = prediction.dl_severity
+                prediction_dict["inference_ms"] = prediction.inference_ms
+                prediction_dict["model_version"] = prediction.model_version
+                prediction_dict["decision_mode"] = prediction.decision_mode
+                prediction_dict["decision_source"] = prediction.decision_source
+                prediction_dict["rule_severity"] = prediction.rule_severity
+                prediction_dict["ml_severity"] = prediction.ml_severity
+                if prediction.dl_score is not None:
+                    denom = max(1e-9, 0.024805 - 0.013571)
+                    prediction_dict["margin"] = round(float(np.clip((prediction.dl_score - 0.013571) / denom, -1.0, 2.0)), 4)
+                else:
+                    prediction_dict["margin"] = None
 
     return {
         "reading": reading_dict,
@@ -108,8 +123,9 @@ async def get_predictions(
     repo = get_repository()
     preds = await repo.get_predictions(target_device, limit=limit)
 
-    items = [
-        {
+    items = []
+    for p in preds:
+        item = {
             "ts": p.ts,
             "label": p.label,
             "severity": p.published_severity,
@@ -120,8 +136,16 @@ async def get_predictions(
             "decision_mode": p.decision_mode,
             "decision_source": p.decision_source,
         }
-        for p in preds
-    ]
+        if p.dl_score is not None or getattr(settings, "model_kind", "ml").lower() == "dl":
+            item["dl_score"] = p.dl_score
+            item["dl_severity"] = p.dl_severity
+            item["inference_ms"] = p.inference_ms
+            if p.dl_score is not None:
+                denom = max(1e-9, 0.024805 - 0.013571)
+                item["margin"] = round(float(np.clip((p.dl_score - 0.013571) / denom, -1.0, 2.0)), 4)
+            else:
+                item["margin"] = None
+        items.append(item)
     return {"items": items}
 
 @router.get("/device/status")

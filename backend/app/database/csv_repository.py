@@ -6,6 +6,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Set, Tuple, Dict, Any, Generator
+from app.config import settings
 from app.database.interfaces import (
     BaseRepository,
     ReadingRecord,
@@ -67,11 +68,16 @@ class CSVRepository(BaseRepository):
         if not os.path.exists(self.predictions_file):
             with open(self.predictions_file, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow([
+                header = [
                     "ts", "device_id", "rule_severity", "ml_severity", "ml_score",
                     "published_severity", "decision_mode", "decision_source", "label", "model_version"
-                ])
+                ]
+                if getattr(settings, "model_kind", "ml").lower() == "dl":
+                    header.extend(["dl_score", "dl_severity", "inference_ms"])
+                writer.writerow(header)
         else:
+            if getattr(settings, "model_kind", "ml").lower() == "dl":
+                self._migrate_predictions_header_for_dl()
             try:
                 with open(self.predictions_file, "r", encoding="utf-8") as f:
                     reader = csv.DictReader(f)
@@ -105,6 +111,44 @@ class CSVRepository(BaseRepository):
                         )
             except Exception:
                 pass
+
+    def _migrate_predictions_header_for_dl(self):
+        """
+        Non-destructively migrates a legacy 10-column predictions.csv to 13 columns
+        by updating the header to include dl_score, dl_severity, inference_ms
+        and padding legacy data rows with empty strings.
+        """
+        if not os.path.exists(self.predictions_file):
+            return
+        try:
+            with open(self.predictions_file, "r", newline="", encoding="utf-8") as f:
+                reader = list(csv.reader(f))
+            if not reader:
+                return
+            header = reader[0]
+            if "dl_score" in header:
+                return  # already migrated
+
+            new_header = list(header) + ["dl_score", "dl_severity", "inference_ms"]
+            new_rows = [new_header]
+            for row in reader[1:]:
+                if len(row) == len(header):
+                    new_rows.append(row + ["", "", ""])
+                else:
+                    new_rows.append(row)
+
+            tmp_file = f"{self.predictions_file}.tmp"
+            bak_file = f"{self.predictions_file}.bak"
+            import shutil
+            shutil.copy2(self.predictions_file, bak_file)
+
+            with open(tmp_file, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerows(new_rows)
+            os.replace(tmp_file, self.predictions_file)
+            logger.info(f"[CSVRepository] Migrated {self.predictions_file} to 13-column DL header (backup saved to {bak_file}).")
+        except Exception as e:
+            logger.error(f"[CSVRepository] Error migrating predictions header: {e}")
 
     async def save_reading(self, reading: ReadingRecord) -> bool:
         key = (reading.device_id, reading.ts)
@@ -202,9 +246,25 @@ class CSVRepository(BaseRepository):
             self._latest_predictions[prediction.device_id] = prediction
 
             try:
+                file_has_dl = False
+                if os.path.exists(self.predictions_file):
+                    try:
+                        with open(self.predictions_file, "r", encoding="utf-8") as f_hdr:
+                            first_line = f_hdr.readline()
+                            if "dl_score" in first_line:
+                                file_has_dl = True
+                    except Exception:
+                        pass
+                else:
+                    file_has_dl = getattr(settings, "model_kind", "ml").lower() == "dl" or prediction.dl_score is not None
+
+                if not file_has_dl and (getattr(settings, "model_kind", "ml").lower() == "dl" or prediction.dl_score is not None):
+                    self._migrate_predictions_header_for_dl()
+                    file_has_dl = True
+
                 with open(self.predictions_file, "a", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
-                    writer.writerow([
+                    row = [
                         prediction.ts,
                         prediction.device_id,
                         "" if prediction.rule_severity is None else prediction.rule_severity,
@@ -215,7 +275,14 @@ class CSVRepository(BaseRepository):
                         prediction.decision_source,
                         prediction.label,
                         prediction.model_version
-                    ])
+                    ]
+                    if file_has_dl:
+                        row.extend([
+                            "" if prediction.dl_score is None else f"{prediction.dl_score:.6f}",
+                            "" if prediction.dl_severity is None else prediction.dl_severity,
+                            "" if prediction.inference_ms is None else f"{prediction.inference_ms:.2f}"
+                        ])
+                    writer.writerow(row)
                 return True
             except Exception as e:
                 logger.error(f"[CSVRepository] Error writing prediction: {e}")
@@ -358,7 +425,10 @@ class CSVRepository(BaseRepository):
             decision_mode=row.get("decision_mode", "RULE"),
             decision_source=row.get("decision_source", row.get("decision_mode", "RULE")),
             label=row.get("label", "NORMAL"),
-            model_version=row.get("model_version", "if_v1")
+            model_version=row.get("model_version", "if_v1"),
+            dl_score=parse_float(row.get("dl_score")),
+            dl_severity=parse_int(row.get("dl_severity")),
+            inference_ms=parse_float(row.get("inference_ms"))
         )
 
     def stream_dataset_export(self) -> Generator[str, None, None]:

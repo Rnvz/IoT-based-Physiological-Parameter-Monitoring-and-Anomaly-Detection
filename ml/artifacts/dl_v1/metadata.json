@@ -1,0 +1,53 @@
+{
+  "model_version": "ae_v1",
+  "variant": "v2",
+  "feature_order": [
+    "Heart_Rate",
+    "SpO2"
+  ],
+  "scaler": {
+    "mean": [
+      76.17215172123677,
+      97.45148557669606
+    ],
+    "scale": [
+      9.768103813500051,
+      1.4986419025808964
+    ]
+  },
+  "thresholds": {
+    "warning_p95": 0.013570531643927092,
+    "critical_p99": 0.02480475604534149
+  },
+  "persistence_N": 3,
+  "split_sha256": "15a424ff1118cac8dfe3cbd20d80f028863b46edc235db24a2dd50adef6d1635",
+  "seeds": [
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "training_sources": [
+    "nasirayub2",
+    "engrarri21",
+    "gourangomandal"
+  ],
+  "date": "2026-10-31T07:04:20.470196+00:00",
+  "environment": {
+    "python": "3.14.8",
+    "torch": "2.15.0+cpu",
+    "onnx": "1.23.2",
+    "onnxruntime": "1.31.1",
+    "scikit_learn": "1.9.1",
+    "numpy": "2.5.4"
+  },
+  "parity_tolerances": {
+    "onnx_vs_numpy_max_abs_diff_scores_le_10": 4.77e-06,
+    "onnx_vs_numpy_max_rel_diff_all": 4.19e-04,
+    "onnx_vs_numpy_threshold_region_0_005_to_0_05": {
+      "max_abs_diff": 4.43e-07,
+      "max_rel_diff": 2.18e-05
+    }
+  }
+}

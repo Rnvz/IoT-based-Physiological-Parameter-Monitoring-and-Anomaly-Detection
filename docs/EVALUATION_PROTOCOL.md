@@ -92,3 +92,43 @@ Seluruh model baru (termasuk model Deep Learning seperti LSTM-Autoencoder atau 1
 3. **Tanpa Tuning pada Test Set**:
    - Dilarang keras melakukan tuning hyperparameter, pemilihan threshold ulang, atau eksplorasi data pada Test Set.
    - Evaluasi pada Test Set hanya dilakukan **satu kali** sebagai verifikasi akhir performa generalisasi model.
+
+---
+
+## 7. Cara Menjalankan Evaluasi (How to Run)
+
+Evaluasi harness dibekukan di dalam modul `ml_eval/`. Eksekusi pipeline dilakukan secara modular atau end-to-end melalui perintah CLI berikut:
+
+### 7.1 Segmentasi Sesi
+Memeriksa gap antar-sampel (default: 10 menit / 600 detik), memfilter `finger=True` dan validitas biologis vitals, serta memberi tag `session_id`:
+```bash
+python3 -m ml_eval.sessions -i data/dataset.csv -o data/dataset_segmented.csv
+```
+
+### 7.2 Pembekuan Partisi (Freeze Split)
+Membagi sesi secara deterministik (Train / Val / Test) dengan seed tetap dan menyimpan checksum SHA256:
+```bash
+python3 -m ml_eval.split -i data/dataset.csv -o splits/split.json --seed 42
+```
+> [!IMPORTANT]
+> Script akan menolak menimpa file `splits/split.json` yang sudah ada demi menjaga integritas benchmark. Gunakan opsi `--force` hanya jika sengaja mereset benchmark dari awal.
+
+### 7.3 Eksekusi Pipeline Evaluasi End-to-End
+Menjalankan ekstraksi fitur jendela kausal (*window=15*, tanpa *cross-session leakage*, tanpa *zero-filling*), pelatihan baseline, injeksi anomali sintetis pada salinan data uji, dan perhitungan metrik baku:
+```bash
+python3 -m ml_eval.run -d data/dataset.csv -s splits/split.json --feature-set core
+```
+
+### 7.4 Verifikasi dengan Data Uji Sintetis (Fixture)
+Untuk menguji keabsahan harness tanpa menggunakan data rekaman riil:
+```bash
+python3 -m ml_eval.run -d tests/fixtures/sample_dataset.csv --fixture
+```
+Setiap keluaran konsol dan laporan yang dihasilkan dengan flag `--fixture` (atau path/metadata bertanda fixture) akan diawali secara otomatis dengan banner peringatan:
+```
+================================================================================
+SYNTHETIC FIXTURE DATA - NOT A RESULT
+================================================================================
+```
+Hasil evaluasi disimpan terstruktur pada direktori `results/<split_sha>/report.json` dan `results/<split_sha>/report.md`.
+
