@@ -258,14 +258,18 @@ Ambang batas internal model:
      - `test_export_parity_torch_onnx_numpy` (SKIPPED: PyTorch not installed)
      - `test_anomaly_score_direction` (SKIPPED: PyTorch not installed)
 
-### b. Uji Paritas ONNX vs NumPy Forward (10.000 Sampel Termasuk Titik Ekstrem & Batas Ambang)
-- **Titik Sampel**: 10.000 titik (distribusi fisiologis normal/abnormal, sapuan batas ambang, dan nilai ekstrem).
-- **Maksimum Selisih Absolut ($\text{skor} \le 10.0$)**: $4,77 \times 10^{-6}$ ($< 10^{-5}$).
-- **Maksimum Selisih Relatif (seluruh sampel)**: $4,19 \times 10^{-4}$ ($0,0419\%$).
-- **Zona Kritis Ambang Batas ($[0,005, 0,05]$ mencakup $\text{warn}=0,0136$ dan $\text{crit}=0,0248$, $N=2.161$)**:
-  - Maksimum Selisih Absolut: **$4,43 \times 10^{-7}$**.
-  - Maksimum Selisih Relatif: **$2,18 \times 10^{-5}$** ($0,00218\%$).
-- Selisih paritas pada batas keputusan berada pada orde $\sim 10^{-7}$, jauh di bawah marjin toleransi ambang batas model, membuktikan kesepakatan klasifikasi 100% identik antara ONNX runtime dan NumPy runtime.
+### b. Uji Paritas ONNX vs NumPy Forward
+
+1. **Uji Grid Fisiologis Sistematis (HR 40–160 step 1, SpO2 70–100 step 0.5; $N = 7.381$ Titik)**:
+   - **Maksimum Selisih Absolut ($L_\infty$)**: **$3,05 \times 10^{-5}$** ($0,0000305$).
+   - **Maksimum Selisih Relatif**: **$1,08\%$** ($0,0108$).
+   - **Rata-rata Selisih Absolut ($L_1$)**: $3,49 \times 10^{-6}$.
+   - **Status Toleransi Rencana Awal ($1 \times 10^{-5}$)**: **Terlewati pada skor mentah** (terdapat 372 titik dari 7.381 titik evaluasi di mana selisih skor melebihi $10^{-5}$ akibat perbedaan akumulasi presisi floating-point antara implementasi operator GeLU/LayerNorm pada ONNX Runtime C++ vs NumPy/SciPy `erf`). Dokumen tidak mengklaim paritas sebagai "EXACT MATCH".
+   - **Dampak pada Keputusan Severity**: Meskipun toleransi $10^{-5}$ terlewati pada skor rekonstruksi mentah di sebagian titik ekstrem, klasifikasi severity tetap konsisten karena ambang batas keputusan operasional berada pada orde $10^{-2}$ ($\text{warn} = 0,013571$ dan $\text{crit} = 0,024805$), sehingga marjin pemisah antar tingkat severity jauh melampaui selisih numerik skor mentah tersebut.
+
+2. **Evaluasi Sampel Validasi & Zona Kritis Batas Ambang ($[0,005, 0,05]$, $N = 2.161$)**:
+   - Maksimum Selisih Absolut: **$4,43 \times 10^{-7}$**.
+   - Maksimum Selisih Relatif: **$2,18 \times 10^{-5}$** ($0,00218\%$).
 
 ### c. Cakupan Pengukuran Latensi Inferensi (0,17 ms)
 Angka latensi inferensi $\approx 0,17\text{ ms}$ ($\approx 170\text{--}200\text{ }\mu\text{s}$) yang dilaporkan pada ringkasan benchmark adalah durasi *raw forward pass* model matematika (`DenseAE v2`) secara lokal di CPU (komputasi matriks ONNX / NumPy array forward pass). Angka ini **BUKAN latensi end-to-end sistem telemetri IoT**, yang secara riil di lapangan didominasi oleh:
