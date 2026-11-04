@@ -28,6 +28,12 @@ class ThresholdEvaluator:
     def load_thresholds(self):
         paths_to_try = [
             self.thresholds_path,
+            os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/physio_synthetic/thresholds.joblib"),
+            os.path.join(os.path.dirname(__file__), "../../../models/physio_synthetic/thresholds.joblib"),
+            "ml_pipeline/models/physio_synthetic/thresholds.joblib",
+            "../ml_pipeline/models/physio_synthetic/thresholds.joblib",
+            "models/physio_synthetic/thresholds.joblib",
+            "../models/physio_synthetic/thresholds.joblib",
             os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/thresholds.joblib"),
             "ml_pipeline/models/thresholds.joblib",
             "../ml_pipeline/models/thresholds.joblib",

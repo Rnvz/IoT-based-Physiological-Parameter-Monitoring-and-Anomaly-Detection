@@ -18,10 +18,10 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:8080,http://localhost:3000,http://127.0.0.1:8080"
     log_level: str = "INFO"
 
-    model_path: str = "ml_pipeline/models/isolation_forest_model.joblib"
-    scaler_path: str = "ml_pipeline/models/scaler.joblib"
-    thresholds_path: str = "ml_pipeline/models/thresholds.joblib"
-    model_version: str = "if_v1"
+    model_path: str = "ml_pipeline/models/physio_synthetic/isolation_forest_model.joblib"
+    scaler_path: str = "ml_pipeline/models/physio_synthetic/scaler.joblib"
+    thresholds_path: str = "ml_pipeline/models/physio_synthetic/thresholds.joblib"
+    model_version: str = "physio_synthetic_v1"
     window_size: int = 15
     max_message_gap_seconds: float = 5.0
     persistent_anomaly_count: int = 3
