@@ -10,11 +10,12 @@ Validates recorded session CSVs against quality requirements from docs/RECORDING
      - Percentage of rows with finger == True (must be >= 95.0%).
      - Percentage of rows with hr, spo2, or temp == 0.0 when finger == True (must be < 2.0%).
      - Percentage of rows with null/missing hum or room_temp (must be 0.0% unless allowed).
+     - Unique device_id values (rejects if mixed or does not match expected_device_id).
      - Feature ranges (min, max, mean, std) for HR, SpO2, temp, hum, room_temp.
   3. Rejects any session that violates protocol criteria.
 
 Usage:
-    python scripts/validate_recording.py -i data_sessions/session_001/
+    python scripts/validate_recording.py -i data_sessions/session_001/ --expected-device-id esp32-01
     python scripts/validate_recording.py -i tests/fixtures/sample_fixture.csv --fixture
 """
 
@@ -26,9 +27,8 @@ from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-# Protocol acceptance criteria thresholds
-DEFAULT_MIN_SESSION_ROWS = 100
-RECOMMENDED_MIN_ROWS = 300
+# Protocol acceptance criteria thresholds (Strict Protocol Defaults)
+DEFAULT_MIN_SESSION_ROWS = 300
 MIN_FINGER_TRUE_PCT = 95.0
 MAX_ZERO_VITALS_PCT = 2.0
 MAX_INTRA_SESSION_GAP_SECONDS = 3.0
@@ -81,6 +81,7 @@ def validate_single_session_df(
     session_id: str,
     df_session: pd.DataFrame,
     min_rows: int = DEFAULT_MIN_SESSION_ROWS,
+    expected_device_id: Optional[str] = None,
     allow_null_dht: bool = False
 ) -> Dict[str, Any]:
     """
@@ -99,6 +100,7 @@ def validate_single_session_df(
             "zero_vitals_pct": 0.0,
             "null_hum_pct": 100.0,
             "null_room_temp_pct": 100.0,
+            "unique_device_ids": [],
             "feature_ranges": {},
             "status": "REJECT",
             "reasons": ["Sesi tidak memiliki baris data (0 rows)."]
@@ -147,6 +149,11 @@ def validate_single_session_df(
 
     null_hum_pct = calc_null_pct(df_session["_hum"])
     null_room_temp_pct = calc_null_pct(df_session["_room_temp"])
+
+    # Device ID check
+    unique_dev_ids: List[str] = []
+    if "device_id" in df_session.columns:
+        unique_dev_ids = sorted(df_session["device_id"].dropna().astype(str).unique().tolist())
 
     # Valid rows
     valid_mask = (
@@ -208,6 +215,15 @@ def validate_single_session_df(
         if null_room_temp_pct > 0.0:
             reasons.append(f"Suhu ruangan (room_temp) memiliki {null_room_temp_pct:.1f}% data null/hilang.")
 
+    # Device ID validations
+    if len(unique_dev_ids) > 1:
+        reasons.append(f"Ditemukan campuran device_id dalam satu sesi: {unique_dev_ids}")
+    elif expected_device_id is not None:
+        if len(unique_dev_ids) == 0:
+            reasons.append(f"Kolom 'device_id' tidak ditemukan atau kosong, diharapkan '{expected_device_id}'.")
+        elif unique_dev_ids[0] != expected_device_id:
+            reasons.append(f"device_id tidak sesuai: ditemukan {unique_dev_ids}, diharapkan '{expected_device_id}'.")
+
     status = "ACCEPT" if len(reasons) == 0 else "REJECT"
 
     return {
@@ -221,6 +237,7 @@ def validate_single_session_df(
         "zero_vitals_pct": zero_vitals_pct,
         "null_hum_pct": null_hum_pct,
         "null_room_temp_pct": null_room_temp_pct,
+        "unique_device_ids": unique_dev_ids,
         "feature_ranges": feature_ranges,
         "status": status,
         "reasons": reasons
@@ -230,6 +247,7 @@ def validate_single_session_df(
 def validate_recording(
     input_path: str,
     min_rows: int = DEFAULT_MIN_SESSION_ROWS,
+    expected_device_id: Optional[str] = None,
     allow_null_dht: bool = False,
     is_fixture: bool = False
 ) -> Dict[str, Any]:
@@ -269,14 +287,14 @@ def validate_recording(
     df["_hum"] = pd.to_numeric(df.get("hum", pd.Series(dtype=float)), errors="coerce")
     df["_room_temp"] = pd.to_numeric(df.get("room_temp", pd.Series(dtype=float)), errors="coerce")
 
-    if "ts" in df.columns:
-        df["_dt"] = df["ts"].apply(parse_timestamp)
+    ts_col = "ts" if "ts" in df.columns else ("timestamp" if "timestamp" in df.columns else None)
+    if ts_col:
+        df["_dt"] = df[ts_col].apply(parse_timestamp)
         df = df.sort_values("_dt").reset_index(drop=True)
     else:
         df["_dt"] = None
 
     # Segment into sessions
-    # If session_id column already exists, use it; otherwise segment on gap > 600s
     if "session_id" in df.columns:
         df["_session_id"] = df["session_id"].astype(str)
     else:
@@ -302,6 +320,7 @@ def validate_recording(
             session_id=str(sid),
             df_session=group.reset_index(drop=True),
             min_rows=min_rows,
+            expected_device_id=expected_device_id,
             allow_null_dht=allow_null_dht
         )
         session_results[str(sid)] = res_s
@@ -339,6 +358,8 @@ def print_report(res: Dict[str, Any]):
         dur_m = s["duration_seconds"] / 60.0
         status_tag = "[ACCEPT]" if s["status"] == "ACCEPT" else "[REJECT]"
         print(f"\n>> {status_tag} {sid.upper()} | {s['valid_rows']}/{s['total_rows']} baris valid | Durasi: {s['duration_seconds']:.1f}s ({dur_m:.1f} m)")
+        dev_str = ", ".join(f"'{d}'" for d in s["unique_device_ids"]) if s["unique_device_ids"] else "N/A (tidak ada kolom)"
+        print(f"   - Unique device_id         : {dev_str}")
         print(f"   - Jeda > 3.0s              : {s['gaps_gt_3s_count']} kejadian (Maks gap: {s['max_gap_seconds']:.2f}s)")
         print(f"   - % finger == True         : {s['finger_true_pct']:.2f}%")
         print(f"   - % Vital == 0.0           : {s['zero_vitals_pct']:.2f}%")
@@ -372,6 +393,7 @@ def main():
     parser = argparse.ArgumentParser(description="Validasi sesi rekaman telemetri per-sesi sesuai docs/RECORDING_PROTOCOL.md.")
     parser.add_argument("--input", "-i", required=True, help="Path ke file CSV atau direktori sesi")
     parser.add_argument("--min-rows", type=int, default=DEFAULT_MIN_SESSION_ROWS, help=f"Minimum baris valid per sesi (default: {DEFAULT_MIN_SESSION_ROWS})")
+    parser.add_argument("--expected-device-id", type=str, default=None, help="Ekspektasi device_id tunggal (tolak jika berbeda atau campuran)")
     parser.add_argument("--allow-null-dht", action="store_true", help="Izinkan null pada sensor DHT22 (untuk skenario DHT_UNPLUGGED)")
     parser.add_argument("--fixture", action="store_true", help="Tandai eksplisit sebagai data fixture pengujian")
     args = parser.parse_args()
@@ -380,6 +402,7 @@ def main():
         res = validate_recording(
             input_path=args.input,
             min_rows=args.min_rows,
+            expected_device_id=args.expected_device_id,
             allow_null_dht=args.allow_null_dht,
             is_fixture=args.fixture
         )
