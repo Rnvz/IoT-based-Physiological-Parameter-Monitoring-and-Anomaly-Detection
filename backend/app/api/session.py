@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 
 from app.database.factory import get_repository
 from app.database.interfaces import ScenarioEventRecord
-from app.api.deps import verify_api_key, verify_read_api_key
+from app.api.deps import verify_api_key, verify_read_api_key, rate_limit_post
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -24,7 +24,7 @@ class ScenarioRequest(BaseModel):
     scenario: ScenarioType
     note: Optional[str] = Field(default=None, max_length=200)
 
-@router.post("/scenario")
+@router.post("/scenario", dependencies=[Depends(rate_limit_post)])
 async def set_scenario(
     payload: ScenarioRequest,
     _auth: str = Depends(verify_api_key)

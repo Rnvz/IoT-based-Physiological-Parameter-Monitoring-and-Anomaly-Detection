@@ -1,11 +1,13 @@
 import os
 import joblib
+import logging
 from pydantic import BaseModel
 from typing import Optional, Dict
-import numpy as np
 from app.config import settings
 from app.ml.device_window import DeviceWindowManager
 from app.ml.severity import ThresholdEvaluator, DevicePersistentEvaluator
+
+logger = logging.getLogger(__name__)
 
 class MLInferenceResult(BaseModel):
     raw_score: Optional[float] = None
@@ -53,11 +55,11 @@ class MLService:
             try:
                 self.model = joblib.load(resolved_model)
                 self.scaler = joblib.load(resolved_scaler)
-                print(f"[MLService] Loaded model from {resolved_model} and scaler from {resolved_scaler}")
+                logger.info(f"[MLService] Loaded model from {resolved_model} and scaler from {resolved_scaler}")
             except Exception as e:
-                print(f"[MLService] Failed loading ML artifacts: {e}")
+                logger.error(f"[MLService] Failed loading ML artifacts: {e}")
         else:
-            print("[MLService] ML artifacts not found. Model inference will be unavailable.")
+            logger.warning("[MLService] ML artifacts not found. Model inference will be unavailable.")
 
     def _get_evaluator(self, device_id: str) -> DevicePersistentEvaluator:
         if device_id not in self.evaluators:
@@ -128,7 +130,7 @@ class MLService:
                 is_warmup=False
             )
         except Exception as e:
-            print(f"[MLService] Inference error for device {device_id}: {e}")
+            logger.error(f"[MLService] Inference error for device {device_id}: {e}")
             return MLInferenceResult(label="SENSOR_ERROR", model_version=settings.model_version)
 
 _ml_service_instance: Optional[MLService] = None

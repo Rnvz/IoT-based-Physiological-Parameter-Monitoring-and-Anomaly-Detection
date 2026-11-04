@@ -452,8 +452,45 @@
     buzzerTest(on) {
       sendAction("/actuator/buzzer", { test: on });
     },
-    exportCsv() {
-      showBanner("CSV download is only available in direct mode.");
+    async exportCsv() {
+      const key = getKey();
+      if (!key) {
+        showBanner("Enter the API key in the top bar to download the dataset CSV.");
+        return;
+      }
+
+      showBanner("Preparing dataset export...");
+      try {
+        const res = await fetch(cfg.API_BASE + "/export/dataset.csv", {
+          method: "GET",
+          headers: {
+            "X-API-Key": key
+          }
+        });
+
+        if (res.status === 401) {
+          showBanner("Failed to export dataset: Invalid or missing API key.");
+          return;
+        }
+
+        if (!res.ok) {
+          showBanner("Failed to export dataset: server returned status " + res.status);
+          return;
+        }
+
+        const blob = await res.blob();
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "dataset_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".csv";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+
+        hideBanner();
+      } catch (e) {
+        showBanner("Failed to download dataset CSV: " + e.message);
+      }
     }
   };
 
@@ -479,6 +516,7 @@
     document.querySelector(".key").hidden = true;
     $("btn-csv").hidden = false;
   } else {
+    $("btn-csv").hidden = false;
     useTransport(apiTransport);
   }
 })();

@@ -1,5 +1,4 @@
-import pytest
-from app.rules.arbitrator import arbitrate, ArbitrationResult
+from app.rules.arbitrator import arbitrate
 from app.ml.inference import MLInferenceResult
 
 def test_arbitrator_rule_mode():
@@ -51,7 +50,7 @@ def test_arbitrator_ml_mode_available():
     assert res.is_fallback is False
 
 def test_arbitrator_ml_mode_fallback_on_warmup():
-    """When ML is in warm-up (is_warmup=True, raw_severity=None), must fall back to RULE."""
+    """When ML is in warm-up (is_warmup=True), suppresses buzzer by holding published_severity at 0 (NORMAL) with WARMUP source."""
     ml_res = MLInferenceResult(
         label="NO_DATA",
         raw_severity=None,
@@ -64,9 +63,9 @@ def test_arbitrator_ml_mode_fallback_on_warmup():
         mode="ML"
     )
     assert res.decision_mode == "ML"
-    assert res.decision_source == "RULE_FALLBACK"
-    assert res.published_severity == 1
-    assert res.published_label == "ANOMALY"
+    assert res.decision_source == "WARMUP"
+    assert res.published_severity == 0
+    assert res.published_label == "NORMAL"
     assert res.rule_severity == 1
     assert res.ml_severity is None
     assert res.is_fallback is True

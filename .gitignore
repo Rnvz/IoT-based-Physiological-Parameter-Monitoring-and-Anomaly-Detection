@@ -102,6 +102,11 @@ Dataset/
 ml_pipeline/data/*
 !ml_pipeline/data/.gitkeep
 
+# Preserve test fixtures
+!tests/fixtures/
+!tests/fixtures/**
+
+
 # ------------------------------------------------------------------------------
 # 4. Embedded / PlatformIO / Arduino Firmware
 # ------------------------------------------------------------------------------

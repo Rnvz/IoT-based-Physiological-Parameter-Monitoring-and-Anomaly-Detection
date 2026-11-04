@@ -3,7 +3,7 @@ import logging
 import uuid
 import asyncio
 from datetime import datetime, timezone
-from typing import Optional, Callable
+from typing import Optional
 import paho.mqtt.client as mqtt
 from pydantic import ValidationError
 

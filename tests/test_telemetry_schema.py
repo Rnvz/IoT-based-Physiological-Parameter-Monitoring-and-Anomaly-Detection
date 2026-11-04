@@ -122,8 +122,11 @@ def test_command_payload_validation():
     cmd3 = CommandPayload(buzzer_test=True, seq=103)
     assert cmd3.buzzer_test is True
 
+    cmd_purple = CommandPayload(mode="MANUAL", color="PURPLE", seq=104)
+    assert cmd_purple.color == "PURPLE"
+
     with pytest.raises(ValidationError):
-        CommandPayload(mode="MANUAL", color="PURPLE", seq=104)
+        CommandPayload(mode="MANUAL", color="CYAN", seq=105)
 
     with pytest.raises(ValidationError):
         CommandPayload(mode="MANUAL", color="BLUE", brightness=150, seq=105)

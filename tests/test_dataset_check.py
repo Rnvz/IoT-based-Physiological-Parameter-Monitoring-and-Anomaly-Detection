@@ -1,7 +1,6 @@
 import os
 import csv
 import tempfile
-import pytest
 from datetime import datetime, timezone, timedelta
 from scripts.dataset_check import analyze_dataset
 
