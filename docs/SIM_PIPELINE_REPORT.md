@@ -147,3 +147,39 @@ Pada sesi `S16` (`scenario == "DHT_UNPLUGGED"`), seluruh 900 baris memiliki `hum
 
 **Kesimpulan Kritis Ablasi**:
 Sensor fotopletismografi **MAX30102 (Heart Rate & SpO2) adalah sensor paling dominan dan esensial**. Tanpa MAX30102, anomali gerakan (`MOTION`) dan pergeseran jari (`FINGER_SHIFT`) sama sekali tidak dapat dideteksi oleh sensor suhu tubuh dan sensor lingkungan (Recall anjlok menjadi 0,71%).
+
+---
+
+## 6. Evaluasi Model Deep Learning (Autoencoder DenseAE)
+
+### A. Pretrained Production Model (`dl_v1` - Transfer Zero-Shot dari Data Publik)
+Model Autoencoder DenseAE v2 (`ml/artifacts/dl_v1/model.onnx` / `model_weights.npz`) yang telah dilatih pada dataset publik (2 fitur: `Heart_Rate`, `SpO2`) diuji langsung pada dataset sintetis:
+- **Metrik Global**: $\text{ROC-AUC} = \mathbf{0.9060}$, $\text{PR-AUC} = \mathbf{0.7324}$ ($\text{PR-AUC} - \text{Prev} = 0.6845$).
+- **Ambang Batas Default Metadata (`p95 = 0.013571`)**:
+  - Tanpa Debounce: $\text{FPR} = 1,27\%$, $\text{Recall} = 65,84\%$, $\text{Precision} = 72,27\%$, $\text{F1} = 0.6890$.
+  - Dengan Debounce Persistensi ($N=3$): $\text{FPR} = \mathbf{0.52\%}$, $\text{Recall} = 41,64\%$, $\text{Precision} = \mathbf{80.14\%}$, $\text{F1} = 0.5480$.
+- **Ambang Batas Kalibrasi Val FPR 3%**:
+  - $\text{FPR} = 5,93\%$, $\text{Recall} = 71,53\%$, $\text{Precision} = 37,78\%$, $\text{F1} = 0.4945$.
+
+### B. Pelatihan Arsitektur DenseAE pada Dataset Sintetis
+Arsitektur simetris DenseAE ($(16, 8, 2, 8, 16)$ encoder-decoder) dilatih langsung pada set data `train` normal sintetis:
+1. **DenseAE 2D (Input: `Heart_Rate`, `SpO2`)**:
+   - $\text{ROC-AUC} = \mathbf{0.9983}$, $\text{PR-AUC} = \mathbf{0.9939}$ ($\text{PR} - \text{Prev} = \mathbf{0.9460}$).
+   - **Performa Test Set (Val FPR 3% Threshold)**:
+     - Tanpa Debounce: $\text{FPR} = \mathbf{1.77\%}$, $\text{Recall} = \mathbf{99.29\%}$ (279 dari 281 anomali tertangkap), $\text{Precision} = 73,81\%$, $\text{F1} = \mathbf{0.8467}$.
+     - Dengan Debounce Persistensi ($N=3$): $\text{FPR} = \mathbf{0.47\%}$ (hanya 26 false alarm), $\text{Recall} = 77,94\%$, $\text{Precision} = \mathbf{89.39\%}$, $\text{F1} = \mathbf{0.8327}$.
+   - **Rincian Skenario Test (Tanpa Debounce)**:
+     - `MOTION`: Recall = **100,0%** (198/198), FPR = 4,3% (30 FP)
+     - `FINGER_SHIFT`: Recall = **97,6%** (81/83), FPR = 0,8% (6 FP)
+     - `REST`: FPR = 1,3% (31 FP / 2.389)
+     - `TYPING`: FPR = 2,8% (25 FP / 892)
+     - `DHT_UNPLUGGED`: FPR = 0,8% (7 FP / 895)
+2. **DenseAE 3D (Input: `Heart_Rate`, `SpO2`, `Temperature`)**:
+   - $\text{ROC-AUC} = 0.9950$, $\text{PR-AUC} = 0.9820$, $\text{Test FPR} = 1,70\%$, $\text{Recall} = 97,86\%$, $\text{F1} = 0.8449$.
+3. **DenseAE 13D (Input: 13 Fitur Window Temporal)**:
+   - $\text{ROC-AUC} = 0.9699$, $\text{PR-AUC} = 0.4708$, $\text{Test FPR} = 4,35\%$, $\text{Recall} = 70,11\%$, $\text{F1} = 0.5495$.
+
+### C. Ringkasan Komparatif ML vs DL pada Data Sintetis
+- Model Deep Learning Autoencoder (**DenseAE 2D**) yang dilatih langsung pada data sintetis menghasilkan metrik akurasi tertinggi di antara seluruh pendekatan ($\text{ROC-AUC} = \mathbf{0.9983}$, $\text{PR-AUC} = \mathbf{0.9939}$, $\text{F1} = \mathbf{0.8467}$).
+- Berbeda dari model 13-window temporal yang terdampak oleh *window lag* sebesar 19,2% pasca-gerakan, model DL per-baris DenseAE 2D langsung mengenali pemulihan sinyal secara instan (FPR pada MOTION hanya 4,3% dengan Recall 100,0%).
+- Penambahan filter persistensi ($N=3$) pada DL secara drastis menekan tingkat alarm palsu ke level minimal (**0,47%** atau kurang dari 1 alarm palsu per 200 sampel) dengan presisi mendekati **90%**.
