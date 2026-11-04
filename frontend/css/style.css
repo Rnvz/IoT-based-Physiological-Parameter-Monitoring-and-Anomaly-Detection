@@ -193,21 +193,45 @@ main {
   font-weight: 750;
 }
 
-/* Dots animation for calculating status */
-.dots-loading::after {
-  content: ' ';
-  display: inline-block;
-  width: 1.5em;
-  text-align: left;
-  animation: dots 1.5s steps(4, jump-none) infinite;
+/* Animasi titik-titik loading tepat di samping tulisan Calculating */
+.dots-anim {
+  display: inline-flex;
+  margin-left: 5px;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  letter-spacing: 2px;
 }
 
-@keyframes dots {
-  0%   { content: ''; }
-  25%  { content: '.'; }
-  50%  { content: '..'; }
-  75%  { content: '...'; }
-  100% { content: '...'; }
+.dots-anim span {
+  display: inline-block;
+  color: inherit;
+  opacity: 0.25;
+  animation: dot-wave 1.4s infinite ease-in-out both;
+}
+
+.dots-anim span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.dots-anim span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.dots-anim span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes dot-wave {
+  0%, 80%, 100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
 }
 
 .band-sub {
@@ -632,32 +656,7 @@ input:focus-visible {
   }
 }
 
-.dots-loading::after {
-  content: ' .';
-  animation: dots 1.5s steps(4, jump-none) infinite;
-}
 
-@keyframes dots {
-  0% {
-    content: ' ';
-  }
-
-  25% {
-    content: ' .';
-  }
-
-  50% {
-    content: ' ..';
-  }
-
-  75% {
-    content: ' ...';
-  }
-
-  100% {
-    content: ' ...';
-  }
-}
 
 .note-bar {
   margin: 0;

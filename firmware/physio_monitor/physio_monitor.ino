@@ -239,26 +239,14 @@ const unsigned long DHT_INTERVAL = 2000;
 
 // ============================================================
 // STATUS
-// Status lokal firmware ini tetap dipakai untuk OLED dan buzzer
-// (perilaku buzzer belum diubah). Keputusan anomali dari model
-// diterima lewat topik result dan dipakai oleh lampu.
-// statusSistem tetap menyimpan 4 nilai ("MENUNGGU SENSOR",
-// "MENDETEKSI", "NORMAL", "ANOMALI") untuk buzzer dan payload MQTT.
-// Layar OLED hanya menampilkan "MENUNGGU SENSOR" atau "MENDETEKSI"
-// (lihat updateOLED).
+// Status lokal firmware ini menunjukkan kondisi pembacaan sensor:
+// "MENUNGGU SENSOR" jika jari belum terdeteksi, atau "MENDETEKSI"
+// jika sensor sedang mengumpulkan/membaca vitals.
+// Keputusan normal/anomali dan tingkat keparahan sepenuhnya
+// diterima dari model backend lewat topik /result.
 // ============================================================
 
 String statusSistem = "MENUNGGU SENSOR";
-
-
-// ============================================================
-// ANOMALY THRESHOLD (dipakai buzzer lokal)
-// ============================================================
-
-const float HR_LOW = 50.0;
-const float HR_HIGH = 100.0;
-const float SPO2_LOW = 90.0;
-const float TEMP_HIGH = 38.0;
 
 
 // ============================================================
@@ -395,6 +383,11 @@ void resetVitals() {
 
   firstBeatDetected = false;
   lastBeatSample = 0;
+
+  // Reset juga status hasil model & buzzer agar tidak membawa anomali dari sesi sebelumnya
+  haveResult = false;
+  lastSeverity = 0;
+  lastResultMs = 0;
 }
 
 
@@ -427,7 +420,12 @@ void addHR(float value) {
     total += hrHistory[i];
   }
 
-  bpmFiltered = total / hrHistoryCount;
+  // Butuh minimal 3 detak valid agar denyut jantung stabil dan tidak membaca noise awal
+  if (hrHistoryCount >= 3) {
+    bpmFiltered = total / hrHistoryCount;
+  } else {
+    bpmFiltered = 0.0;
+  }
 }
 
 
@@ -1249,7 +1247,7 @@ void serviceMQTT() {
 
 
 // ============================================================
-// STATUS (lokal, untuk OLED dan buzzer)
+// STATUS (lokal, untuk OLED dan indikator sensor)
 // ============================================================
 
 void updateStatus() {
@@ -1261,51 +1259,24 @@ void updateStatus() {
     return;
   }
 
-  if (bpmFiltered <= 0 || spo2Filtered <= 0) {
-
-    statusSistem = "MENDETEKSI";
-
-    return;
-  }
-
-  bool anomaly = false;
-
-  if (bpmFiltered < HR_LOW || bpmFiltered > HR_HIGH) {
-    anomaly = true;
-  }
-
-  if (spo2Filtered < SPO2_LOW) {
-    anomaly = true;
-  }
-
-  if (suhuValid && suhuAktual > TEMP_HIGH) {
-    anomaly = true;
-  }
-
-  if (anomaly) {
-    statusSistem = "ANOMALI";
-  } else {
-    statusSistem = "NORMAL";
-  }
+  statusSistem = "MENDETEKSI";
 }
 
 
 // ============================================================
-// BUZZER - beep 150 ms setiap 1000 ms saat ANOMALI
-// (perilaku belum diubah; menunggu keputusan apakah buzzer
-// mengikuti hasil model atau tetap ambang lokal)
+// BUZZER - Mengikuti keputusan model dari backend & manual test
+// Buzzer berbunyi beep 150 ms per 1000 ms jika model mendeteksi
+// anomali (lastSeverity >= 2), atau menyala terus jika buzzerTest aktif.
 // ============================================================
 
 void updateBuzzer() {
 
   unsigned long now = millis();
 
-
   // ----------------------------------------------------------
   // Tes buzzer dari dashboard
   // Selama aktif, buzzer menyala terus. Berhenti jika dimatikan
-  // atau melewati BUZZER_TEST_TIMEOUT. Setelah itu logika alarm
-  // normal di bawah berjalan seperti biasa.
+  // atau melewati BUZZER_TEST_TIMEOUT.
   // ----------------------------------------------------------
 
   if (buzzerTest) {
@@ -1326,7 +1297,13 @@ void updateBuzzer() {
     }
   }
 
-  if (statusSistem != "ANOMALI") {
+  // Jika tidak dalam kondisi test, buzzer hanya berbunyi jika:
+  // 1. Jari masih menempel di sensor
+  // 2. Hasil model valid dan belum timeout
+  // 3. Tingkat keparahan anomali kritis (lastSeverity >= 2)
+  bool isModelAnomaly = fingerPresent && haveResult && (now - lastResultMs <= RESULT_TIMEOUT) && (lastSeverity >= 2);
+
+  if (!isModelAnomaly) {
 
     digitalWrite(BUZZER_PIN, BUZZER_MATI);
 

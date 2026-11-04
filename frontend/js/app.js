@@ -9,7 +9,7 @@
     NORMAL: { text: "Normal", cls: "band-ok" },
     ANOMALY: { text: "Anomaly detected", cls: "band-bad" },
     NO_FINGER: { text: "Finger not detected", cls: "band-info" },
-    CALCULATING: { text: "Calculating", cls: "band-info dots-loading" },
+    CALCULATING: { text: "Calculating", cls: "band-info" },
     NO_DATA: { text: "No data", cls: "band-none" },
     SENSOR_ERROR: { text: "Sensor issue", cls: "band-warn" }
   };
@@ -35,7 +35,8 @@
   let selectedColor = "GREEN";
   const charts = {};
   let lampMode = "AUTO";
-  let buzzerOn = false;
+  let buzzerTestOn = false;
+  let isAnomalyAlarm = false;
   let transport = null;
 
   function fmt(v, digits) {
@@ -50,6 +51,9 @@
   }
 
   function getKey() {
+    if (cfg.API_KEY) {
+      return cfg.API_KEY;
+    }
     const keyInput = $("api-key");
     if (keyInput && keyInput.value && keyInput.value.trim()) {
       saveKey(keyInput.value.trim());
@@ -107,7 +111,11 @@
     const band = $("status-band");
 
     band.className = "band " + info.cls;
-    $("band-text").textContent = info.text;
+    if (labelKey === "CALCULATING") {
+      $("band-text").innerHTML = `${info.text}<span class="dots-anim"><span>.</span><span>.</span><span>.</span></span>`;
+    } else {
+      $("band-text").textContent = info.text;
+    }
 
     if (sub) {
       $("band-sub").textContent = sub;
@@ -123,7 +131,11 @@
     const info = map[status] || { text: "Waiting for data", cls: "band-none" };
 
     $("status-band").className = "band " + info.cls;
-    $("band-text").textContent = info.text;
+    if (status === "MENDETEKSI") {
+      $("band-text").innerHTML = `${info.text}<span class="dots-anim"><span>.</span><span>.</span><span>.</span></span>`;
+    } else {
+      $("band-text").textContent = info.text;
+    }
     $("band-sub").textContent = "Direct mode without backend: status comes from firmware threshold, not ML model.";
   }
 
@@ -148,18 +160,30 @@
       $("updated").textContent = "Last reading: " + new Date(reading.ts).toLocaleTimeString();
     }
 
+    const hasVitals = fingerOn && validPositive(reading.hr) && validPositive(reading.spo2);
+
     if (!fingerOn) {
+      isAnomalyAlarm = false;
       setBand("NO_FINGER", "Place your finger on the MAX30102 sensor to start measuring.");
+    } else if (!hasVitals) {
+      // Jari sudah terdeteksi tetapi BPM / SpO2 masih dalam proses kalkulasi awal
+      isAnomalyAlarm = false;
+      setBand("CALCULATING", "Detecting pulse and calculating heart rate...");
     } else if (data.local_status) {
+      isAnomalyAlarm = false;
       renderLocalBand(data.local_status);
     } else if (prediction && LABELS[prediction.label]) {
+      // Alarm buzzer aktif HANYA ketika kondisi terkonfirmasi anomali
+      isAnomalyAlarm = prediction.label === "ANOMALY" || Number(prediction.severity) >= 2;
       const score = prediction.score === null || prediction.score === undefined
         ? ""
         : " Anomaly score: " + fmt(prediction.score, 3) + ".";
       setBand(prediction.label, "Model result indicates unusual data patterns, not a medical diagnosis." + score);
     } else {
+      isAnomalyAlarm = false;
       setBand("CALCULATING", "Collecting sensor data samples for model evaluation...");
     }
+    updateBuzzerIndicator();
   }
 
   function renderDevice(data) {
@@ -198,10 +222,10 @@
     $("btn-auto").setAttribute("aria-pressed", String(lampMode === "AUTO"));
     $("btn-manual").setAttribute("aria-pressed", String(lampMode === "MANUAL"));
 
-    buzzerOn = !!(data.buzzer && data.buzzer.test);
+    buzzerTestOn = !!(data.buzzer && data.buzzer.test);
     const bb = $("btn-buzzer");
-    bb.setAttribute("aria-pressed", String(buzzerOn));
-    bb.textContent = buzzerOn ? "Buzzer: on (click to turn off)" : "Buzzer: off";
+    bb.setAttribute("aria-pressed", String(buzzerTestOn));
+    bb.textContent = buzzerTestOn ? "Buzzer: on (click to turn off)" : "Buzzer: off";
 
     /* --- UPDATE INDIKATOR CARD BARU --- */
 
@@ -224,11 +248,18 @@
       indLampText.textContent = color;
     }
 
-    // 2. Indikator Buzzer (Pulse animation jika menyala)
+    // 2. Indikator Buzzer
+    updateBuzzerIndicator();
+  }
+
+  function updateBuzzerIndicator() {
+    const isBuzzerActive = buzzerTestOn || isAnomalyAlarm;
     const indBuzzer = $("ind-buzzer");
     const indBuzzerText = $("ind-buzzer-text");
 
-    if (buzzerOn) {
+    if (!indBuzzer || !indBuzzerText) return;
+
+    if (isBuzzerActive) {
       indBuzzer.className = "ind-circle buzzer-on";
       indBuzzerText.textContent = "ON";
       indBuzzerText.style.color = "var(--bad)";
@@ -370,13 +401,14 @@
 
   function bindControls() {
     const keyInput = $("api-key");
-
-    keyInput.value = getKey();
-    keyInput.addEventListener("input", () => saveKey(keyInput.value.trim()));
-    keyInput.addEventListener("change", () => saveKey(keyInput.value.trim()));
+    if (keyInput) {
+      keyInput.value = getKey();
+      keyInput.addEventListener("input", () => saveKey(keyInput.value.trim()));
+      keyInput.addEventListener("change", () => saveKey(keyInput.value.trim()));
+    }
 
     $("btn-auto").addEventListener("click", () => transport.lampAuto());
-    $("btn-buzzer").addEventListener("click", () => transport.buzzerTest(!buzzerOn));
+    $("btn-buzzer").addEventListener("click", () => transport.buzzerTest(!buzzerTestOn));
     $("btn-csv").addEventListener("click", () => transport.exportCsv());
     $("btn-manual").addEventListener("click", sendManualLed);
 
