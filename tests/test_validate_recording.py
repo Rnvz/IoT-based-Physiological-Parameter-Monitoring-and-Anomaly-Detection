@@ -171,3 +171,24 @@ def test_validate_recording_null_dht_and_allow_flag(tmp_path):
     # With allow flag -> ACCEPT
     res_accept = validate_recording(str(csv_file), min_rows=300, allow_null_dht=True)
     assert res_accept["status"] == "ACCEPT"
+
+
+def test_validate_recording_scenario_label_check(tmp_path):
+    """Verify that expected scenario label matches or rejects if mismatched."""
+    base_t = datetime(2026, 1, 1, 8, 0, 0, tzinfo=timezone.utc)
+    csv_file = tmp_path / "readings.csv"
+    lines = ["ts,hr,spo2,temp,hum,room_temp,finger,scenario"]
+    for i in range(350):
+        t = (base_t + timedelta(seconds=i)).isoformat()
+        lines.append(f"{t},75.0,98.0,36.5,50.0,24.0,True,REST")
+    csv_file.write_text("\n".join(lines) + "\n")
+
+    # Matching scenario -> ACCEPT
+    res_ok = validate_recording(str(csv_file), min_rows=300, expected_scenario="REST")
+    assert res_ok["status"] == "ACCEPT"
+    assert res_ok["sessions"]["session_001"]["scenario_label"] == "REST"
+
+    # Mismatched scenario -> REJECT
+    res_bad = validate_recording(str(csv_file), min_rows=300, expected_scenario="TYPING")
+    assert res_bad["status"] == "REJECT"
+    assert any("Label skenario tidak sesuai" in r for r in res_bad["sessions"]["session_001"]["reasons"])

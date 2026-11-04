@@ -82,6 +82,7 @@ def validate_single_session_df(
     df_session: pd.DataFrame,
     min_rows: int = DEFAULT_MIN_SESSION_ROWS,
     expected_device_id: Optional[str] = None,
+    expected_scenario: Optional[str] = None,
     allow_null_dht: bool = False
 ) -> Dict[str, Any]:
     """
@@ -91,6 +92,7 @@ def validate_single_session_df(
     if total_rows == 0:
         return {
             "session_id": session_id,
+            "scenario_label": expected_scenario,
             "total_rows": 0,
             "valid_rows": 0,
             "duration_seconds": 0.0,
@@ -224,10 +226,19 @@ def validate_single_session_df(
         elif unique_dev_ids[0] != expected_device_id:
             reasons.append(f"device_id tidak sesuai: ditemukan {unique_dev_ids}, diharapkan '{expected_device_id}'.")
 
+    # Scenario label validations
+    unique_scenarios: List[str] = []
+    if "scenario" in df_session.columns:
+        unique_scenarios = sorted(df_session["scenario"].dropna().astype(str).unique().tolist())
+    if expected_scenario is not None and len(unique_scenarios) > 0:
+        if expected_scenario not in unique_scenarios:
+            reasons.append(f"Label skenario tidak sesuai: ditemukan {unique_scenarios}, diharapkan '{expected_scenario}'.")
+
     status = "ACCEPT" if len(reasons) == 0 else "REJECT"
 
     return {
         "session_id": session_id,
+        "scenario_label": expected_scenario or (unique_scenarios[0] if len(unique_scenarios) == 1 else None),
         "total_rows": total_rows,
         "valid_rows": valid_rows,
         "duration_seconds": round(duration_s, 2),
@@ -248,6 +259,7 @@ def validate_recording(
     input_path: str,
     min_rows: int = DEFAULT_MIN_SESSION_ROWS,
     expected_device_id: Optional[str] = None,
+    expected_scenario: Optional[str] = None,
     allow_null_dht: bool = False,
     is_fixture: bool = False
 ) -> Dict[str, Any]:
@@ -258,7 +270,7 @@ def validate_recording(
     df = pd.read_csv(csv_file)
 
     if len(df) == 0:
-        empty_res = validate_single_session_df("session_001", pd.DataFrame(), min_rows=min_rows)
+        empty_res = validate_single_session_df("session_001", pd.DataFrame(), min_rows=min_rows, expected_scenario=expected_scenario)
         return {
             "csv_file": csv_file,
             "is_fixture": is_fixture,
@@ -321,6 +333,7 @@ def validate_recording(
             df_session=group.reset_index(drop=True),
             min_rows=min_rows,
             expected_device_id=expected_device_id,
+            expected_scenario=expected_scenario,
             allow_null_dht=allow_null_dht
         )
         session_results[str(sid)] = res_s
@@ -358,6 +371,8 @@ def print_report(res: Dict[str, Any]):
         dur_m = s["duration_seconds"] / 60.0
         status_tag = "[ACCEPT]" if s["status"] == "ACCEPT" else "[REJECT]"
         print(f"\n>> {status_tag} {sid.upper()} | {s['valid_rows']}/{s['total_rows']} baris valid | Durasi: {s['duration_seconds']:.1f}s ({dur_m:.1f} m)")
+        if s.get("scenario_label"):
+            print(f"   - Skenario Sesi            : '{s['scenario_label']}'")
         dev_str = ", ".join(f"'{d}'" for d in s["unique_device_ids"]) if s["unique_device_ids"] else "N/A (tidak ada kolom)"
         print(f"   - Unique device_id         : {dev_str}")
         print(f"   - Jeda > 3.0s              : {s['gaps_gt_3s_count']} kejadian (Maks gap: {s['max_gap_seconds']:.2f}s)")
@@ -394,6 +409,7 @@ def main():
     parser.add_argument("--input", "-i", required=True, help="Path ke file CSV atau direktori sesi")
     parser.add_argument("--min-rows", type=int, default=DEFAULT_MIN_SESSION_ROWS, help=f"Minimum baris valid per sesi (default: {DEFAULT_MIN_SESSION_ROWS})")
     parser.add_argument("--expected-device-id", type=str, default=None, help="Ekspektasi device_id tunggal (tolak jika berbeda atau campuran)")
+    parser.add_argument("--scenario-label", type=str, default=None, help="Label skenario yang diharapkan untuk sesi ini (mis. REST, TYPING)")
     parser.add_argument("--allow-null-dht", action="store_true", help="Izinkan null pada sensor DHT22 (untuk skenario DHT_UNPLUGGED)")
     parser.add_argument("--fixture", action="store_true", help="Tandai eksplisit sebagai data fixture pengujian")
     args = parser.parse_args()
@@ -403,6 +419,7 @@ def main():
             input_path=args.input,
             min_rows=args.min_rows,
             expected_device_id=args.expected_device_id,
+            expected_scenario=args.scenario_label,
             allow_null_dht=args.allow_null_dht,
             is_fixture=args.fixture
         )

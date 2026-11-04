@@ -137,6 +137,31 @@ Pemilihan antara varian `S3` dan `S5` dilakukan sepenuhnya pada set validasi ber
 6. **Validasi Pasca-Sesi:**
    * Begitu sesi selesai (server dihentikan), jalankan validator:
      ```bash
-     .venv/bin/python scripts/validate_recording.py -i ./data_sessions/session_001_rest_pagi/ --expected-device-id esp32-01
+     .venv/bin/python scripts/validate_recording.py -i ./data_sessions/session_001_rest_pagi/ --expected-device-id esp32-01 --scenario-label REST
      ```
    * Jika validator menghasilkan status `REJECT`, sesi wajib diulang sebelum berpindah ke skenario berikutnya.
+
+---
+
+## 9. Lembar Catatan Sesi (Session Log Sheet) & Isolasi Folder
+
+> [!IMPORTANT]
+> **Rasional Arsitektur Metadata (`note` vs `/export/dataset.csv`):**  
+> Audit kode menunjukkan bahwa endpoint `/session/scenario` menyimpan parameter `note` ke dalam `scenario_events.csv`, namun fungsi `export_dataset()` pada backend **TIDAK mengikutsertakan kolom `note` ke dalam `/export/dataset.csv`** (hanya mengekspor string enum `scenario`).  
+> Oleh karena itu, pelacakan konteks fisik dan variasi mikroklimat **wajib mengandalkan isolasi direktori dan lembar catatan sesi**, dengan aturan:
+> 1. **Satu Skenario per Sesi:** Satu sesi perekaman hanya menjalankan satu jenis skenario tunggal.
+> 2. **Satu `CSV_DIR` per Sesi:** Setiap sesi disimpan ke direktori terisolasi baru.
+> 3. **Nama Folder Memuat Skenario:** Format folder wajib `session_<XXX>_<skenario>_<kondisi>/` (mis. `session_001_rest_pagi/`).
+> 4. **Pengisian Lembar Catatan Sesi:** Setiap sesi dicatat secara manual ke dalam lembar catatan sesi di bawah ini.
+
+### Template Lembar Catatan Sesi:
+
+| ID Sesi / Direktori | Skenario API | Tanggal & Jam (WIB) | Target Durasi | Suhu Ruang (°C) | Kelembapan (%) | Catatan Kondisi Riil / Observasi Fisik | Status Validator |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `session_001_rest_pagi` | `REST` | *Contoh: 2026-11-05 07:15* | 15 menit | ~24.5 | ~58 | Duduk santai di kamar tidur, bernapas tenang | `ACCEPT` |
+| `session_002_typing_siang` | `TYPING` | *Contoh: 2026-11-05 13:00* | 15 menit | ~28.0 | ~62 | Mengetik laporan di meja kerja | `ACCEPT` |
+| `session_003_rest_malam` | `REST` | *Contoh: 2026-11-05 21:00* | 15 menit | ~26.0 | ~60 | Duduk rileks malam hari | `ACCEPT` |
+| `session_004_env_ac_siang` | `OTHER` (`FAN_AC`) | *Contoh: 2026-11-06 14:00* | 15 menit | ~22.0 | ~50 | Ruangan ber-AC sejuk, hembusan stabil | `ACCEPT` |
+| `session_005_stairs_sore` | `OTHER` (`WALK_STAIRS`) | *Contoh: 2026-11-06 17:00* | 12 menit | ~27.0 | ~65 | Naik turun tangga perlahan (bukan latihan berat) | `ACCEPT` |
+| `session_006_cold_test` | `OTHER` (`COLD_HANDS`) | *Contoh: 2026-11-07 10:00* | 15 menit | ~25.0 | ~55 | Tangan dingin sebelum pasang sensor | `ACCEPT` |
+| `session_007_robustness_test` | `FINGER_SHIFT` | *Contoh: 2026-11-07 15:00* | 10 menit | ~25.0 | ~55 | Sensor digeser sedikit pada jari tanpa melepas | `ACCEPT` |
