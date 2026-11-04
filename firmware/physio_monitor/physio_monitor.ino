@@ -876,18 +876,21 @@ void publishActuatorStatus() {
     manualLeft = (manualUntil - now) / 1000;
   }
 
-  char buf[260];
+  char buf[300];
+
+  bool buzzerSounding = buzzerTest || (fingerPresent && haveResult && (now - lastResultMs <= RESULT_TIMEOUT) && (lastSeverity >= 2));
 
   snprintf(
     buf,
     sizeof(buf),
     "{\"mode\":\"%s\",\"led\":{\"color\":\"%s\",\"brightness\":%u},"
-    "\"buzzer\":{\"test\":%s},"
+    "\"buzzer\":{\"test\":%s,\"active\":%s},"
     "\"source\":\"%s\",\"ack_seq\":%ld,\"manual_left_s\":%lu}",
     ledMode == MODE_AUTO ? "AUTO" : "MANUAL",
     currentColor,
     currentBrightness,
     buzzerTest ? "true" : "false",
+    buzzerSounding ? "true" : "false",
     currentSource,
     lastCmdSeq,
     manualLeft
@@ -935,7 +938,11 @@ void actuatorOnMessage(
 
   if (strcmp(topic, TOPIC_RESULT) == 0) {
 
-    lastSeverity = doc["severity"] | 0;
+    int newSev = doc["severity"] | 0;
+    if (newSev != lastSeverity || !haveResult) {
+      statusDirty = true;
+    }
+    lastSeverity = newSev;
     lastResultMs = millis();
     haveResult = true;
 

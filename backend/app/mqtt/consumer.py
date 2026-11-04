@@ -230,7 +230,8 @@ class MQTTService:
             led_bright = led.get("brightness", "-") if isinstance(led, dict) else "-"
             buzzer = data.get("buzzer", {})
             buzz_test = buzzer.get("test", False) if isinstance(buzzer, dict) else False
-            buzz_str = "TEST" if buzz_test else "OFF"
+            buzz_active = buzzer.get("active", False) if isinstance(buzzer, dict) else False
+            buzz_str = "TEST" if buzz_test else ("ON" if buzz_active else "OFF")
             act_text = f"[AKTUATOR] Mode: {mode} | LED: {led_color} ({led_bright}%) | Buzz: {buzz_str} (seq: {seq_int})"
             row = f"| {ts_now:<8} | {dev:<8} | {act_text[:76]:<76} |"
             print(row, flush=True)
