@@ -8,30 +8,35 @@
 ## 1. Pernyataan Ruang Lingkup & Etika
 
 1. **Subjek Tunggal (*Single-Subject Baseline*):** Seluruh data telemetri fisiologis berasal dari 1 subjek sukarelawan tunggal ($n=1$) dalam kondisi sadar penuh dan sehat secara mandiri.
-2. **Karakter Label Non-Klinis:** Label kondisi (`NORMAL`, `ANOMALOUS`, `EXCLUDED`) merupakan kategori operasional perangkat telemetri IoT dan variasi aktivitas fisik, **BUKAN** diagnosis medis atau klinis.
+2. **Karakter Label Non-Klinis:** Kategori operasional perangkat telemetri IoT dan variasi aktivitas fisik **BUKAN** diagnosis medis atau klinis.
 3. **Anomali Injeksi:** Anomali fisiologis kritis (seperti desaturasi oksigen SpO2 drastis atau takikardia ekstrem) tidak direplikasi secara fisik pada tubuh manusia, melainkan dievaluasi secara terpisah melalui injeksi sinyal sintetis terstandarisasi ([ml_eval/inject.py](file:///home/ywenanta/Projects/IoT/ml_eval/inject.py)) yang dilaporkan dengan label eksplisit: `SINTETIS / INJEKSI`.
-4. **Prinsip Keselamatan (Safety First):** **DILARANG** melakukan prosedur yang membahayakan tubuh, seperti menahan napas (apnea buatan), membatasi sirkulasi darah (turniket/ikatan jari), hiperventilasi paksa, atau olahraga ekstrem yang memicu pingsan.
+4. **Prinsip Keselamatan Mutlak (Safety First):** **DILARANG KERAS** dan **TIDAK BOLEH** menahan napas (apnea buatan), hiperventilasi, melakukan manuver Valsalva, latihan fisik berat, membatasi sirkulasi darah (turniket/ikatan jari), atau melakukan tindakan fisik apa pun yang sengaja dilakukan untuk menurunkan SpO2.
 
 ---
 
-## 2. Pemetaan Skenario Baku API ke Label (Dibekukan)
+## 2. Pemetaan Skenario Baku API ke Label
 
-Sesuai kontrak skema backend [backend/app/api/session.py](file:///home/ywenanta/Projects/IoT/backend/app/api/session.py), endpoint `/session/scenario` **hanya menerima 7 enum nilai `ScenarioType`**. Seluruh skenario di luar 6 skenario dasar wajib menggunakan nilai `OTHER` dengan parameter `note` berformat string tetap.
+> **STATUS PEMETAAN: DRAFT, MENUNGGU PERSETUJUAN PENGGUNA**  
+> *Sesuai kontrak skema backend [backend/app/api/session.py](file:///home/ywenanta/Projects/IoT/backend/app/api/session.py), endpoint `/session/scenario` hanya menerima 7 enum nilai `ScenarioType` (`REST`, `TYPING`, `LIGHT_ACTIVITY`, `MOTION`, `FINGER_SHIFT`, `SENSOR_OFF`, `OTHER`). Seluruh skenario di luar skenario dasar menggunakan `OTHER` dengan parameter `note`.*
 
-Tabel pemetaan berikut dibekukan (*frozen*) sebelum perekaman dimulai:
+Tabel pemetaan taksonomi label draft:
 
-| Nilai `scenario` (API) | Parameter `note` (Format Tetap) | Deskripsi Prosedur Fisik | Kategori Label Beku |
+| Nilai `scenario` (API) | Parameter `note` | Deskripsi Prosedur Fisik | Kategori Label Taksonomi |
 | :--- | :--- | :--- | :--- |
-| `REST` | *Kosong / deskripsi ruangan* | Duduk tenang di kursi, bernapas santai dan rileks. | **NORMAL** |
-| `TYPING` | *Kosong / deskripsi meja* | Duduk di meja kerja sambil mengetik komputer atau membaca. | **NORMAL** |
-| `LIGHT_ACTIVITY` | *Kosong / aktivitas* | Berdiri, meregangkan tubuh, atau berjalan santai di ruangan. | **NORMAL** |
-| `OTHER` | `"WALK_STAIRS"` | Berjalan santai dan naik-turun tangga perlahan (1–2 menit). | **NORMAL** (Aktivitas Fisik Wajar) |
-| `OTHER` | `"COLD_HANDS"` | Tangan menyentuh permukaan/gelas air dingin sebelum sensor dipasang. | **NORMAL** (Perturbasi Termal Alami) |
-| `OTHER` | `"FAN_AC"` | Duduk di dekat hembusan kipas angin atau AC ruangan. | **NORMAL** (Variasi Mikroklimat) |
-| `FINGER_SHIFT` | *Opsional* | Menggeser sedikit letak sensor MAX30102 pada jari tanpa melepas. | **ANOMALI JINAK** (Evaluasi False Alarm) |
-| `MOTION` | *Opsional* | Gerakan tangan terencana saat memakai sensor. | **ANOMALI JINAK** (Evaluasi False Alarm) |
-| `OTHER` | `"DHT_UNPLUGGED"` | Mencabut kabel data DHT22 selama sesi berjalan. | **UJI FALLBACK S3** (Bukan Medis) |
-| `SENSOR_OFF` | *Opsional* | Sensor MAX30102 dilepas dari jari (`finger=False`). | **DIKECUALIKAN** (Dibuang oleh filter) |
+| `REST` | *Kosong / deskripsi ruangan* | Duduk tenang di kursi, bernapas santai dan rileks. | **Normal** |
+| `TYPING` | *Kosong / deskripsi meja* | Duduk di meja kerja sambil mengetik komputer atau membaca. | **Normal** |
+| `LIGHT_ACTIVITY` | *Kosong / aktivitas* | Berdiri, meregangkan tubuh, atau berjalan santai di ruangan. | **Normal** |
+| `OTHER` | `"FAN_AC"` | Duduk di dekat hembusan kipas angin atau perubahan AC ruangan. | **Normal** (Variasi Mikroklimat) |
+| `MOTION` | *Opsional* | Gerakan tangan terencana saat memakai sensor. | **Positif Anomali Pola Data** |
+| `FINGER_SHIFT` | *Opsional* | Menggeser sedikit letak sensor MAX30102 pada jari tanpa melepas. | **Positif Anomali Pola Data** |
+| `OTHER` | `"DHT_UNPLUGGED"` | Mencabut kabel data DHT22 selama sesi berjalan. | **Positif Anomali Pola Data** (Sensor Fallback) |
+| `OTHER` | `"WALK_STAIRS"` | Berjalan santai dan naik-turun tangga perlahan (1–2 menit). | **Dilaporkan Terpisah, Bukan Anomali** |
+| `OTHER` | `"COLD_HANDS"` | Tangan dingin sebelum sensor dipasang. | **Dilaporkan Terpisah, Bukan Anomali** |
+| `SENSOR_OFF` | *Opsional* | Sensor MAX30102 dilepas dari jari (`finger=False`). | **Dikecualikan (Tidak Sampai ke Model)** |
+
+> [!IMPORTANT]
+> **Catatan Teknis Gate Input Model:**  
+> Skenario `SENSOR_OFF` (`finger=False`) serta baris data dengan nilai sensor vital $0.0$ **TIDAK PERNAH sampai ke model inferensi ML/DL** (langsung diabaikan oleh gate validitas `finger == True and hr > 0 and spo2 > 0 and temp > 0`). Oleh karena itu, baris-baris tersebut **BUKAN merupakan kelas positif anomali**, melainkan data idle/artefak yang secara otomatis dibuang sebelum evaluasi skor anomali.
 
 ---
 
@@ -68,16 +73,16 @@ Perekaman dilakukan minimal sebanyak **6 sesi terpisah** yang disebar dalam mini
 
 ---
 
-## 5. Pemilihan Varian Fitur (S3 vs S5) & Representasi Suhu Relatif
+## 5. Konfigurasi Fitur S3 dan S5
 
-1. **Penetapan Varian Tanpa Asumsi Subjektif:**
-   * Tidak ada klaim apriori mengenai "varian utama". Pemilihan antara varian **`S3`** (fisiologis murni: `hr`, `spo2`, `temp`) dan **`S5`** (fisiologis + lingkungan: `hr`, `spo2`, `temp`, suhu lingkungan, kelembapan) dilakukan **sepenuhnya berdasarkan kriteria performa validasi** yang ditetapkan di muka:
-     * Rasio False Alarm Rate (FAR) pada sesi validasi ber-AC.
-     * PR-AUC pada validasi anomali injeksi.
-2. **Representasi Suhu Relatif Ruang (Anti-Multikolinearitas):**
-   * Untuk varian lingkungan, **hanya digunakan satu representasi suhu relatif ruang**, yaitu selisih termal:
-     $$\text{temp\_sub\_room} = \text{temp} - \text{room\_temp}$$
-   * **DILARANG** memasukkan `temp`, `room_temp`, dan `temp_sub_room` secara bersamaan ke dalam vektor input karena ketiga variabel tersebut memiliki ketergantungan linier identik ($X_1 - X_2 = X_3$) yang merusak kestabilan matriks kovariansi dan bobot model.
+Daftar kolom fitur persis yang digunakan dalam pipeline evaluasi:
+* **Varian `S3` (Fisiologis Murni):**
+  Kolom persis: `hr`, `spo2`, `temp` (3 dimensi).
+* **Varian `S5` (Fisiologis + Lingkungan):**
+  Kolom persis: `hr`, `spo2`, `temp`, `room_temp`, `hum` (5 dimensi, yaitu `S3` + `room_temp` + `hum`).
+  **TANPA kolom selisih `temp - room_temp`**.
+
+Pemilihan antara varian `S3` dan `S5` dilakukan sepenuhnya pada set validasi berdasarkan PR-AUC anomali injeksi dan stabilitas FAR pada sesi perubahan suhu ruangan.
 
 ---
 
