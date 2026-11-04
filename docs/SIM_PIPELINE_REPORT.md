@@ -1,6 +1,6 @@
-# LAPORAN EVALUASI PIPELINE ML PADA DATASET SINTETIS
+# LAPORAN EVALUASI PIPELINE ML & DL PADA DATASET SINTETIS
 > **STATUS**: SIMULATOR, BUKAN HASIL ALAT  
-> **Catatan**: Seluruh data yang dianalisis dalam dokumen ini berasal dari simulator telemetri (`esp32-sim` / `origin=SYNTHETIC`), BUKAN rekaman pasien atau alat fisik riil. Test split telah dilihat sebelumnya dalam proses eksplorasi (bukan *unseen evaluation* sekali jalan).
+> **Pemberitahuan Metodologi Kritis**: Seluruh data yang dianalisis dalam dokumen ini berasal dari simulator telemetri (`esp32-sim` / `origin=SYNTHETIC`), BUKAN rekaman pasien atau alat fisik riil. Test split telah dilihat berulang kali (*repeatedly inspected*) oleh agent dalam proses iterasi dan eksplorasi, serta **TIDAK ADA protokol pra-registrasi (*no pre-registration*)** untuk dataset simulator ini. Semua hasil harus diperlakukan sebagai evaluasi eksploratori retrospektif, bukan pembuktian prospektif terdaftar (*registered trial*).
 
 ---
 
@@ -15,10 +15,10 @@
   .gitignore:136:data/	ml_pipeline/data/physio_synthetic/features_train.csv
   ```
 - **File Yang Dikelola**:
-  - File kode implementasi: `ml_pipeline/src/train_physio_synthetic.py` (di-stage & commit).
+  - File implementasi evaluasi: `ml_pipeline/src/evaluate_dl_simulator.py` & `ml_pipeline/src/train_physio_synthetic.py` (di-stage & commit).
   - File laporan: `docs/SIM_PIPELINE_REPORT.md` (di-stage & commit).
-  - Data fitur dan model `.joblib` diabaikan oleh `.gitignore` dan **tidak akan ter-commit**.
-  - File backend (`backend/app/config.py`), firmware, model lama, dan direktori `data/` tidak disentuh sama sekali.
+  - Seluruh data `.joblib`, bobot `.pt`, dan data turunan diabaikan oleh `.gitignore` dan **tidak akan ter-commit**.
+  - File backend (`backend/app/config.py`), firmware, artefak produksi publik (`ml/artifacts/dl_v1`), dan direktori `data/` tidak disentuh sama sekali.
 
 ---
 
@@ -29,7 +29,7 @@
 - **Kolom `device_id`**: `esp32-sim` (100%)
 - **Definisi Label Ground Truth**:
   - `ref_status`: Status referensi fisiologis (`NORMAL`, `ANOMALY`, `NO_DATA`).
-  - `ref_OUTPUT`: Binerisasi referensi untuk pelatihan:
+  - `ref_OUTPUT`: Binerisasi referensi untuk evaluasi/pelatihan:
     - `0.0`: Kondisi fisiologis normal (`NORMAL`).
     - `1.0`: Kondisi anomali terinduksi (`ANOMALY`).
     - `NaN`: Kondisi sensor lepas / *warm-up* (`SENSOR_OFF` / `NO_DATA`).
@@ -42,144 +42,193 @@
   ```
 - **Distribusi Skenario per `split_role`**:
   - `train` (5.700 baris): `REST` (3.600), `TYPING` (1.200), `LIGHT_ACTIVITY` (900). Seluruh sampel normal (5.666 valid + 34 SENSOR_OFF), tanpa anomali.
-  - `val` (5.400 baris): `REST` (1.200), `TYPING` (1.200), `FAN_AC` (1.200), `MOTION` (900), `FINGER_SHIFT` (900).
-  - `test` (6.000 baris): `REST` (2.400), `TYPING` (900), `MOTION` (900), `FINGER_SHIFT` (900), `DHT_UNPLUGGED` (900).
+  - `val` (5.400 baris): `REST` (1.200), `TYPING` (1.200), `FAN_AC` (1.200), `MOTION` (900), `FINGER_SHIFT` (900). Total valid normal: 5.021, anomali: 260.
+  - `test` (6.000 baris): `REST` (2.400), `TYPING` (900), `MOTION` (900), `FINGER_SHIFT` (900), `DHT_UNPLUGGED` (900). Total valid normal: 5.582, anomali: 281.
   - `report_only` (600 baris): `COLD_HANDS` (300), `WALK_STAIRS` (300).
-- **Rincian Panjang Tiap Sesi**:
-  - `S01` (train, REST): 1.200 baris (Normal: 1.193, Anomali: 0, SENSOR_OFF: 7)
-  - `S02` (train, REST): 1.200 baris (Normal: 1.196, Anomali: 0, SENSOR_OFF: 4)
-  - `S03` (train, REST): 1.200 baris (Normal: 1.192, Anomali: 0, SENSOR_OFF: 8)
-  - `S04` (train, TYPING): 1.200 baris (Normal: 1.193, Anomali: 0, SENSOR_OFF: 7)
-  - `S05` (train, LIGHT_ACTIVITY): 900 baris (Normal: 892, Anomali: 0, SENSOR_OFF: 8)
-  - `S06` (val, REST): 1.200 baris (Normal: 1.195, Anomali: 0, SENSOR_OFF: 5)
-  - `S07` (val, TYPING): 1.200 baris (Normal: 1.192, Anomali: 0, SENSOR_OFF: 8)
-  - `S08` (val, FAN_AC): 1.200 baris (Normal: 1.193, Anomali: 0, SENSOR_OFF: 7)
-  - `S09` (val, MOTION): 900 baris (Normal: 705, Anomali: 191, SENSOR_OFF: 4)
-  - `S10` (val, FINGER_SHIFT): 900 baris (Normal: 736, Anomali: 69, SENSOR_OFF: 95)
-  - `S11` (test, REST): 1.200 baris (Normal: 1.195, Anomali: 0, SENSOR_OFF: 5)
-  - `S12` (test, REST): 1.200 baris (Normal: 1.194, Anomali: 0, SENSOR_OFF: 6)
-  - `S13` (test, TYPING): 900 baris (Normal: 892, Anomali: 0, SENSOR_OFF: 8)
-  - `S14` (test, MOTION): 900 baris (Normal: 695, Anomali: 198, SENSOR_OFF: 7)
-  - `S15` (test, FINGER_SHIFT): 900 baris (Normal: 711, Anomali: 83, SENSOR_OFF: 106)
-  - `S16` (test, DHT_UNPLUGGED): 900 baris (Normal: 895, Anomali: 0, SENSOR_OFF: 5)
-  - `S17` (report_only, WALK_STAIRS): 300 baris (Normal: 295, Anomali: 0, SENSOR_OFF: 5)
-  - `S18` (report_only, COLD_HANDS): 300 baris (Normal: 294, Anomali: 0, SENSOR_OFF: 6)
-- **Diff vs Versi Sebelumnya (`physio_monitor_synthetic_dataset.csv`)**:
-  - Baris bertambah dari 12.900 baris menjadi 17.700 baris (+300 baris per sesi untuk S01–S16).
-  - Kolom bertambah dari 13 kolom menjadi 24 kolom.
-  - Kolom tambahan meliputi ground truth anotasi (`ref_status`, `ref_OUTPUT`, `split_role`, `report_group`) serta status inferensi simulasi runtime (`rule_severity`, `published_severity`, `label`, `decision_mode`, `decision_source`).
+- **Rincian Sesi Uji (Test Set)**:
+  - `S11` (test, REST): 1.195 normal, 0 anomali, 5 SENSOR_OFF
+  - `S12` (test, REST): 1.194 normal, 0 anomali, 6 SENSOR_OFF
+  - `S13` (test, TYPING): 892 normal, 0 anomali, 8 SENSOR_OFF
+  - `S14` (test, MOTION): 695 normal, 198 anomali, 7 SENSOR_OFF (16 anomaly bursts)
+  - `S15` (test, FINGER_SHIFT): 711 normal, 83 anomali, 106 SENSOR_OFF (13 anomaly bursts)
+  - `S16` (test, DHT_UNPLUGGED): 895 normal, 0 anomali, 5 SENSOR_OFF (100% DHT null)
 
 ---
 
-## 3. Analisis Transisi Label & Fenomena Alarm Palsu Skenario MOTION
+## 3. Analisis Skenario MOTION: Perbandingan Window 13 vs Fitur Mentah (IF Raw & DenseAE)
 
-### A. Transisi Dinamis di Dalam Sesi
-Label `ref_OUTPUT` **berubah dinamis berkali-kali di dalam sesi** yang sama (bukan sesi statis satu label):
-- **Sesi S09 (Val)**: 26 blok pergantian antara fase diam (`0.0`) dan burst gerakan (`1.0`).
-  - Proporsi baris berlabel anomali (1): 191 / 900 baris (**21,22%**).
-- **Sesi S14 (Test)**: 34 blok pergantian antara fase diam (`0.0`) dan burst gerakan (`1.0`).
-  - Proporsi baris berlabel anomali (1): 198 / 900 baris (**22,00%**).
+### A. Fenomena Transisi Dinamis
+Label `ref_OUTPUT` berubah dinamis berkali-kali di dalam sesi S14 (34 segmen transisi). Dari 900 baris data di S14, terdapat 198 baris anomali gerakan yang terbagi ke dalam **16 distinct bursts**, diselingi fase diam/normal (695 baris normal valid).
 
-### B. Mengapa 19,2% Baris Normal Memicu Alarm (*Window Lag Effect*)
-Pada skenario `MOTION` di test set (S14), dari 681 baris berlabel normal (`OUTPUT=0`), terdapat 131 baris (**19,24%**) yang ditandai anomali oleh model IF 13-Window pada ambang batas FPR 3%.
+### B. Komparasi False Alarm S14: Window 13 vs Fitur Mentah
+Pada analisis awal menggunakan model **IF (13 Fitur Window)**, skenario `MOTION` memicu alarm palsu pada 131 baris normal (**19,24% FPR pada MOTION**).
+Ketika dibandingkan langsung dengan model berbasis **fitur mentah per-baris (raw per-row)** pada target kalibrasi yang sama:
 
-**Temuan Kuantitatif Pembuktian**:
-- Sebanyak **131 dari 131 baris (100,0%)** alarm palsu tersebut terjadi tepat dalam rentang $\mathbf{\le 14}$ **baris pertama setelah burst anomali gerakan berhenti**!
-- Sebanyak **0 baris (0,0%)** alarm palsu terjadi di luar jendela 14 baris pasca-anomali.
-- **Penyebab Fisis & Matematis**:
-  Fitur model mengandalkan *rolling window* berukuran 15 sampel ($W=15$). Saat gerakan fisik ekstrem berhenti, label ground truth seketika kembali ke `0.0`, namun buffer 15 detik masih menampung fluktuasi denyut nadi ekstrem dari beberapa detik sebelumnya.
-  - Rata-rata `Var_Heart_Rate` pada True Normal murni: **7,50**
-  - Rata-rata `Var_Heart_Rate` pada False Positive pasca-gerakan: **146,01** (hampir 20x lipat lebih tinggi!).
-  Ini merupakan fenomena **Histeresis Jendela Geser (*Rolling Window Lag / Recovery Phase*)**, di mana fitur temporal mendeteksi dinamika pemulihan (*recovery dynamic*) sebelum sinyal benar-benar tenang kembali.
+| Model | Fitur Input | FP pada S14 Normal (695) | FPR pada MOTION | Recall MOTION (198) | Keterangan Dinamika |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| **IF (13 Fitur Window)** | 13 Fitur Rolling Window ($W=15$) | 131 | **19,24%** | 85,35% (169/198) | Terkena *window lag* 14 detik pasca-gerak |
+| **IF (2D raw)** | 2 Fitur Mentah (`hr`, `spo2`) | **11** | **1,58%** | **100,00%** (198/198) | Bebas buffer temporal; respons instan |
+| **IF (3D raw)** | 3 Fitur Mentah (`hr`, `spo2`, `temp`) | **10** | **1,44%** | **100,00%** (198/198) | Bebas buffer temporal; respons instan |
+| **DenseAE 2D (seed 42)**| 2 Fitur Mentah (`hr`, `spo2`) | **4** | **0,58%** | **100,00%** (198/198) | Rekonstruksi instan tanpa histeresis |
 
----
-
-## 4. Evaluasi & Perbandingan Model (Operating Point FPR 3% Val)
-
-Seluruh model dievaluasi pada partisi split bawaan yang sama:
-- *Training*: Hanya sampel normal pada set `train` (S01–S05).
-- *Ambang Batas*: Dikalibrasi pada data normal set `val` (S06–S10) pada target FPR = 3,0%.
-- *Prevalensi Anomali*: Validation = 4,99%, Test = 4,86% (281 anomali / 5.779 baris).
-
-### Tabel Perbandingan Metrik Global:
-| Model | ROC-AUC | PR-AUC | PR-AUC - Prev | Val FPR | Test FPR | Test Recall | Test Prec | Test F1 |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Rule Default (Vitals)** | 0.8790 | 0.7698 | 0.7212 | 0.0% | **0.00%** | 75.80% | **100.00%** | 0.8624 |
-| **IF (3 Fitur Mentah)** | **0.9954** | **0.9384** | **0.8898** | 3.0% | 2.60% | **93.95%** | 64.86% | **0.7674** |
-| **IF (13 Fitur Window)** | 0.9852 | 0.7444 | 0.6958 | 3.0% | 3.31% | 89.32% | 57.97% | 0.7031 |
-| **One-Class SVM** | 0.9631 | 0.4089 | 0.3602 | 5.3% | 6.62% | 89.32% | 40.81% | 0.5603 |
-| **LOF (Novelty)** | 0.9619 | 0.3935 | 0.3449 | 3.0% | 4.73% | 55.87% | 37.65% | 0.4499 |
-| **Mahalanobis (EllipticEnv)** | 0.9583 | 0.3820 | 0.3334 | 3.0% | 4.62% | 56.58% | 38.50% | 0.4582 |
-
-### Rincian Performa per Skenario pada Test Set:
-- **IF (13 Fitur Window)**:
-  - `REST`: FPR = 0,1% (3 FP)
-  - `TYPING`: FPR = 0,2% (2 FP)
-  - `DHT_UNPLUGGED`: FPR = 0,2% (2 FP)
-  - `FINGER_SHIFT`: Recall = **98,8%** (82/83), FPR = 6,3%
-  - `MOTION`: Recall = **85,4%** (169/198), FPR = 19,2% (efek window lag)
-- **IF (3 Fitur Mentah)**:
-  - `REST`: FPR = 2,7% (64 FP)
-  - `TYPING`: FPR = 4,8% (42 FP)
-  - `DHT_UNPLUGGED`: FPR = 1,0% (9 FP)
-  - `FINGER_SHIFT`: Recall = 81,9% (68/83), FPR = 3,3%
-  - `MOTION`: Recall = **99,0%** (196/198), FPR = **0,7%** (karena tidak ada window lag 15 detik)
+**Temuan Pembuktian**:
+1. Sebanyak **131 dari 131 FP (100,0%)** pada model IF 13-window terjadi tepat pada rentang $\le 14$ baris pertama setelah anomali gerakan berhenti. Pada rentang tersebut, buffer 15 detik masih menampung varians sinyal ekstrem (`Var_Heart_Rate` rata-rata 146,01 vs 7,50 pada true normal).
+2. Model dengan **fitur mentah per-baris (IF raw dan DenseAE)** sama sekali tidak memiliki buffer masa lalu, sehingga false alarm pada transisi gerak langsung turun drastis dari **19,24% menjadi 0,58% – 1,58%** dengan Recall anomali gerakan tetap sempurna (**100,0%**).
+3. Tingginya false positive pada skenario MOTION pada model window bukanlah kegagalan deteksi anomali fisis, melainkan **artefak histeresis rolling window**.
 
 ---
 
-## 5. Eksperimen Ekstensi DHT22 & Studi Ablasi Sensor
+## 4. Evaluasi Menyeluruh Model ML & DL pada Test Set
 
-### A. Penanganan Skenario `DHT_UNPLUGGED` (Null Sensor Suhu & Kelembapan Ruang)
-Pada sesi `S16` (`scenario == "DHT_UNPLUGGED"`), seluruh 900 baris memiliki `hum = NaN` dan `room_temp = NaN` (100% missing).
-1. **Strategi Imputasi Median**:
-   Mengisi nilai null dengan median data latih (`room_temp = 26.0 °C`, `hum = 65.0%`), sehingga `temp - room_temp` tetap terdefinisi.
-   Hasil: Alarm palsu pada `DHT_UNPLUGGED` turun menjadi **0,00%** (0 false alarm dari 881 sampel uji).
-2. **Strategi Fallback Model Routing (`FALLBACK_S3`)**:
-   Sesuai label `report_group: FALLBACK_S3`, jika sensor DHT22 terputus, sistem secara otomatis beralih (*fallback*) ke model 13-fitur vital murni tanpa ambient, memastikan terputusnya DHT22 tidak memicu alarm palsu klinis pada pasien.
+Ambang batas seluruh model kontinu dikalibrasi pada data normal set validasi (`val_normal`, 5.021 baris) dengan target FPR 3,0% (persentil 97 dari distribusi skor normal val). Ambang univariat dikalibrasi pada parameter persentil normal train untuk menghasilkan FPR 3,0% pada validasi normal. Rule Default menggunakan batas klinis standar.
 
-### B. Studi Ablasi Sensor (Uji Sensitivitas Fitur):
-| Konfigurasi Fitur | ROC-AUC | PR-AUC | Test Recall | Test FPR | Keterangan |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| **Lengkap Vital + DHT22 (22 Fitur)** | 0.9791 | 0.7345 | 84.70% | 3.73% | Imputasi median pada DHT22. |
-| **Vital Lengkap Tanpa DHT22 (13 Fitur)** | **0.9852** | **0.7444** | **89.32%** | **3.31%** | Baseline optimal. |
-| **Ablasi: Tanpa DS18B20 (MAX30102 + DHT22)** | 0.9943 | 0.9075 | 94.66% | 2.33% | Performa tetap sangat tinggi. |
-| **Ablasi: Tanpa MAX30102 (DS18B20 + DHT22)** | **0.5976** | **0.0614** | **0.71%** | 2.93% | **MODEL KOLAPS TOTAL!** |
+### A. Tabel Titik Operasi Tanpa Debounce (Raw / $N=1$)
+*Catatan: Kolom Test FPR menyajikan FPR aktual pada test set (5.582 baris normal). ROC-AUC dan PR-AUC hanya dilaporkan untuk model skor kontinu; model diskrit (Rule & Ambang Univariat) dilaporkan sebagai titik operasi.*
 
-**Kesimpulan Kritis Ablasi**:
-Sensor fotopletismografi **MAX30102 (Heart Rate & SpO2) adalah sensor paling dominan dan esensial**. Tanpa MAX30102, anomali gerakan (`MOTION`) dan pergeseran jari (`FINGER_SHIFT`) sama sekali tidak dapat dideteksi oleh sensor suhu tubuh dan sensor lingkungan (Recall anjlok menjadi 0,71%).
+| Model | ROC-AUC | PR-AUC | Test FPR Aktual | Recall | Presisi | F1 | Burst Recall (29) | Med Lat | FPR tol14 |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Rule Default (2D)** | N/A | N/A | **0,00%** | 75,80% | **100,00%** | 0,8623 | 96,6% (28) | **0,0s** | **0,00%** |
+| **Rule Default (3D)** | N/A | N/A | **0,00%** | 75,80% | **100,00%** | 0,8623 | 96,6% (28) | **0,0s** | **0,00%** |
+| **Univariate (2D, q=3%)** | N/A | N/A | 1,24% | 98,58% | 80,06% | **0,8836** | **100,0%** (29) | **0,0s** | 1,23% |
+| **Univariate (3D, q=3%)** | N/A | N/A | 1,24% | 98,58% | 80,06% | **0,8836** | **100,0%** (29) | **0,0s** | 1,23% |
+| **dl_v1 Zero-Shot (2D)** | 0,9060 | 0,7324 | 5,93% | 71,53% | 37,78% | 0,4945 | 96,6% (28) | **0,0s** | 6,14% |
+| **IF (2D raw)** | 0,9965 | 0,9776 | 1,40% | 98,93% | 78,09% | 0,8728 | **100,0%** (29) | **0,0s** | 1,33% |
+| **IF (3D raw)** | 0,9952 | 0,9392 | 2,74% | 95,02% | 63,57% | 0,7618 | **100,0%** (29) | **0,0s** | 2,71% |
+| **Mahalanobis (2D)** | 0,9978 | 0,9918 | 3,22% | **99,64%** | 60,87% | 0,7557 | **100,0%** (29) | **0,0s** | 2,90% |
+| **Mahalanobis (3D)** | 0,9989 | 0,9909 | 3,89% | 98,93% | 56,16% | 0,7165 | **100,0%** (29) | **0,0s** | 3,62% |
+| **LOF (2D)** | 0,9985 | 0,9921 | 1,65% | 98,58% | 75,07% | 0,8523 | **100,0%** (29) | **0,0s** | 1,62% |
+| **LOF (3D)** | **0,9991** | 0,9935 | 2,13% | 99,29% | 70,10% | 0,8218 | **100,0%** (29) | **0,0s** | 2,06% |
+| **OCSVM (2D)** | 0,9952 | 0,9929 | 1,42% | 99,29% | 77,93% | 0,8732 | **100,0%** (29) | **0,0s** | 1,38% |
+| **OCSVM (3D)** | 0,9974 | **0,9938** | 1,76% | 99,29% | 74,01% | 0,8480 | **100,0%** (29) | **0,0s** | 1,81% |
+| **DenseAE 2D (seed 42)** | 0,9971 | 0,9939 | 1,52% | 99,29% | 76,65% | 0,8651 | **100,0%** (29) | **0,0s** | 1,44% |
+| **DenseAE 3D (seed 42)** | 0,9985 | 0,9864 | 3,67% | 98,22% | 57,38% | 0,7244 | **100,0%** (29) | **0,0s** | 3,69% |
 
 ---
 
-## 6. Evaluasi Model Deep Learning (Autoencoder DenseAE)
+### B. Tabel Performa dengan Persistence Debounce ($N=3$)
 
-### A. Pretrained Production Model (`dl_v1` - Transfer Zero-Shot dari Data Publik)
-Model Autoencoder DenseAE v2 (`ml/artifacts/dl_v1/model.onnx` / `model_weights.npz`) yang telah dilatih pada dataset publik (2 fitur: `Heart_Rate`, `SpO2`) diuji langsung pada dataset sintetis:
-- **Metrik Global**: $\text{ROC-AUC} = \mathbf{0.9060}$, $\text{PR-AUC} = \mathbf{0.7324}$ ($\text{PR-AUC} - \text{Prev} = 0.6845$).
-- **Ambang Batas Default Metadata (`p95 = 0.013571`)**:
-  - Tanpa Debounce: $\text{FPR} = 1,27\%$, $\text{Recall} = 65,84\%$, $\text{Precision} = 72,27\%$, $\text{F1} = 0.6890$.
-  - Dengan Debounce Persistensi ($N=3$): $\text{FPR} = \mathbf{0.52\%}$, $\text{Recall} = 41,64\%$, $\text{Precision} = \mathbf{80.14\%}$, $\text{F1} = 0.5480$.
-- **Ambang Batas Kalibrasi Val FPR 3%**:
-  - $\text{FPR} = 5,93\%$, $\text{Recall} = 71,53\%$, $\text{Precision} = 37,78\%$, $\text{F1} = 0.4945$.
+*Debounce $N=3$ mengharuskan alarm terpicu selama 3 detik berturut-turut di dalam sesi yang sama sebelum status dinyatakan anomali.*
 
-### B. Pelatihan Arsitektur DenseAE pada Dataset Sintetis
-Arsitektur simetris DenseAE ($(16, 8, 2, 8, 16)$ encoder-decoder) dilatih langsung pada set data `train` normal sintetis:
-1. **DenseAE 2D (Input: `Heart_Rate`, `SpO2`)**:
-   - $\text{ROC-AUC} = \mathbf{0.9983}$, $\text{PR-AUC} = \mathbf{0.9939}$ ($\text{PR} - \text{Prev} = \mathbf{0.9460}$).
-   - **Performa Test Set (Val FPR 3% Threshold)**:
-     - Tanpa Debounce: $\text{FPR} = \mathbf{1.77\%}$, $\text{Recall} = \mathbf{99.29\%}$ (279 dari 281 anomali tertangkap), $\text{Precision} = 73,81\%$, $\text{F1} = \mathbf{0.8467}$.
-     - Dengan Debounce Persistensi ($N=3$): $\text{FPR} = \mathbf{0.47\%}$ (hanya 26 false alarm), $\text{Recall} = 77,94\%$, $\text{Precision} = \mathbf{89.39\%}$, $\text{F1} = \mathbf{0.8327}$.
-   - **Rincian Skenario Test (Tanpa Debounce)**:
-     - `MOTION`: Recall = **100,0%** (198/198), FPR = 4,3% (30 FP)
-     - `FINGER_SHIFT`: Recall = **97,6%** (81/83), FPR = 0,8% (6 FP)
-     - `REST`: FPR = 1,3% (31 FP / 2.389)
-     - `TYPING`: FPR = 2,8% (25 FP / 892)
-     - `DHT_UNPLUGGED`: FPR = 0,8% (7 FP / 895)
-2. **DenseAE 3D (Input: `Heart_Rate`, `SpO2`, `Temperature`)**:
-   - $\text{ROC-AUC} = 0.9950$, $\text{PR-AUC} = 0.9820$, $\text{Test FPR} = 1,70\%$, $\text{Recall} = 97,86\%$, $\text{F1} = 0.8449$.
-3. **DenseAE 13D (Input: 13 Fitur Window Temporal)**:
-   - $\text{ROC-AUC} = 0.9699$, $\text{PR-AUC} = 0.4708$, $\text{Test FPR} = 4,35\%$, $\text{Recall} = 70,11\%$, $\text{F1} = 0.5495$.
+| Model + $N=3$ | Test FPR Aktual | Recall | Presisi | F1 | Burst Recall (29) | Med Lat | FPR tol14 |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Rule Default (2D) + N3** | **0,00%** | 51,60% | **100,00%** | 0,6808 | 58,6% (17) | 2,0s | **0,00%** |
+| **Rule Default (3D) + N3** | **0,00%** | 51,60% | **100,00%** | 0,6808 | 58,6% (17) | 2,0s | **0,00%** |
+| **Univariate (2D) + N3** | 0,30% | 76,51% | 92,67% | 0,8382 | **100,0%** (29) | 2,0s | 0,27% |
+| **Univariate (3D) + N3** | 0,30% | 76,51% | 92,67% | 0,8382 | **100,0%** (29) | 2,0s | 0,27% |
+| **dl_v1 Zero-Shot + N3** | 3,87% | 47,33% | 38,11% | 0,4222 | 55,2% (16) | 2,0s | 4,04% |
+| **IF (2D raw) + N3** | **0,25%** | **77,94%** | **93,99%** | **0,8521** | **100,0%** (29) | 2,0s | **0,19%** |
+| **IF (3D raw) + N3** | 1,36% | 70,11% | 72,16% | 0,7112 | 89,7% (26) | 2,0s | 1,31% |
+| **Mahalanobis (2D) + N3** | 1,67% | 78,29% | 70,29% | 0,7407 | **100,0%** (29) | 2,0s | 1,38% |
+| **Mahalanobis (3D) + N3** | 2,10% | 77,22% | 64,97% | 0,7057 | **100,0%** (29) | 2,0s | 1,90% |
+| **LOF (2D) + N3** | 0,48% | 76,87% | 88,89% | 0,8244 | **100,0%** (29) | 2,0s | 0,44% |
+| **LOF (3D) + N3** | 0,84% | 77,58% | 82,26% | 0,7985 | **100,0%** (29) | 2,0s | 0,71% |
+| **OCSVM (2D) + N3** | 0,39% | 77,94% | 90,87% | 0,8391 | **100,0%** (29) | 2,0s | 0,35% |
+| **OCSVM (3D) + N3** | 0,66% | 77,94% | 85,55% | 0,8156 | **100,0%** (29) | 2,0s | 0,67% |
+| **DenseAE 2D + N3 (seed 42)**| 0,56% | 77,94% | 87,60% | 0,8249 | **100,0%** (29) | 2,0s | 0,52% |
+| **DenseAE 3D + N3 (seed 42)**| 1,65% | 77,58% | 70,32% | 0,7377 | **100,0%** (29) | 2,0s | 1,67% |
 
-### C. Ringkasan Komparatif ML vs DL pada Data Sintetis
-- Model Deep Learning Autoencoder (**DenseAE 2D**) yang dilatih langsung pada data sintetis menghasilkan metrik akurasi tertinggi di antara seluruh pendekatan ($\text{ROC-AUC} = \mathbf{0.9983}$, $\text{PR-AUC} = \mathbf{0.9939}$, $\text{F1} = \mathbf{0.8467}$).
-- Berbeda dari model 13-window temporal yang terdampak oleh *window lag* sebesar 19,2% pasca-gerakan, model DL per-baris DenseAE 2D langsung mengenali pemulihan sinyal secara instan (FPR pada MOTION hanya 4,3% dengan Recall 100,0%).
-- Penambahan filter persistensi ($N=3$) pada DL secara drastis menekan tingkat alarm palsu ke level minimal (**0,47%** atau kurang dari 1 alarm palsu per 200 sampel) dengan presisi mendekati **90%**.
+---
+
+### C. Recall pada Ketat Test FPR (Kurva ROC Non-Interpolated)
+
+*Dihitung langsung dari kurva ROC empiris tanpa interpolasi linear:*
+
+| Model | Recall @ FPR $\le$ 0,1% | Recall @ FPR $\le$ 0,5% | Recall @ FPR $\le$ 1,0% | Recall @ FPR $\le$ 3,0% |
+| :--- | :---: | :---: | :---: | :---: |
+| **dl_v1 Zero-Shot (2D)** | 63,35% | 64,41% | 64,77% | 67,62% |
+| **IF (2D raw)** | 85,05% | 92,17% | 96,80% | **99,29%** |
+| **IF (3D raw)** | 69,04% | 83,99% | 86,83% | 95,37% |
+| **Mahalanobis (2D)** | 97,15% | 98,22% | 98,58% | 98,93% |
+| **Mahalanobis (3D)** | 97,15% | 97,51% | 98,22% | 98,93% |
+| **LOF (2D)** | 97,51% | 98,58% | 98,58% | **99,29%** |
+| **LOF (3D)** | 97,15% | 97,86% | 98,93% | **99,29%** |
+| **OCSVM (2D)** | **98,22%** | **99,29%** | **99,29%** | **99,29%** |
+| **OCSVM (3D)** | 97,86% | 98,58% | 98,93% | **99,29%** |
+| **DenseAE 2D (seed 42)** | **98,22%** | 98,93% | **99,29%** | **99,29%** |
+| **DenseAE 3D (seed 42)** | 95,73% | 97,15% | 97,15% | 98,22% |
+
+---
+
+### D. Hasil Pelatihan DenseAE (5 Seeds: 42–46, Mean $\pm$ SD)
+
+Model PyTorch DenseAutoencoder (`ml/dl/models.py`) dilatih secara deterministik pada 5 seed acak berturut-turut:
+
+1. **DenseAE 2D (`hr`, `spo2`)**:
+   - **Tanpa Debounce (Raw, $N=1$)**:
+     - $\text{ROC-AUC} = 0,9967 \pm 0,0014$
+     - $\text{PR-AUC} = 0,9932 \pm 0,0007$
+     - $\text{Test FPR} = 2,24\% \pm 0,55\%$
+     - $\text{Recall} = 99,29\% \pm 0,00\%$
+     - $\text{Presisi} = 70,55\% \pm 5,34\%$
+     - $\text{F1-Score} = 0,8165 \pm 0,0367$
+     - $\text{Burst Recall} = 100,0\% \pm 0,0\%$ (29/29)
+     - $\text{FPR tol14} = 2,28\% \pm 0,63\%$
+   - **Dengan Persistence ($N=3$)**:
+     - $\text{Test FPR} = 0,79\% \pm 0,27\%$
+     - $\text{Recall} = 77,94\% \pm 0,00\%$
+     - $\text{Presisi} = 84,04\% \pm 4,77\%$
+     - $\text{F1-Score} = 0,8054 \pm 0,0217$
+     - $\text{Burst Recall} = 100,0\% \pm 0,0\%$ (29/29)
+     - $\text{FPR tol14} = 0,80\% \pm 0,31\%$
+
+2. **DenseAE 3D (`hr`, `spo2`, `temp`)**:
+   - **Tanpa Debounce (Raw, $N=1$)**:
+     - $\text{ROC-AUC} = 0,9984 \pm 0,0003$
+     - $\text{PR-AUC} = 0,9874 \pm 0,0026$
+     - $\text{Test FPR} = 3,65\% \pm 0,37\%$
+     - $\text{Recall} = 98,43\% \pm 0,48\%$
+     - $\text{F1-Score} = 0,7269 \pm 0,0206$
+     - $\text{Burst Recall} = 100,0\% \pm 0,0\%$ (29/29)
+     - $\text{FPR tol14} = 3,64\% \pm 0,47\%$
+   - **Dengan Persistence ($N=3$)**:
+     - $\text{Test FPR} = 1,57\% \pm 0,16\%$
+     - $\text{Recall} = 76,87\% \pm 0,81\%$
+     - $\text{F1-Score} = 0,7391 \pm 0,0089$
+     - $\text{Burst Recall} = 100,0\% \pm 0,0\%$ (29/29)
+     - $\text{FPR tol14} = 1,55\% \pm 0,21\%$
+
+---
+
+## 5. Analisis Kritis: Kegagalan Zero-Shot dan Realitas Kinerja DL vs ML
+
+### A. Evaluasi Objektif: DL Tidak Unggul Mutlak
+Klaim sebelumnya bahwa model Deep Learning Autoencoder (*DenseAE*) lebih unggul daripada seluruh pendekatan baseline **tidak terbukti secara empiris**:
+1. Pada mode persistensi $N=3$, **Isolation Forest 2D raw** menghasilkan F1-Score yang lebih tinggi (**0,8521** vs **0,8054** mean pada DenseAE 2D) dengan Test FPR yang jauh lebih rendah (**0,25%** vs **0,79%** mean pada DenseAE 2D).
+2. **Univariate Thresholding** sederhana per-sensor menghasilkan F1-Score sebesar **0,8382** dengan Test FPR hanya **0,30%** (debounced) dan menangkap 100% burst anomali (29/29), tanpa memerlukan komputasi matriks densitas tinggi ataupun pelatihan neural network.
+3. Penambahan fitur suhu (`temp`) pada DenseAE 3D justru mendegradasi F1-Score dari 0,8165 ke 0,7269 (raw) dan menaikkan Test FPR dari 2,24% menjadi 3,65%, karena anomali simulator terfokus pada dinamika PPG fotopletismografi.
+
+### B. Evaluasi Transfer Zero-Shot `dl_v1`: Terjadi Degradasi Domain
+Model produksi pra-latih `dl_v1` (yang dilatih pada dataset publik 3 sumber: Nasir Ayub, Engr Arri, Gourango Mandal) **gagal melakukan transfer zero-shot secara andal** ke dataset simulator telemetri ini:
+- **Test FPR Aktual Melonjak**: 5,93% pada raw ($N=1$) dan 3,87% pada $N=3$ (jauh melampaui toleransi target 3%).
+- **Presisi Rendah**: Presisi hanya mencapai 37,78% (raw) dan 38,11% ($N=3$), dengan lebih dari 60% alarm adalah false alarm.
+- **Deteksi Kejadian Terbatas**: Recall anomali hanya mencapai 71,53% (raw) dan anjlok ke 47,33% ($N=3$). Burst Recall hanya 55,2% (hanya 16 dari 29 burst yang terdeteksi dengan $N=3$).
+- **Penyebab**: Pergeseran distribusi (*domain covariate shift*) antara profil noise sensor MAX30102 pada data publik klinis vs karakteristik sintesis generator telemetri ESP32. Model produksi membutuhkan kalibrasi domain spesifik (*domain adaptation*) sebelum dapat digunakan pada simulator ini.
+
+---
+
+## 6. Keterbatasan Sampel Uji & Analisis Ketidakandalan CI Bootstrap
+
+### A. Karakteristik Kluster Test Set
+- **Jumlah Sesi Uji**: 6 sesi total (S11–S16).
+- **Jumlah Sesi Beranomali**: HANYA **2 sesi** (`S14 MOTION` dan `S15 FINGER_SHIFT`).
+- **Sesi Bebas Anomali**: 4 sesi (`S11 REST`, `S12 REST`, `S13 TYPING`, `S16 DHT_UNPLUGGED`).
+- **Total Anomaly Bursts**: **29 bursts** (16 di S14, 13 di S15).
+
+### B. Mengapa Interval Kepercayaan (CI) Bootstrap Kluster Tidak Dapat Dihitung Secara Andal
+1. **Jumlah Kluster Positif Terlalu Sedikit ($M=2$)**:
+   Metode block / cluster bootstrap pada tingkat sesi mengharuskan jumlah kluster independen yang memadai ($M \ge 30-50$). Dengan hanya 2 sesi anomali, setiap penarikan sampel dengan pengembalian (*resampling with replacement*) memiliki probabilitas 25% hanya menarik S14, 25% hanya menarik S15, dan 50% menarik keduanya. Varians antar-penarikan menjadi sangat ekstrem dan estimasi interval parameter mengalami bias kluster parah.
+2. **Ketergantungan Skenario**:
+   Burst resampling (29 bursts) menghasilkan estimasi empiris 95% CI Burst Recall $[100,0\%, 100,0\%]$ untuk DenseAE 2D dan IF 2D raw. Namun interval ini **terlalu optimistik (degenerate)** karena seluruh 29 burst hanya mewakili dua variasi fisik buatan simulator telemetri (gerakan tangan dan pergeseran sensor), bukan variasi populasi pasien yang independen.
+
+---
+
+## 7. Verifikasi Integritas dan Urutan Data
+
+- **Verifikasi Urutan Indeks**:
+  Seluruh Series prediksi debounced ($N=3$) diverifikasi secara programatis:
+  ```python
+  assert (pred_deb.index == test_df.index).all()
+  ```
+  Hasil pengujian: **PASSED (100% konsisten)**.
+- **Integritas Artefak**:
+  Tidak ada modifikasi pada file runtime produksi `ml/artifacts/dl_v1/`, firmware, konfigurasi backend, atau database live. Evaluasi ini murni dijalankan pada script terisolasi `ml_pipeline/src/evaluate_dl_simulator.py`.
