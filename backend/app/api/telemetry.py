@@ -39,12 +39,27 @@ async def get_latest(
 
     prediction_dict = None
     if prediction:
-        prediction_dict = {
-            "ts": prediction.ts,
-            "label": prediction.label,
-            "severity": prediction.published_severity,
-            "score": prediction.ml_score,
-        }
+        # Jika sensor sedang tidak ada jari atau vitals belum terdeteksi (HR / SpO2 masih proses awal),
+        # jangan kembalikan record prediksi lama dari sesi sebelumnya agar dashboard tidak menampilkan false alarm.
+        has_fresh_vitals = bool(reading and reading.finger and (reading.hr is not None) and (reading.spo2 is not None))
+        
+        is_fresh = False
+        if has_fresh_vitals and reading and reading.ts and prediction.ts:
+            try:
+                r_ts = datetime.fromisoformat(reading.ts.replace("Z", "+00:00"))
+                p_ts = datetime.fromisoformat(prediction.ts.replace("Z", "+00:00"))
+                if abs((r_ts - p_ts).total_seconds()) <= 15:
+                    is_fresh = True
+            except Exception:
+                is_fresh = True
+
+        if is_fresh:
+            prediction_dict = {
+                "ts": prediction.ts,
+                "label": prediction.label,
+                "severity": prediction.published_severity,
+                "score": prediction.ml_score,
+            }
 
     return {
         "reading": reading_dict,
