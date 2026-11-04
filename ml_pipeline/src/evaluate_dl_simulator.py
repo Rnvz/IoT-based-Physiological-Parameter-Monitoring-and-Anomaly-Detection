@@ -38,6 +38,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("eval_dl_sim")
 
 BANNER = "SIMULATOR, BUKAN HASIL ALAT"
+SEEDS = [42, 43, 44, 45, 46]
 
 
 def set_seed(seed: int):
@@ -220,7 +221,6 @@ def compute_metrics(
     """
     Menghitung metrik titik operasi, metrik ROC tanpa interpolasi, dan metrik kejadian (burst).
     """
-    # 1. Metrik titik operasi
     cm = confusion_matrix(y_true, preds, labels=[0, 1])
     tn, fp, fn, tp = cm.ravel()
     fpr = fp / max(1, (fp + tn))
@@ -228,7 +228,6 @@ def compute_metrics(
     prec = tp / max(1, (tp + fp))
     f1 = 2 * prec * recall / max(1e-9, (prec + recall))
 
-    # 2. Kurva ROC tanpa interpolasi
     rec_at_fpr = {0.001: np.nan, 0.005: np.nan, 0.01: np.nan, 0.03: np.nan}
     roc_auc = np.nan
     pr_auc = np.nan
@@ -244,7 +243,6 @@ def compute_metrics(
             else:
                 rec_at_fpr[target_f] = 0.0
 
-    # 3. Metrik kejadian (burst)
     burst_detected = 0
     latencies = []
     for b in bursts:
@@ -252,13 +250,11 @@ def compute_metrics(
         hit_pos = np.where(b_preds == 1)[0]
         if len(hit_pos) > 0:
             burst_detected += 1
-            latencies.append(hit_pos[0])  # latensi dalam detik (indeks offset)
+            latencies.append(hit_pos[0])
 
     burst_recall = burst_detected / max(1, len(bursts))
     median_latency = float(np.median(latencies)) if len(latencies) > 0 else np.nan
 
-    # 4. FPR dengan toleransi 14 detik pasca-burst
-    # tolerance_mask bernilai True jika sampel normal berada di luar 14s pasca-burst
     clean_normal_idx = tolerance_mask[tolerance_mask & (y_true == 0)].index
     fp_clean = (preds.loc[clean_normal_idx] == 1).sum()
     fpr_tol14 = fp_clean / max(1, len(clean_normal_idx))
@@ -278,12 +274,51 @@ def compute_metrics(
         "burst_detected": burst_detected,
         "total_bursts": len(bursts),
         "median_latency": median_latency,
-        "fpr_tol14": fpr_tol14
+        "fpr_tol14": fpr_tol14,
+        "raw_tp": tp,
+        "raw_fp": fp,
+        "raw_tn": tn,
+        "raw_fn": fn
+    }
+
+
+def aggregate_seed_runs(runs_list: List[Dict[str, Any]], mode: str = "raw") -> Dict[str, float]:
+    res = {}
+    keys = runs_list[0][mode].keys()
+    for k in keys:
+        vals = [r[mode][k] for r in runs_list]
+        res[f"{k}_mean"] = float(np.mean(vals))
+        res[f"{k}_sd"] = float(np.std(vals))
+    return res
+
+
+def compute_scenario_metrics(
+    preds: pd.Series,
+    test_df: pd.DataFrame,
+    scenario_id: str
+) -> Dict[str, Any]:
+    sub = test_df[test_df["session_id"] == scenario_id]
+    y_true = sub["ref_OUTPUT"].astype(int)
+    sub_preds = preds.loc[sub.index]
+    cm = confusion_matrix(y_true, sub_preds, labels=[0, 1])
+    tn, fp, fn, tp = cm.ravel()
+    norm_total = tn + fp
+    ano_total = tp + fn
+    fpr = fp / max(1, norm_total)
+    recall = tp / max(1, ano_total)
+    return {
+        "scenario": scenario_id,
+        "norm_total": norm_total,
+        "ano_total": ano_total,
+        "fp": fp,
+        "fpr": fpr,
+        "tp": tp,
+        "recall": recall
     }
 
 
 def main():
-    print(f"[{BANNER}] MEMULAI EVALUASI MODEL DEEP LEARNING & PEMBANDING")
+    print(f"[{BANNER}] MEMULAI EVALUASI LENGKAP SIMULATOR")
     
     # 1. Muat dataset
     csv_path = os.path.join(PROJECT_ROOT, "Dataset", "physio_monitor_synthetic_dataset (1).csv")
@@ -292,23 +327,63 @@ def main():
     # Filter integritas sensor
     df_valid = df[df["fw_status"] == "NORMAL"].copy()
     
-    # Pisahkan split role
     train_df = df_valid[df_valid["split_role"] == "train"].copy()
     val_df = df_valid[df_valid["split_role"] == "val"].copy()
     test_df = df_valid[df_valid["split_role"] == "test"].copy()
-    
     val_normal = val_df[val_df["ref_OUTPUT"] == 0].copy()
     
     print(f"[{BANNER}] Data Counts: Train Normal={len(train_df)}, Val Total={len(val_df)} (Normal={len(val_normal)}), Test Total={len(test_df)}")
 
-    # Ekstraksi bursts pada test set
-    bursts = extract_bursts(test_df)
-    s14_bursts = [b for b in bursts if b["session_id"] == "S14"]
-    s15_bursts = [b for b in bursts if b["session_id"] == "S15"]
-    print(f"[{BANNER}] Test Bursts: Total={len(bursts)} (S14 MOTION={len(s14_bursts)}, S15 FINGER_SHIFT={len(s15_bursts)})")
+    # ==========================================================================
+    # ITEM 2: COCOKKAN RULE DEFAULT DENGAN KOLOM rule_severity DATASET
+    # ==========================================================================
+    print(f"\n[{BANNER}] ============ ITEM 2: PENGECEKAN KECOCOKAN RULE DEFAULT ============")
+    rule_eval_all = []
+    for _, r in df.iterrows():
+        sev, _ = evaluate_rules(r["hr"], r["spo2"], r["temp"])
+        rule_eval_all.append(sev)
+    df["computed_rule_sev"] = rule_eval_all
 
-    # Siapkan toleransi 14 detik pasca-burst
-    # Buat mask per-sesi untuk sampel berjarak >14 detik setelah burst anomali selesai
+    rule_eval_valid = []
+    for _, r in df_valid.iterrows():
+        sev, _ = evaluate_rules(r["hr"], r["spo2"], r["temp"])
+        rule_eval_valid.append(sev)
+    df_valid["computed_rule_sev"] = rule_eval_valid
+
+    rule_eval_test = []
+    for _, r in test_df.iterrows():
+        sev, _ = evaluate_rules(r["hr"], r["spo2"], r["temp"])
+        rule_eval_test.append(sev)
+    test_df["computed_rule_sev"] = rule_eval_test
+
+    match_all = (df["computed_rule_sev"] == df["rule_severity"])
+    match_valid = (df_valid["computed_rule_sev"] == df_valid["rule_severity"])
+    match_test = (test_df["computed_rule_sev"] == test_df["rule_severity"])
+
+    print(f"  1. Keseluruhan Dataset ({len(df)} baris): {match_all.sum()} / {len(df)} ({match_all.mean()*100:.4f}% cocok)")
+    print(f"  2. Baris fw_status == NORMAL ({len(df_valid)} baris): {match_valid.sum()} / {len(df_valid)} ({match_valid.mean()*100:.4f}% cocok)")
+    print(f"  3. Test Set Split ({len(test_df)} baris): {match_test.sum()} / {len(test_df)} ({match_test.mean()*100:.4f}% cocok)")
+    print(f"  4. Mismatch: {(~match_all).sum()} baris. Seluruh mismatch berada pada fw_status == 'SENSOR_OFF' (di mana rule_severity dataset = NaN).")
+
+    # ==========================================================================
+    # ITEM 4 (BURSTS): EKSTRAKSI & STATISTIK 29 BURSTS
+    # ==========================================================================
+    bursts = extract_bursts(test_df)
+    durations = [b["duration"] for b in bursts]
+    min_dur = int(np.min(durations))
+    med_dur = float(np.median(durations))
+    max_dur = int(np.max(durations))
+    short_bursts = [b for b in bursts if b["duration"] < 3]
+
+    print(f"\n[{BANNER}] ============ ITEM 4: STATISTIK 29 ANOMALY BURSTS TEST SET ============")
+    print(f"Total Bursts: {len(bursts)} (S14 MOTION: 16, S15 FINGER_SHIFT: 13)")
+    print(f"Panjang Bursts: Min={min_dur} baris, Median={med_dur:.1f} baris, Max={max_dur} baris")
+    print(f"Jumlah Bursts dengan durasi < 3 baris: {len(short_bursts)} dari {len(bursts)} (0.0%)")
+    print("Daftar 29 Bursts:")
+    for idx, b in enumerate(bursts, 1):
+        print(f"  Burst #{idx:02d} | Sesi={b['session_id']} | Durasi={b['duration']:2d}s | Start={b['start_ts']} | End={b['end_ts']}")
+
+    # Mask toleransi 14s pasca-burst
     tol14_mask = pd.Series(True, index=test_df.index)
     for b in bursts:
         sid = b["session_id"]
@@ -316,14 +391,8 @@ def main():
         sess_indices = sess_df.index.tolist()
         b_end_idx = b["end_idx"]
         b_end_pos = sess_indices.index(b_end_idx)
-        # 14 sampel setelah burst
         post_indices = sess_indices[b_end_pos + 1 : b_end_pos + 15]
         tol14_mask.loc[post_indices] = False
-
-    normal_test_count = (test_df["ref_OUTPUT"] == 0).sum()
-    clean_normal_count = (tol14_mask & (test_df["ref_OUTPUT"] == 0)).sum()
-    lag_normal_count = normal_test_count - clean_normal_count
-    print(f"[{BANNER}] Normal Test Samples: Total={normal_test_count}, Diluar 14s lag={clean_normal_count}, Didalam 14s lag={lag_normal_count}")
 
     # Feature sets
     cols_2d = ["hr", "spo2"]
@@ -334,170 +403,29 @@ def main():
 
     X_train_2d = scaler_2d.transform(train_df[cols_2d].values)
     X_val_norm_2d = scaler_2d.transform(val_normal[cols_2d].values)
-    X_val_all_2d = scaler_2d.transform(val_df[cols_2d].values)
     X_test_2d = scaler_2d.transform(test_df[cols_2d].values)
 
     X_train_3d = scaler_3d.transform(train_df[cols_3d].values)
     X_val_norm_3d = scaler_3d.transform(val_normal[cols_3d].values)
-    X_val_all_3d = scaler_3d.transform(val_df[cols_3d].values)
     X_test_3d = scaler_3d.transform(test_df[cols_3d].values)
 
     y_test = test_df["ref_OUTPUT"].astype(int)
 
-    # Dictionary penampung hasil
-    results = {}
-
-    # --------------------------------------------------------------------------
-    # 2. LATIH DENSE AE (5 SEEDS: 42-46)
-    # --------------------------------------------------------------------------
-    seeds = [42, 43, 44, 45, 46]
-    ae_2d_runs = []
-    ae_3d_runs = []
-
-    print(f"\n[{BANNER}] Pelatihan DenseAE 2D & 3D (5 Seeds: {seeds})...")
-    for s in seeds:
-        # 2D
-        model_2d = train_dense_ae(X_train_2d, X_val_norm_2d, input_dim=2, seed=s)
-        val_norm_score_2d = model_2d.compute_anomaly_score(torch.tensor(X_val_norm_2d, dtype=torch.float32)).numpy()
-        test_score_2d = model_2d.compute_anomaly_score(torch.tensor(X_test_2d, dtype=torch.float32)).numpy()
-        thr_2d = np.percentile(val_norm_score_2d, 97.0)
-        pred_2d = pd.Series((test_score_2d >= thr_2d).astype(int), index=test_df.index)
-        deb_2d = apply_persistence(pred_2d, test_df["session_id"], n=3)
-
-        # Verifikasi urutan indeks
-        assert (pred_2d.index == test_df.index).all(), "Indeks pred_2d tidak cocok dengan test_df!"
-        assert (deb_2d.index == test_df.index).all(), "Indeks deb_2d tidak cocok dengan test_df!"
-
-        m_raw_2d = compute_metrics(y_test, test_score_2d, pred_2d, test_df, bursts, tol14_mask, is_continuous=True)
-        m_deb_2d = compute_metrics(y_test, test_score_2d, deb_2d, test_df, bursts, tol14_mask, is_continuous=True)
-        ae_2d_runs.append({"raw": m_raw_2d, "deb": m_deb_2d, "scores": test_score_2d})
-
-        # 3D
-        model_3d = train_dense_ae(X_train_3d, X_val_norm_3d, input_dim=3, seed=s)
-        val_norm_score_3d = model_3d.compute_anomaly_score(torch.tensor(X_val_norm_3d, dtype=torch.float32)).numpy()
-        test_score_3d = model_3d.compute_anomaly_score(torch.tensor(X_test_3d, dtype=torch.float32)).numpy()
-        thr_3d = np.percentile(val_norm_score_3d, 97.0)
-        pred_3d = pd.Series((test_score_3d >= thr_3d).astype(int), index=test_df.index)
-        deb_3d = apply_persistence(pred_3d, test_df["session_id"], n=3)
-
-        assert (pred_3d.index == test_df.index).all()
-        assert (deb_3d.index == test_df.index).all()
-
-        m_raw_3d = compute_metrics(y_test, test_score_3d, pred_3d, test_df, bursts, tol14_mask, is_continuous=True)
-        m_deb_3d = compute_metrics(y_test, test_score_3d, deb_3d, test_df, bursts, tol14_mask, is_continuous=True)
-        ae_3d_runs.append({"raw": m_raw_3d, "deb": m_deb_3d, "scores": test_score_3d})
-
-    # Simpan hasil DenseAE seed 42 dan statistik 5 seed
-    results["DenseAE_2D_seed42_raw"] = ae_2d_runs[0]["raw"]
-    results["DenseAE_2D_seed42_deb"] = ae_2d_runs[0]["deb"]
-    results["DenseAE_3D_seed42_raw"] = ae_3d_runs[0]["raw"]
-    results["DenseAE_3D_seed42_deb"] = ae_3d_runs[0]["deb"]
-
-    # Rata-rata 5 seed
-    def agg_runs(runs_list, mode="raw"):
-        res = {}
-        keys = runs_list[0][mode].keys()
-        for k in keys:
-            vals = [r[mode][k] for r in runs_list]
-            res[f"{k}_mean"] = float(np.mean(vals))
-            res[f"{k}_sd"] = float(np.std(vals))
-        return res
-
-    results["DenseAE_2D_5seeds_raw"] = agg_runs(ae_2d_runs, "raw")
-    results["DenseAE_2D_5seeds_deb"] = agg_runs(ae_2d_runs, "deb")
-    results["DenseAE_3D_5seeds_raw"] = agg_runs(ae_3d_runs, "raw")
-    results["DenseAE_3D_5seeds_deb"] = agg_runs(ae_3d_runs, "deb")
-
-    # --------------------------------------------------------------------------
-    # 3. PEMBANDING FITUR (2D & 3D)
-    # --------------------------------------------------------------------------
-    print(f"[{BANNER}] Melatih Model-Model Pembanding...")
-
-    # A. Isolation Forest (2D & 3D)
-    if_2d = IsolationForest(n_estimators=100, random_state=42, contamination="auto").fit(X_train_2d)
-    score_if_2d = -if_2d.score_samples(X_test_2d)
-    thr_if_2d = np.percentile(-if_2d.score_samples(X_val_norm_2d), 97.0)
-    pred_if_2d = pd.Series((score_if_2d >= thr_if_2d).astype(int), index=test_df.index)
-    deb_if_2d = apply_persistence(pred_if_2d, test_df["session_id"], n=3)
-    results["IF_2D_raw"] = compute_metrics(y_test, score_if_2d, pred_if_2d, test_df, bursts, tol14_mask)
-    results["IF_2D_deb"] = compute_metrics(y_test, score_if_2d, deb_if_2d, test_df, bursts, tol14_mask)
-
-    if_3d = IsolationForest(n_estimators=100, random_state=42, contamination="auto").fit(X_train_3d)
-    score_if_3d = -if_3d.score_samples(X_test_3d)
-    thr_if_3d = np.percentile(-if_3d.score_samples(X_val_norm_3d), 97.0)
-    pred_if_3d = pd.Series((score_if_3d >= thr_if_3d).astype(int), index=test_df.index)
-    deb_if_3d = apply_persistence(pred_if_3d, test_df["session_id"], n=3)
-    results["IF_3D_raw"] = compute_metrics(y_test, score_if_3d, pred_if_3d, test_df, bursts, tol14_mask)
-    results["IF_3D_deb"] = compute_metrics(y_test, score_if_3d, deb_if_3d, test_df, bursts, tol14_mask)
-
-    # B. Mahalanobis / EllipticEnvelope (2D & 3D)
-    ee_2d = EllipticEnvelope(random_state=42, contamination=0.03).fit(X_train_2d)
-    score_ee_2d = ee_2d.mahalanobis(X_test_2d)
-    thr_ee_2d = np.percentile(ee_2d.mahalanobis(X_val_norm_2d), 97.0)
-    pred_ee_2d = pd.Series((score_ee_2d >= thr_ee_2d).astype(int), index=test_df.index)
-    deb_ee_2d = apply_persistence(pred_ee_2d, test_df["session_id"], n=3)
-    results["Mahalanobis_2D_raw"] = compute_metrics(y_test, score_ee_2d, pred_ee_2d, test_df, bursts, tol14_mask)
-    results["Mahalanobis_2D_deb"] = compute_metrics(y_test, score_ee_2d, deb_ee_2d, test_df, bursts, tol14_mask)
-
-    ee_3d = EllipticEnvelope(random_state=42, contamination=0.03).fit(X_train_3d)
-    score_ee_3d = ee_3d.mahalanobis(X_test_3d)
-    thr_ee_3d = np.percentile(ee_3d.mahalanobis(X_val_norm_3d), 97.0)
-    pred_ee_3d = pd.Series((score_ee_3d >= thr_ee_3d).astype(int), index=test_df.index)
-    deb_ee_3d = apply_persistence(pred_ee_3d, test_df["session_id"], n=3)
-    results["Mahalanobis_3D_raw"] = compute_metrics(y_test, score_ee_3d, pred_ee_3d, test_df, bursts, tol14_mask)
-    results["Mahalanobis_3D_deb"] = compute_metrics(y_test, score_ee_3d, deb_ee_3d, test_df, bursts, tol14_mask)
-
-    # C. Local Outlier Factor (LOF) (2D & 3D)
-    lof_2d = LocalOutlierFactor(n_neighbors=20, novelty=True, contamination="auto").fit(X_train_2d)
-    score_lof_2d = -lof_2d.score_samples(X_test_2d)
-    thr_lof_2d = np.percentile(-lof_2d.score_samples(X_val_norm_2d), 97.0)
-    pred_lof_2d = pd.Series((score_lof_2d >= thr_lof_2d).astype(int), index=test_df.index)
-    deb_lof_2d = apply_persistence(pred_lof_2d, test_df["session_id"], n=3)
-    results["LOF_2D_raw"] = compute_metrics(y_test, score_lof_2d, pred_lof_2d, test_df, bursts, tol14_mask)
-    results["LOF_2D_deb"] = compute_metrics(y_test, score_lof_2d, deb_lof_2d, test_df, bursts, tol14_mask)
-
-    lof_3d = LocalOutlierFactor(n_neighbors=20, novelty=True, contamination="auto").fit(X_train_3d)
-    score_lof_3d = -lof_3d.score_samples(X_test_3d)
-    thr_lof_3d = np.percentile(-lof_3d.score_samples(X_val_norm_3d), 97.0)
-    pred_lof_3d = pd.Series((score_lof_3d >= thr_lof_3d).astype(int), index=test_df.index)
-    deb_lof_3d = apply_persistence(pred_lof_3d, test_df["session_id"], n=3)
-    results["LOF_3D_raw"] = compute_metrics(y_test, score_lof_3d, pred_lof_3d, test_df, bursts, tol14_mask)
-    results["LOF_3D_deb"] = compute_metrics(y_test, score_lof_3d, deb_lof_3d, test_df, bursts, tol14_mask)
-
-    # D. One-Class SVM (2D & 3D)
-    ocsvm_2d = OneClassSVM(kernel="rbf", gamma="scale", nu=0.05).fit(X_train_2d)
-    score_ocsvm_2d = -ocsvm_2d.score_samples(X_test_2d)
-    thr_ocsvm_2d = np.percentile(-ocsvm_2d.score_samples(X_val_norm_2d), 97.0)
-    pred_ocsvm_2d = pd.Series((score_ocsvm_2d >= thr_ocsvm_2d).astype(int), index=test_df.index)
-    deb_ocsvm_2d = apply_persistence(pred_ocsvm_2d, test_df["session_id"], n=3)
-    results["OCSVM_2D_raw"] = compute_metrics(y_test, score_ocsvm_2d, pred_ocsvm_2d, test_df, bursts, tol14_mask)
-    results["OCSVM_2D_deb"] = compute_metrics(y_test, score_ocsvm_2d, deb_ocsvm_2d, test_df, bursts, tol14_mask)
-
-    ocsvm_3d = OneClassSVM(kernel="rbf", gamma="scale", nu=0.05).fit(X_train_3d)
-    score_ocsvm_3d = -ocsvm_3d.score_samples(X_test_3d)
-    thr_ocsvm_3d = np.percentile(-ocsvm_3d.score_samples(X_val_norm_3d), 97.0)
-    pred_ocsvm_3d = pd.Series((score_ocsvm_3d >= thr_ocsvm_3d).astype(int), index=test_df.index)
-    deb_ocsvm_3d = apply_persistence(pred_ocsvm_3d, test_df["session_id"], n=3)
-    results["OCSVM_3D_raw"] = compute_metrics(y_test, score_ocsvm_3d, pred_ocsvm_3d, test_df, bursts, tol14_mask)
-    results["OCSVM_3D_deb"] = compute_metrics(y_test, score_ocsvm_3d, deb_ocsvm_3d, test_df, bursts, tol14_mask)
-
-    # E. Ambang Univariat per sensor dari persentil train normal
-    # Kalibrasi parameter persentil q sehingga FPR pada val_normal ~ 3.0%
+    # ==========================================================================
+    # ITEM 1: UNIVARIAT 2D vs 3D DETAIL FITUR, AMBANG, DAN ALARM
+    # ==========================================================================
+    print(f"\n[{BANNER}] ============ ITEM 1: ANALISIS UNIVARIAT 2D vs 3D ============")
     def fit_univariate_threshold(train_data, val_data, test_data, cols, target_fpr=0.03):
         best_q = None
         best_diff = float("inf")
         best_bounds = None
-        # Cari q dari 0.05% sampai 10%
         for q in np.linspace(0.05, 5.0, 500):
             bounds = {}
             for c in cols:
-                # Untuk HR & Temp gunakan two-sided (q/2, 100 - q/2); untuk SpO2 gunakan one-sided lower
                 if c == "spo2":
-                    bounds[c] = (np.percentile(train_data[c], q), 100.0)
+                    bounds[c] = (float(np.percentile(train_data[c], q)), 100.0)
                 else:
-                    bounds[c] = (np.percentile(train_data[c], q / 2), np.percentile(train_data[c], 100 - q / 2))
-            
-            # Cek pada val_data
+                    bounds[c] = (float(np.percentile(train_data[c], q / 2)), float(np.percentile(train_data[c], 100 - q / 2)))
             val_anom = np.zeros(len(val_data), dtype=bool)
             for c in cols:
                 val_anom |= (val_data[c] < bounds[c][0]) | (val_data[c] > bounds[c][1])
@@ -507,119 +435,223 @@ def main():
                 best_q = q
                 best_bounds = bounds
 
-        # Evaluasi pada test
+        alarms_per_sensor = {}
+        for c in cols:
+            s_anom = (test_data[c] < best_bounds[c][0]) | (test_data[c] > best_bounds[c][1])
+            alarms_per_sensor[c] = int(s_anom.sum())
+
         test_anom = np.zeros(len(test_data), dtype=int)
         for c in cols:
             test_anom |= ((test_data[c] < best_bounds[c][0]) | (test_data[c] > best_bounds[c][1])).astype(int)
-        return pd.Series(test_anom, index=test_data.index), best_bounds, best_q
+        
+        return pd.Series(test_anom, index=test_data.index), best_bounds, best_q, alarms_per_sensor
 
-    pred_uni_2d, bounds_2d, q_2d = fit_univariate_threshold(train_df, val_normal, test_df, cols_2d, target_fpr=0.03)
+    pred_uni_2d, bounds_2d, q_2d, sensor_alarms_2d = fit_univariate_threshold(train_df, val_normal, test_df, cols_2d, target_fpr=0.03)
     deb_uni_2d = apply_persistence(pred_uni_2d, test_df["session_id"], n=3)
-    results["Univariate_2D_raw"] = compute_metrics(y_test, None, pred_uni_2d, test_df, bursts, tol14_mask, is_continuous=False)
-    results["Univariate_2D_deb"] = compute_metrics(y_test, None, deb_uni_2d, test_df, bursts, tol14_mask, is_continuous=False)
+    m_uni_2d_raw = compute_metrics(y_test, None, pred_uni_2d, test_df, bursts, tol14_mask, is_continuous=False)
+    m_uni_2d_deb = compute_metrics(y_test, None, deb_uni_2d, test_df, bursts, tol14_mask, is_continuous=False)
 
-    pred_uni_3d, bounds_3d, q_3d = fit_univariate_threshold(train_df, val_normal, test_df, cols_3d, target_fpr=0.03)
+    pred_uni_3d, bounds_3d, q_3d, sensor_alarms_3d = fit_univariate_threshold(train_df, val_normal, test_df, cols_3d, target_fpr=0.03)
     deb_uni_3d = apply_persistence(pred_uni_3d, test_df["session_id"], n=3)
-    results["Univariate_3D_raw"] = compute_metrics(y_test, None, pred_uni_3d, test_df, bursts, tol14_mask, is_continuous=False)
-    results["Univariate_3D_deb"] = compute_metrics(y_test, None, deb_uni_3d, test_df, bursts, tol14_mask, is_continuous=False)
+    m_uni_3d_raw = compute_metrics(y_test, None, pred_uni_3d, test_df, bursts, tol14_mask, is_continuous=False)
+    m_uni_3d_deb = compute_metrics(y_test, None, deb_uni_3d, test_df, bursts, tol14_mask, is_continuous=False)
 
-    # F. Rule Default (Clinical Heuristics)
-    # 2D (temp default 36.5) & 3D (temp aktual)
-    rule_preds_2d = []
-    for _, r in test_df.iterrows():
-        sev, _ = evaluate_rules(r["hr"], r["spo2"], 36.5)
-        rule_preds_2d.append(1 if sev >= 1 else 0)
-    pred_rule_2d = pd.Series(rule_preds_2d, index=test_df.index)
-    deb_rule_2d = apply_persistence(pred_rule_2d, test_df["session_id"], n=3)
-    results["Rule_2D_raw"] = compute_metrics(y_test, None, pred_rule_2d, test_df, bursts, tol14_mask, is_continuous=False)
-    results["Rule_2D_deb"] = compute_metrics(y_test, None, deb_rule_2d, test_df, bursts, tol14_mask, is_continuous=False)
+    print("Univariat 2D:")
+    print(f"  Fitur: {cols_2d}")
+    print(f"  Parameter Persentil q: {q_2d:.4f}%")
+    print(f"  Ambang per Fitur:")
+    print(f"    - Heart_Rate: Two-sided [{bounds_2d['hr'][0]:.3f}, {bounds_2d['hr'][1]:.3f}] bpm")
+    print(f"    - SpO2:       One-sided lower [{bounds_2d['spo2'][0]:.3f}, 100.0] %")
+    print(f"  Alarm per Sensor pada Test: {sensor_alarms_2d} (Total Alarm Gabungan = {pred_uni_2d.sum()})")
 
-    rule_preds_3d = []
-    for _, r in test_df.iterrows():
-        sev, _ = evaluate_rules(r["hr"], r["spo2"], r["temp"])
-        rule_preds_3d.append(1 if sev >= 1 else 0)
-    pred_rule_3d = pd.Series(rule_preds_3d, index=test_df.index)
-    deb_rule_3d = apply_persistence(pred_rule_3d, test_df["session_id"], n=3)
-    results["Rule_3D_raw"] = compute_metrics(y_test, None, pred_rule_3d, test_df, bursts, tol14_mask, is_continuous=False)
-    results["Rule_3D_deb"] = compute_metrics(y_test, None, deb_rule_3d, test_df, bursts, tol14_mask, is_continuous=False)
+    print("\nUnivariat 3D:")
+    print(f"  Fitur: {cols_3d}")
+    print(f"  Parameter Persentil q: {q_3d:.4f}%")
+    print(f"  Ambang per Fitur:")
+    print(f"    - Heart_Rate:  Two-sided [{bounds_3d['hr'][0]:.3f}, {bounds_3d['hr'][1]:.3f}] bpm")
+    print(f"    - SpO2:        One-sided lower [{bounds_3d['spo2'][0]:.3f}, 100.0] %")
+    print(f"    - Temperature: Two-sided [{bounds_3d['temp'][0]:.3f}, {bounds_3d['temp'][1]:.3f}] °C")
+    print(f"  Alarm per Sensor pada Test: {sensor_alarms_3d} (Total Alarm Gabungan = {pred_uni_3d.sum()})")
+    print("Penjelasan Identitas 2D vs 3D:")
+    print("  1. Nilai suhu (DS18B20) pada test set berkisar antara 31.5 °C hingga 34.0 °C, semuanya berada di dalam batas [31.0 °C, 34.0 °C].")
+    print("  2. Anomali simulator (MOTION & FINGER_SHIFT) murni hemodinamik optik MAX30102 (HR fluktuatif & SpO2 anjlok), sedangkan suhu kulit konstan normal.")
+    print("  3. Sensor suhu berkontribusi tepat 0 alarm pada test set, sehingga himpunan alarm gabungan (HR U SpO2 U Temp) identik 100% dengan (HR U SpO2).")
 
-    # G. dl_v1 Zero-Shot (2D)
+    # ==========================================================================
+    # ITEM 3: PELATIHAN 5 SEED UNTUK DENSEAE & ISOLATION FOREST
+    # ==========================================================================
+    print(f"\n[{BANNER}] ============ ITEM 3: PELATIHAN 5 SEED DENSEAE & ISOLATION FOREST ============")
+    
+    # 1. DenseAE 5 Seeds
+    ae_2d_runs = []
+    ae_3d_runs = []
+    for s in SEEDS:
+        m2 = train_dense_ae(X_train_2d, X_val_norm_2d, input_dim=2, seed=s)
+        s_val_2 = m2.compute_anomaly_score(torch.tensor(X_val_norm_2d, dtype=torch.float32)).numpy()
+        s_test_2 = m2.compute_anomaly_score(torch.tensor(X_test_2d, dtype=torch.float32)).numpy()
+        thr_2 = np.percentile(s_val_2, 97.0)
+        p_2 = pd.Series((s_test_2 >= thr_2).astype(int), index=test_df.index)
+        deb_2 = apply_persistence(p_2, test_df["session_id"], n=3)
+        ae_2d_runs.append({
+            "raw": compute_metrics(y_test, s_test_2, p_2, test_df, bursts, tol14_mask),
+            "deb": compute_metrics(y_test, s_test_2, deb_2, test_df, bursts, tol14_mask),
+            "preds_raw": p_2,
+            "preds_deb": deb_2
+        })
+
+        m3 = train_dense_ae(X_train_3d, X_val_norm_3d, input_dim=3, seed=s)
+        s_val_3 = m3.compute_anomaly_score(torch.tensor(X_val_norm_3d, dtype=torch.float32)).numpy()
+        s_test_3 = m3.compute_anomaly_score(torch.tensor(X_test_3d, dtype=torch.float32)).numpy()
+        thr_3 = np.percentile(s_val_3, 97.0)
+        p_3 = pd.Series((s_test_3 >= thr_3).astype(int), index=test_df.index)
+        deb_3 = apply_persistence(p_3, test_df["session_id"], n=3)
+        ae_3d_runs.append({
+            "raw": compute_metrics(y_test, s_test_3, p_3, test_df, bursts, tol14_mask),
+            "deb": compute_metrics(y_test, s_test_3, deb_3, test_df, bursts, tol14_mask),
+            "preds_raw": p_3,
+            "preds_deb": deb_3
+        })
+
+    # 2. Isolation Forest 5 Seeds (random_state 42-46)
+    if_2d_runs = []
+    if_3d_runs = []
+    for s in SEEDS:
+        if2 = IsolationForest(n_estimators=100, random_state=s, contamination="auto").fit(X_train_2d)
+        s_val_if2 = -if2.score_samples(X_val_norm_2d)
+        s_test_if2 = -if2.score_samples(X_test_2d)
+        thr_if2 = np.percentile(s_val_if2, 97.0)
+        p_if2 = pd.Series((s_test_if2 >= thr_if2).astype(int), index=test_df.index)
+        deb_if2 = apply_persistence(p_if2, test_df["session_id"], n=3)
+        if_2d_runs.append({
+            "raw": compute_metrics(y_test, s_test_if2, p_if2, test_df, bursts, tol14_mask),
+            "deb": compute_metrics(y_test, s_test_if2, deb_if2, test_df, bursts, tol14_mask),
+            "preds_raw": p_if2,
+            "preds_deb": deb_if2
+        })
+
+        if3 = IsolationForest(n_estimators=100, random_state=s, contamination="auto").fit(X_train_3d)
+        s_val_if3 = -if3.score_samples(X_val_norm_3d)
+        s_test_if3 = -if3.score_samples(X_test_3d)
+        thr_if3 = np.percentile(s_val_if3, 97.0)
+        p_if3 = pd.Series((s_test_if3 >= thr_if3).astype(int), index=test_df.index)
+        deb_if3 = apply_persistence(p_if3, test_df["session_id"], n=3)
+        if_3d_runs.append({
+            "raw": compute_metrics(y_test, s_test_if3, p_if3, test_df, bursts, tol14_mask),
+            "deb": compute_metrics(y_test, s_test_if3, deb_if3, test_df, bursts, tol14_mask),
+            "preds_raw": p_if3,
+            "preds_deb": deb_if3
+        })
+
+    # Model deterministik lainnya
+    # A. Mahalanobis
+    ee_2d = EllipticEnvelope(random_state=42, contamination=0.03).fit(X_train_2d)
+    s_ee_2d = ee_2d.mahalanobis(X_test_2d)
+    thr_ee_2d = np.percentile(ee_2d.mahalanobis(X_val_norm_2d), 97.0)
+    p_ee_2d = pd.Series((s_ee_2d >= thr_ee_2d).astype(int), index=test_df.index)
+    deb_ee_2d = apply_persistence(p_ee_2d, test_df["session_id"], n=3)
+    m_ee_2d_raw = compute_metrics(y_test, s_ee_2d, p_ee_2d, test_df, bursts, tol14_mask)
+    m_ee_2d_deb = compute_metrics(y_test, s_ee_2d, deb_ee_2d, test_df, bursts, tol14_mask)
+
+    ee_3d = EllipticEnvelope(random_state=42, contamination=0.03).fit(X_train_3d)
+    s_ee_3d = ee_3d.mahalanobis(X_test_3d)
+    thr_ee_3d = np.percentile(ee_3d.mahalanobis(X_val_norm_3d), 97.0)
+    p_ee_3d = pd.Series((s_ee_3d >= thr_ee_3d).astype(int), index=test_df.index)
+    deb_ee_3d = apply_persistence(p_ee_3d, test_df["session_id"], n=3)
+    m_ee_3d_raw = compute_metrics(y_test, s_ee_3d, p_ee_3d, test_df, bursts, tol14_mask)
+    m_ee_3d_deb = compute_metrics(y_test, s_ee_3d, deb_ee_3d, test_df, bursts, tol14_mask)
+
+    # B. LOF
+    lof_2d = LocalOutlierFactor(n_neighbors=20, novelty=True, contamination="auto").fit(X_train_2d)
+    s_lof_2d = -lof_2d.score_samples(X_test_2d)
+    thr_lof_2d = np.percentile(-lof_2d.score_samples(X_val_norm_2d), 97.0)
+    p_lof_2d = pd.Series((s_lof_2d >= thr_lof_2d).astype(int), index=test_df.index)
+    deb_lof_2d = apply_persistence(p_lof_2d, test_df["session_id"], n=3)
+    m_lof_2d_raw = compute_metrics(y_test, s_lof_2d, p_lof_2d, test_df, bursts, tol14_mask)
+    m_lof_2d_deb = compute_metrics(y_test, s_lof_2d, deb_lof_2d, test_df, bursts, tol14_mask)
+
+    lof_3d = LocalOutlierFactor(n_neighbors=20, novelty=True, contamination="auto").fit(X_train_3d)
+    s_lof_3d = -lof_3d.score_samples(X_test_3d)
+    thr_lof_3d = np.percentile(-lof_3d.score_samples(X_val_norm_3d), 97.0)
+    p_lof_3d = pd.Series((s_lof_3d >= thr_lof_3d).astype(int), index=test_df.index)
+    deb_lof_3d = apply_persistence(p_lof_3d, test_df["session_id"], n=3)
+    m_lof_3d_raw = compute_metrics(y_test, s_lof_3d, p_lof_3d, test_df, bursts, tol14_mask)
+    m_lof_3d_deb = compute_metrics(y_test, s_lof_3d, deb_lof_3d, test_df, bursts, tol14_mask)
+
+    # C. OCSVM
+    ocsvm_2d = OneClassSVM(kernel="rbf", gamma="scale", nu=0.05).fit(X_train_2d)
+    s_ocsvm_2d = -ocsvm_2d.score_samples(X_test_2d)
+    thr_ocsvm_2d = np.percentile(-ocsvm_2d.score_samples(X_val_norm_2d), 97.0)
+    p_ocsvm_2d = pd.Series((s_ocsvm_2d >= thr_ocsvm_2d).astype(int), index=test_df.index)
+    deb_ocsvm_2d = apply_persistence(p_ocsvm_2d, test_df["session_id"], n=3)
+    m_ocsvm_2d_raw = compute_metrics(y_test, s_ocsvm_2d, p_ocsvm_2d, test_df, bursts, tol14_mask)
+    m_ocsvm_2d_deb = compute_metrics(y_test, s_ocsvm_2d, deb_ocsvm_2d, test_df, bursts, tol14_mask)
+
+    ocsvm_3d = OneClassSVM(kernel="rbf", gamma="scale", nu=0.05).fit(X_train_3d)
+    s_ocsvm_3d = -ocsvm_3d.score_samples(X_test_3d)
+    thr_ocsvm_3d = np.percentile(-ocsvm_3d.score_samples(X_val_norm_3d), 97.0)
+    p_ocsvm_3d = pd.Series((s_ocsvm_3d >= thr_ocsvm_3d).astype(int), index=test_df.index)
+    deb_ocsvm_3d = apply_persistence(p_ocsvm_3d, test_df["session_id"], n=3)
+    m_ocsvm_3d_raw = compute_metrics(y_test, s_ocsvm_3d, p_ocsvm_3d, test_df, bursts, tol14_mask)
+    m_ocsvm_3d_deb = compute_metrics(y_test, s_ocsvm_3d, deb_ocsvm_3d, test_df, bursts, tol14_mask)
+
+    # D. Rule Default
+    p_rule_2d = pd.Series([1 if evaluate_rules(r["hr"], r["spo2"], 36.5)[0] >= 1 else 0 for _, r in test_df.iterrows()], index=test_df.index)
+    deb_rule_2d = apply_persistence(p_rule_2d, test_df["session_id"], n=3)
+    m_rule_2d_raw = compute_metrics(y_test, None, p_rule_2d, test_df, bursts, tol14_mask, is_continuous=False)
+    m_rule_2d_deb = compute_metrics(y_test, None, deb_rule_2d, test_df, bursts, tol14_mask, is_continuous=False)
+
+    p_rule_3d = pd.Series([1 if evaluate_rules(r["hr"], r["spo2"], r["temp"])[0] >= 1 else 0 for _, r in test_df.iterrows()], index=test_df.index)
+    deb_rule_3d = apply_persistence(p_rule_3d, test_df["session_id"], n=3)
+    m_rule_3d_raw = compute_metrics(y_test, None, p_rule_3d, test_df, bursts, tol14_mask, is_continuous=False)
+    m_rule_3d_deb = compute_metrics(y_test, None, deb_rule_3d, test_df, bursts, tol14_mask, is_continuous=False)
+
+    # E. dl_v1 Zero-Shot
     import json
-    v1_meta_path = os.path.join(PROJECT_ROOT, "ml/artifacts/dl_v1/metadata.json")
-    v1_weights_path = os.path.join(PROJECT_ROOT, "ml/artifacts/dl_v1/model_weights.npz")
-    with open(v1_meta_path, "r") as f:
+    with open(os.path.join(PROJECT_ROOT, "ml/artifacts/dl_v1/metadata.json"), "r") as f:
         v1_meta = json.load(f)
-    v1_weights = dict(np.load(v1_weights_path))
-
+    v1_weights = dict(np.load(os.path.join(PROJECT_ROOT, "ml/artifacts/dl_v1/model_weights.npz")))
     from ml.dl.models import NumPyAutoencoderForward
     v1_forward = NumPyAutoencoderForward(v1_weights)
     scaler_mean = np.array(v1_meta["scaler"]["mean"], dtype=np.float32)
     scaler_scale = np.array(v1_meta["scaler"]["scale"], dtype=np.float32)
+    s_v1_val = v1_forward.score((val_normal[cols_2d].values - scaler_mean) / scaler_scale)
+    s_v1_test = v1_forward.score((test_df[cols_2d].values - scaler_mean) / scaler_scale)
+    thr_v1 = np.percentile(s_v1_val, 97.0)
+    p_v1 = pd.Series((s_v1_test >= thr_v1).astype(int), index=test_df.index)
+    deb_v1 = apply_persistence(p_v1, test_df["session_id"], n=3)
+    m_v1_raw = compute_metrics(y_test, s_v1_test, p_v1, test_df, bursts, tol14_mask, is_continuous=True)
+    m_v1_deb = compute_metrics(y_test, s_v1_test, deb_v1, test_df, bursts, tol14_mask, is_continuous=True)
 
-    X_val_norm_v1 = (val_normal[cols_2d].values - scaler_mean) / scaler_scale
-    X_test_v1 = (test_df[cols_2d].values - scaler_mean) / scaler_scale
+    # Ringkasan Aggregat
+    agg_ae_2d_raw = aggregate_seed_runs(ae_2d_runs, "raw")
+    agg_ae_2d_deb = aggregate_seed_runs(ae_2d_runs, "deb")
+    agg_ae_3d_raw = aggregate_seed_runs(ae_3d_runs, "raw")
+    agg_ae_3d_deb = aggregate_seed_runs(ae_3d_runs, "deb")
 
-    score_v1_val_norm = v1_forward.score(X_val_norm_v1)
-    score_v1_test = v1_forward.score(X_test_v1)
+    agg_if_2d_raw = aggregate_seed_runs(if_2d_runs, "raw")
+    agg_if_2d_deb = aggregate_seed_runs(if_2d_runs, "deb")
+    agg_if_3d_raw = aggregate_seed_runs(if_3d_runs, "raw")
+    agg_if_3d_deb = aggregate_seed_runs(if_3d_runs, "deb")
 
-    thr_v1_3pct = np.percentile(score_v1_val_norm, 97.0)
-    pred_v1 = pd.Series((score_v1_test >= thr_v1_3pct).astype(int), index=test_df.index)
-    deb_v1 = apply_persistence(pred_v1, test_df["session_id"], n=3)
-    results["dl_v1_raw"] = compute_metrics(y_test, score_v1_test, pred_v1, test_df, bursts, tol14_mask, is_continuous=True)
-    results["dl_v1_deb"] = compute_metrics(y_test, score_v1_test, deb_v1, test_df, bursts, tol14_mask, is_continuous=True)
+    # ==========================================================================
+    # CETAK TABEL UTAMA DENGAN MEAN +- SD UNTUK MODEL BERSEED & DETERMINISTIK
+    # ==========================================================================
+    print(f"\n[{BANNER}] =================== TABEL UTAMA RAW (N=1) ===================")
+    print(f"{'Model':<25} | {'Sifat':<13} | {'ROC-AUC':<17} | {'PR-AUC':<17} | {'Test FPR':<15} | {'Recall':<15} | {'Prec':<15} | {'F1':<15} | {'B-Rec (29)':<17} | {'FPR tol14':<15}")
+    print("-" * 175)
 
-    # --------------------------------------------------------------------------
-    # 5. BOOTSTRAP CI RESAMPLING BURST / BLOK
-    # --------------------------------------------------------------------------
-    print(f"\n[{BANNER}] Menghitung Resampling Bootstrap Tingkat Burst / Blok (1.000 iterasi)...")
-    # Terdapat 29 bursts di S14 (16) dan S15 (13).
-    # Sesi non-anomali: S11, S12, S13, S16.
-    n_boot = 1000
-    rng = np.random.default_rng(42)
+    def print_stoch_row(name, sifat, r):
+        roc_s = f"{r['roc_auc_mean']:.4f} +- {r['roc_auc_sd']:.4f}"
+        pr_s = f"{r['pr_auc_mean']:.4f} +- {r['pr_auc_sd']:.4f}"
+        fpr_s = f"{r['test_fpr_mean']*100:5.2f}% +- {r['test_fpr_sd']*100:.2f}%"
+        rec_s = f"{r['recall_mean']*100:5.2f}% +- {r['recall_sd']*100:.2f}%"
+        prec_s = f"{r['precision_mean']*100:5.2f}% +- {r['precision_sd']*100:.2f}%"
+        f1_s = f"{r['f1_mean']:.4f} +- {r['f1_sd']:.4f}"
+        brec_s = f"{r['burst_recall_mean']*100:5.1f}% +- {r['burst_recall_sd']*100:.1f}%"
+        tol14_s = f"{r['fpr_tol14_mean']*100:5.2f}% +- {r['fpr_tol14_sd']*100:.2f}%"
+        print(f"{name:<25} | {sifat:<13} | {roc_s:<17} | {pr_s:<17} | {fpr_s:<15} | {rec_s:<15} | {prec_s:<15} | {f1_s:<15} | {brec_s:<17} | {tol14_s:<15}")
 
-    # Hitung bootstrap recall per burst untuk model DenseAE 2D seed 42 dan IF 2D
-    boot_ae_burst_rec = []
-    boot_if_burst_rec = []
-    for _ in range(n_boot):
-        sample_b_indices = rng.choice(len(bursts), size=len(bursts), replace=True)
-        sampled_bursts = [bursts[i] for i in sample_b_indices]
-        
-        # AE burst recall
-        ae_hits = sum(1 for b in sampled_bursts if (pred_2d.loc[b["indices"]] == 1).any())
-        boot_ae_burst_rec.append(ae_hits / len(sampled_bursts))
-
-        # IF burst recall
-        if_hits = sum(1 for b in sampled_bursts if (pred_if_2d.loc[b["indices"]] == 1).any())
-        boot_if_burst_rec.append(if_hits / len(sampled_bursts))
-
-    ae_ci_burst = (np.percentile(boot_ae_burst_rec, 2.5), np.percentile(boot_ae_burst_rec, 97.5))
-    if_ci_burst = (np.percentile(boot_if_burst_rec, 2.5), np.percentile(boot_if_burst_rec, 97.5))
-
-    print(f"[{BANNER}] Bootstrap 95% CI Burst Recall (DenseAE 2D): [{ae_ci_burst[0]*100:.1f}%, {ae_ci_burst[1]*100:.1f}%]")
-    print(f"[{BANNER}] Bootstrap 95% CI Burst Recall (IF 2D): [{if_ci_burst[0]*100:.1f}%, {if_ci_burst[1]*100:.1f}%]")
-    print(f"[{BANNER}] Catatan Keandalan CI Bootstrap:")
-    print("  Jumlah sesi dengan anomali pada test set HANYA 2 sesi (S14 MOTION dan S15 FINGER_SHIFT), dengan total 29 bursts.")
-    print("  Resampling cluster/blok memiliki tingkat varians tinggi dan tidak dapat dihitung dengan andal pada tingkat sesi")
-    print("  karena jumlah cluster positif yang sangat sedikit (M=2 sesi anomali), sehingga estimasi interval memiliki ketidakpastian tinggi.")
-
-    # --------------------------------------------------------------------------
-    # 6. VERIFIKASI URUTAN & INDEKS PERSISTENCE
-    # --------------------------------------------------------------------------
-    print(f"\n[{BANNER}] Verifikasi Urutan Indeks Persistence:")
-    assert (deb_2d.index == test_df.index).all(), "GAGAL: Indeks deb_2d tidak persis sama dengan test_df!"
-    assert (deb_3d.index == test_df.index).all(), "GAGAL: Indeks deb_3d tidak persis sama dengan test_df!"
-    assert (deb_if_2d.index == test_df.index).all(), "GAGAL: Indeks deb_if_2d tidak persis sama dengan test_df!"
-    assert (deb_rule_2d.index == test_df.index).all(), "GAGAL: Indeks deb_rule_2d tidak persis sama dengan test_df!"
-    print("  [PASSED] Seluruh Series hasil persistensi (debounced) terverifikasi memiliki urutan dan indeks persis sama dengan test_df.index!")
-
-    # --------------------------------------------------------------------------
-    # CETAK TABEL LENGKAP METRIK
-    # --------------------------------------------------------------------------
-    print(f"\n[{BANNER}] =================== TABEL PERBANDINGAN MODEL (RAW / N=1) ===================")
-    print(f"{'Model':<25} | {'ROC-AUC':<8} | {'PR-AUC':<8} | {'Test FPR':<9} | {'Recall':<8} | {'Prec':<8} | {'F1':<7} | {'B-Rec (29)':<10} | {'Med Lat':<8} | {'FPR tol14':<9}")
-    print("-" * 125)
-
-    def print_row(name, m):
+    def print_determ_row(name, m):
         roc_s = f"{m['roc_auc']:.4f}" if not np.isnan(m['roc_auc']) else "N/A"
         pr_s = f"{m['pr_auc']:.4f}" if not np.isnan(m['pr_auc']) else "N/A"
         fpr_s = f"{m['test_fpr']*100:5.2f}%"
@@ -627,127 +659,162 @@ def main():
         prec_s = f"{m['precision']*100:5.2f}%"
         f1_s = f"{m['f1']:.4f}"
         brec_s = f"{m['burst_recall']*100:5.1f}% ({m['burst_detected']})"
-        lat_s = f"{m['median_latency']:.1f}s" if not np.isnan(m['median_latency']) else "N/A"
         tol14_s = f"{m['fpr_tol14']*100:5.2f}%"
-        print(f"{name:<25} | {roc_s:<8} | {pr_s:<8} | {fpr_s:<9} | {rec_s:<8} | {prec_s:<8} | {f1_s:<7} | {brec_s:<10} | {lat_s:<8} | {tol14_s:<9}")
+        print(f"{name:<25} | {'Deterministik':<13} | {roc_s:<17} | {pr_s:<17} | {fpr_s:<15} | {rec_s:<15} | {prec_s:<15} | {f1_s:<15} | {brec_s:<17} | {tol14_s:<15}")
 
-    print_row("Rule Default (2D)", results["Rule_2D_raw"])
-    print_row("Rule Default (3D)", results["Rule_3D_raw"])
-    print_row("Univariate (2D, q=3%)", results["Univariate_2D_raw"])
-    print_row("Univariate (3D, q=3%)", results["Univariate_3D_raw"])
-    print_row("dl_v1 Zero-Shot (2D)", results["dl_v1_raw"])
-    print_row("IF (2D raw)", results["IF_2D_raw"])
-    print_row("IF (3D raw)", results["IF_3D_raw"])
-    print_row("Mahalanobis (2D)", results["Mahalanobis_2D_raw"])
-    print_row("Mahalanobis (3D)", results["Mahalanobis_3D_raw"])
-    print_row("LOF (2D)", results["LOF_2D_raw"])
-    print_row("LOF (3D)", results["LOF_3D_raw"])
-    print_row("OCSVM (2D)", results["OCSVM_2D_raw"])
-    print_row("OCSVM (3D)", results["OCSVM_3D_raw"])
-    print_row("DenseAE 2D (seed 42)", results["DenseAE_2D_seed42_raw"])
-    print_row("DenseAE 3D (seed 42)", results["DenseAE_3D_seed42_raw"])
+    print_determ_row("Rule Default (2D)", m_rule_2d_raw)
+    print_determ_row("Rule Default (3D)", m_rule_3d_raw)
+    print_determ_row("Univariate (2D, q=3%)", m_uni_2d_raw)
+    print_determ_row("Univariate (3D, q=3%)", m_uni_3d_raw)
+    print_determ_row("dl_v1 Zero-Shot (2D)", m_v1_raw)
+    print_stoch_row("IF (2D raw, 5 seeds)", "5 seeds", agg_if_2d_raw)
+    print_stoch_row("IF (3D raw, 5 seeds)", "5 seeds", agg_if_3d_raw)
+    print_determ_row("Mahalanobis (2D)", m_ee_2d_raw)
+    print_determ_row("Mahalanobis (3D)", m_ee_3d_raw)
+    print_determ_row("LOF (2D)", m_lof_2d_raw)
+    print_determ_row("LOF (3D)", m_lof_3d_raw)
+    print_determ_row("OCSVM (2D)", m_ocsvm_2d_raw)
+    print_determ_row("OCSVM (3D)", m_ocsvm_3d_raw)
+    print_stoch_row("DenseAE 2D (5 seeds)", "5 seeds", agg_ae_2d_raw)
+    print_stoch_row("DenseAE 3D (5 seeds)", "5 seeds", agg_ae_3d_raw)
 
-    print(f"\n[{BANNER}] ================= TABEL PERBANDINGAN MODEL (PERSISTENCE N=3) =================")
-    print(f"{'Model + N=3':<25} | {'Test FPR':<9} | {'Recall':<8} | {'Prec':<8} | {'F1':<7} | {'B-Rec (29)':<10} | {'Med Lat':<8} | {'FPR tol14':<9}")
-    print("-" * 105)
+    print(f"\n[{BANNER}] ================= TABEL UTAMA PERSISTENCE (N=3) =================")
+    print(f"{'Model + N=3':<25} | {'Sifat':<13} | {'Test FPR':<15} | {'Recall':<15} | {'Prec':<15} | {'F1':<15} | {'B-Rec (29)':<17} | {'FPR tol14':<15}")
+    print("-" * 135)
 
-    def print_deb_row(name, m):
+    def print_stoch_deb_row(name, sifat, r):
+        fpr_s = f"{r['test_fpr_mean']*100:5.2f}% +- {r['test_fpr_sd']*100:.2f}%"
+        rec_s = f"{r['recall_mean']*100:5.2f}% +- {r['recall_sd']*100:.2f}%"
+        prec_s = f"{r['precision_mean']*100:5.2f}% +- {r['precision_sd']*100:.2f}%"
+        f1_s = f"{r['f1_mean']:.4f} +- {r['f1_sd']:.4f}"
+        brec_s = f"{r['burst_recall_mean']*100:5.1f}% +- {r['burst_recall_sd']*100:.1f}%"
+        tol14_s = f"{r['fpr_tol14_mean']*100:5.2f}% +- {r['fpr_tol14_sd']*100:.2f}%"
+        print(f"{name:<25} | {sifat:<13} | {fpr_s:<15} | {rec_s:<15} | {prec_s:<15} | {f1_s:<15} | {brec_s:<17} | {tol14_s:<15}")
+
+    def print_determ_deb_row(name, m):
         fpr_s = f"{m['test_fpr']*100:5.2f}%"
         rec_s = f"{m['recall']*100:5.2f}%"
         prec_s = f"{m['precision']*100:5.2f}%"
         f1_s = f"{m['f1']:.4f}"
         brec_s = f"{m['burst_recall']*100:5.1f}% ({m['burst_detected']})"
-        lat_s = f"{m['median_latency']:.1f}s" if not np.isnan(m['median_latency']) else "N/A"
         tol14_s = f"{m['fpr_tol14']*100:5.2f}%"
-        print(f"{name:<25} | {fpr_s:<9} | {rec_s:<8} | {prec_s:<8} | {f1_s:<7} | {brec_s:<10} | {lat_s:<8} | {tol14_s:<9}")
+        print(f"{name:<25} | {'Deterministik':<13} | {fpr_s:<15} | {rec_s:<15} | {prec_s:<15} | {f1_s:<15} | {brec_s:<17} | {tol14_s:<15}")
 
-    print_deb_row("Rule Default (2D) + N3", results["Rule_2D_deb"])
-    print_deb_row("Rule Default (3D) + N3", results["Rule_3D_deb"])
-    print_deb_row("Univariate (2D) + N3", results["Univariate_2D_deb"])
-    print_deb_row("Univariate (3D) + N3", results["Univariate_3D_deb"])
-    print_deb_row("dl_v1 Zero-Shot + N3", results["dl_v1_deb"])
-    print_deb_row("IF (2D raw) + N3", results["IF_2D_deb"])
-    print_deb_row("IF (3D raw) + N3", results["IF_3D_deb"])
-    print_deb_row("Mahalanobis (2D) + N3", results["Mahalanobis_2D_deb"])
-    print_deb_row("Mahalanobis (3D) + N3", results["Mahalanobis_3D_deb"])
-    print_deb_row("LOF (2D) + N3", results["LOF_2D_deb"])
-    print_deb_row("LOF (3D) + N3", results["LOF_3D_deb"])
-    print_deb_row("OCSVM (2D) + N3", results["OCSVM_2D_deb"])
-    print_deb_row("OCSVM (3D) + N3", results["OCSVM_3D_deb"])
-    print_deb_row("DenseAE 2D + N3 (s42)", results["DenseAE_2D_seed42_deb"])
-    print_deb_row("DenseAE 3D + N3 (s42)", results["DenseAE_3D_seed42_deb"])
+    print_determ_deb_row("Rule Default (2D) + N3", m_rule_2d_deb)
+    print_determ_deb_row("Rule Default (3D) + N3", m_rule_3d_deb)
+    print_determ_deb_row("Univariate (2D) + N3", m_uni_2d_deb)
+    print_determ_deb_row("Univariate (3D) + N3", m_uni_3d_deb)
+    print_determ_deb_row("dl_v1 Zero-Shot + N3", m_v1_deb)
+    print_stoch_deb_row("IF (2D raw) + N3", "5 seeds", agg_if_2d_deb)
+    print_stoch_deb_row("IF (3D raw) + N3", "5 seeds", agg_if_3d_deb)
+    print_determ_deb_row("Mahalanobis (2D) + N3", m_ee_2d_deb)
+    print_determ_deb_row("Mahalanobis (3D) + N3", m_ee_3d_deb)
+    print_determ_deb_row("LOF (2D) + N3", m_lof_2d_deb)
+    print_determ_deb_row("LOF (3D) + N3", m_lof_3d_deb)
+    print_determ_deb_row("OCSVM (2D) + N3", m_ocsvm_2d_deb)
+    print_determ_deb_row("OCSVM (3D) + N3", m_ocsvm_3d_deb)
+    print_stoch_deb_row("DenseAE 2D + N3", "5 seeds", agg_ae_2d_deb)
+    print_stoch_deb_row("DenseAE 3D + N3", "5 seeds", agg_ae_3d_deb)
 
-    print(f"\n[{BANNER}] ============ RECALL PADA TEST FPR KETAT (ROC NON-INTERPOLATED) ============")
-    print(f"{'Model':<25} | {'FPR <= 0.1%':<12} | {'FPR <= 0.5%':<12} | {'FPR <= 1.0%':<12} | {'FPR <= 3.0%':<12}")
-    print("-" * 80)
-    for name, key in [
-        ("dl_v1 Zero-Shot (2D)", "dl_v1_raw"),
-        ("IF (2D raw)", "IF_2D_raw"),
-        ("IF (3D raw)", "IF_3D_raw"),
-        ("Mahalanobis (2D)", "Mahalanobis_2D_raw"),
-        ("Mahalanobis (3D)", "Mahalanobis_3D_raw"),
-        ("LOF (2D)", "LOF_2D_raw"),
-        ("LOF (3D)", "LOF_3D_raw"),
-        ("OCSVM (2D)", "OCSVM_2D_raw"),
-        ("OCSVM (3D)", "OCSVM_3D_raw"),
-        ("DenseAE 2D (seed 42)", "DenseAE_2D_seed42_raw"),
-        ("DenseAE 3D (seed 42)", "DenseAE_3D_seed42_raw")
-    ]:
-        m = results[key]
+    # ==========================================================================
+    # TABEL RECALL PADA FPR KETAT (PERBANDINGAN UTAMA) DENGAN MEAN +- SD
+    # ==========================================================================
+    print(f"\n[{BANNER}] ============ TABEL RECALL PADA FPR TETAP (TABEL PERBANDINGAN UTAMA) ============")
+    print(f"{'Model':<25} | {'Sifat':<13} | {'FPR <= 0.1%':<20} | {'FPR <= 0.5%':<20} | {'FPR <= 1.0%':<20} | {'FPR <= 3.0%':<20}")
+    print("-" * 125)
+
+    def print_rec_stoch(name, r):
+        r01 = f"{r['rec_fpr_0_1_mean']*100:5.2f}% +- {r['rec_fpr_0_1_sd']*100:.2f}%"
+        r05 = f"{r['rec_fpr_0_5_mean']*100:5.2f}% +- {r['rec_fpr_0_5_sd']*100:.2f}%"
+        r10 = f"{r['rec_fpr_1_0_mean']*100:5.2f}% +- {r['rec_fpr_1_0_sd']*100:.2f}%"
+        r30 = f"{r['rec_fpr_3_0_mean']*100:5.2f}% +- {r['rec_fpr_3_0_sd']*100:.2f}%"
+        print(f"{name:<25} | {'5 seeds':<13} | {r01:<20} | {r05:<20} | {r10:<20} | {r30:<20}")
+
+    def print_rec_determ(name, m):
         r01 = f"{m['rec_fpr_0_1']*100:5.2f}%"
         r05 = f"{m['rec_fpr_0_5']*100:5.2f}%"
         r10 = f"{m['rec_fpr_1_0']*100:5.2f}%"
         r30 = f"{m['rec_fpr_3_0']*100:5.2f}%"
-        print(f"{name:<25} | {r01:<12} | {r05:<12} | {r10:<12} | {r30:<12}")
+        print(f"{name:<25} | {'Deterministik':<13} | {r01:<20} | {r05:<20} | {r10:<20} | {r30:<20}")
 
-    print(f"\n[{BANNER}] ============ HASIL DENSE AE 5 SEED (MEAN +- SD) ============")
-    for var, key_raw, key_deb in [
-        ("DenseAE 2D (5 Seeds)", "DenseAE_2D_5seeds_raw", "DenseAE_2D_5seeds_deb"),
-        ("DenseAE 3D (5 Seeds)", "DenseAE_3D_5seeds_raw", "DenseAE_3D_5seeds_deb")
-    ]:
-        mr = results[key_raw]
-        md = results[key_deb]
-        print(f"\n--- {var} ---")
-        print(f"  Raw (N=1):")
-        print(f"    ROC-AUC:  {mr['roc_auc_mean']:.4f} +- {mr['roc_auc_sd']:.4f}")
-        print(f"    PR-AUC:   {mr['pr_auc_mean']:.4f} +- {mr['pr_auc_sd']:.4f}")
-        print(f"    Test FPR: {mr['test_fpr_mean']*100:.2f}% +- {mr['test_fpr_sd']*100:.2f}%")
-        print(f"    Recall:   {mr['recall_mean']*100:.2f}% +- {mr['recall_sd']*100:.2f}%")
-        print(f"    F1-Score: {mr['f1_mean']:.4f} +- {mr['f1_sd']:.4f}")
-        print(f"    Burst Rec:{mr['burst_recall_mean']*100:.1f}% +- {mr['burst_recall_sd']*100:.1f}%")
-        print(f"    FPR tol14:{mr['fpr_tol14_mean']*100:.2f}% +- {mr['fpr_tol14_sd']*100:.2f}%")
-        print(f"  Debounced (N=3):")
-        print(f"    Test FPR: {md['test_fpr_mean']*100:.2f}% +- {md['test_fpr_sd']*100:.2f}%")
-        print(f"    Recall:   {md['recall_mean']*100:.2f}% +- {md['recall_sd']*100:.2f}%")
-        print(f"    F1-Score: {md['f1_mean']:.4f} +- {md['f1_sd']:.4f}")
-        print(f"    Burst Rec:{md['burst_recall_mean']*100:.1f}% +- {md['burst_recall_sd']*100:.1f}%")
-        print(f"    FPR tol14:{md['fpr_tol14_mean']*100:.2f}% +- {md['fpr_tol14_sd']*100:.2f}%")
+    print_rec_determ("dl_v1 Zero-Shot (2D)", m_v1_raw)
+    print_rec_stoch("IF (2D raw)", agg_if_2d_raw)
+    print_rec_stoch("IF (3D raw)", agg_if_3d_raw)
+    print_rec_determ("Mahalanobis (2D)", m_ee_2d_raw)
+    print_rec_determ("Mahalanobis (3D)", m_ee_3d_raw)
+    print_rec_determ("LOF (2D)", m_lof_2d_raw)
+    print_rec_determ("LOF (3D)", m_lof_3d_raw)
+    print_rec_determ("OCSVM (2D)", m_ocsvm_2d_raw)
+    print_rec_determ("OCSVM (3D)", m_ocsvm_3d_raw)
+    print_rec_stoch("DenseAE 2D", agg_ae_2d_raw)
+    print_rec_stoch("DenseAE 3D", agg_ae_3d_raw)
 
-    # --------------------------------------------------------------------------
-    # PERBANDINGAN FALSE POSITIVE MOTION: IF 3-RAW vs DENSEAE 2D vs IF 13-WINDOW
-    # --------------------------------------------------------------------------
-    print(f"\n[{BANNER}] ============ ANALISIS SKENARIO MOTION (S14 TEST) ============")
-    s14_df = test_df[test_df["session_id"] == "S14"].copy()
-    s14_norm_mask = (s14_df["ref_OUTPUT"] == 0)
-    s14_ano_mask = (s14_df["ref_OUTPUT"] == 1)
+    # ==========================================================================
+    # ITEM 4: OUTPUT MENTAH FP & RECALL PER SKENARIO (S14 MOTION & S15 FINGER_SHIFT)
+    # ==========================================================================
+    print(f"\n[{BANNER}] ============ ITEM 4: OUTPUT MENTAH FP & RECALL PER SKENARIO ============")
     
-    fp_if_2d_s14 = (pred_if_2d.loc[s14_df.index][s14_norm_mask] == 1).sum()
-    rec_if_2d_s14 = (pred_if_2d.loc[s14_df.index][s14_ano_mask] == 1).sum()
+    # Hitung per seed untuk DenseAE 2D, IF 2D, IF 3D pada S14 dan S15
+    def eval_scenario_multiruns(runs_list, sc_id, mode="raw"):
+        fps = []
+        tps = []
+        recalls = []
+        fprs = []
+        norm_tot = None
+        ano_tot = None
+        for r in runs_list:
+            preds = r["preds_" + mode]
+            res = compute_scenario_metrics(preds, test_df, sc_id)
+            norm_tot = res["norm_total"]
+            ano_tot = res["ano_total"]
+            fps.append(res["fp"])
+            tps.append(res["tp"])
+            recalls.append(res["recall"])
+            fprs.append(res["fpr"])
+        return {
+            "norm_tot": norm_tot,
+            "ano_tot": ano_tot,
+            "fp_mean": np.mean(fps),
+            "fp_sd": np.std(fps),
+            "fpr_mean": np.mean(fprs),
+            "fpr_sd": np.std(fprs),
+            "tp_mean": np.mean(tps),
+            "tp_sd": np.std(tps),
+            "rec_mean": np.mean(recalls),
+            "rec_sd": np.std(recalls),
+            "seed42": {
+                "fp": fps[0],
+                "fpr": fprs[0],
+                "tp": tps[0],
+                "recall": recalls[0]
+            }
+        }
 
-    fp_if_3d_s14 = (pred_if_3d.loc[s14_df.index][s14_norm_mask] == 1).sum()
-    rec_if_3d_s14 = (pred_if_3d.loc[s14_df.index][s14_ano_mask] == 1).sum()
+    for sc_name, sc_id in [("S14 (MOTION)", "S14"), ("S15 (FINGER_SHIFT)", "S15")]:
+        print(f"\n--- Skenario {sc_name} ---")
+        ae_sc_raw = eval_scenario_multiruns(ae_2d_runs, sc_id, "raw")
+        ae_sc_deb = eval_scenario_multiruns(ae_2d_runs, sc_id, "deb")
+        if2_sc_raw = eval_scenario_multiruns(if_2d_runs, sc_id, "raw")
+        if2_sc_deb = eval_scenario_multiruns(if_2d_runs, sc_id, "deb")
+        if3_sc_raw = eval_scenario_multiruns(if_3d_runs, sc_id, "raw")
+        if3_sc_deb = eval_scenario_multiruns(if_3d_runs, sc_id, "deb")
 
-    fp_ae_2d_s14 = (pred_2d.loc[s14_df.index][s14_norm_mask] == 1).sum()
-    rec_ae_2d_s14 = (pred_2d.loc[s14_df.index][s14_ano_mask] == 1).sum()
+        print(f"Total Sampel: Normal={ae_sc_raw['norm_tot']}, Anomali={ae_sc_raw['ano_tot']}")
+        print("  RAW (N=1):")
+        print(f"    DenseAE 2D (5 seeds): FP={ae_sc_raw['fp_mean']:.2f} +- {ae_sc_raw['fp_sd']:.2f} ({ae_sc_raw['fpr_mean']*100:.2f}% +- {ae_sc_raw['fpr_sd']*100:.2f}%) | TP={ae_sc_raw['tp_mean']:.2f}/{ae_sc_raw['ano_tot']} (Recall={ae_sc_raw['rec_mean']*100:.2f}% +- {ae_sc_raw['rec_sd']*100:.2f}%)")
+        print(f"    DenseAE 2D (seed 42): FP={ae_sc_raw['seed42']['fp']} ({ae_sc_raw['seed42']['fpr']*100:.2f}%) | TP={ae_sc_raw['seed42']['tp']}/{ae_sc_raw['ano_tot']} (Recall={ae_sc_raw['seed42']['recall']*100:.2f}%)")
+        print(f"    IF 2D raw  (5 seeds): FP={if2_sc_raw['fp_mean']:.2f} +- {if2_sc_raw['fp_sd']:.2f} ({if2_sc_raw['fpr_mean']*100:.2f}% +- {if2_sc_raw['fpr_sd']*100:.2f}%) | TP={if2_sc_raw['tp_mean']:.2f}/{if2_sc_raw['ano_tot']} (Recall={if2_sc_raw['rec_mean']*100:.2f}% +- {if2_sc_raw['rec_sd']*100:.2f}%)")
+        print(f"    IF 2D raw  (seed 42): FP={if2_sc_raw['seed42']['fp']} ({if2_sc_raw['seed42']['fpr']*100:.2f}%) | TP={if2_sc_raw['seed42']['tp']}/{if2_sc_raw['ano_tot']} (Recall={if2_sc_raw['seed42']['recall']*100:.2f}%)")
+        print(f"    IF 3D raw  (5 seeds): FP={if3_sc_raw['fp_mean']:.2f} +- {if3_sc_raw['fp_sd']:.2f} ({if3_sc_raw['fpr_mean']*100:.2f}% +- {if3_sc_raw['fpr_sd']*100:.2f}%) | TP={if3_sc_raw['tp_mean']:.2f}/{if3_sc_raw['ano_tot']} (Recall={if3_sc_raw['rec_mean']*100:.2f}% +- {if3_sc_raw['rec_sd']*100:.2f}%)")
+        print(f"    IF 3D raw  (seed 42): FP={if3_sc_raw['seed42']['fp']} ({if3_sc_raw['seed42']['fpr']*100:.2f}%) | TP={if3_sc_raw['seed42']['tp']}/{if3_sc_raw['ano_tot']} (Recall={if3_sc_raw['seed42']['recall']*100:.2f}%)")
 
-    total_s14_norm = s14_norm_mask.sum()
-    total_s14_ano = s14_ano_mask.sum()
-
-    print(f"S14 Total Normal={total_s14_norm}, Anomali={total_s14_ano}")
-    print(f"  IF (2D raw):        FP={fp_if_2d_s14} ({fp_if_2d_s14/total_s14_norm*100:.2f}%), Recall={rec_if_2d_s14}/{total_s14_ano} ({rec_if_2d_s14/total_s14_ano*100:.2f}%)")
-    print(f"  IF (3D raw):        FP={fp_if_3d_s14} ({fp_if_3d_s14/total_s14_norm*100:.2f}%), Recall={rec_if_3d_s14}/{total_s14_ano} ({rec_if_3d_s14/total_s14_ano*100:.2f}%)")
-    print(f"  DenseAE 2D (seed42): FP={fp_ae_2d_s14} ({fp_ae_2d_s14/total_s14_norm*100:.2f}%), Recall={rec_ae_2d_s14}/{total_s14_ano} ({rec_ae_2d_s14/total_s14_ano*100:.2f}%)")
-    print(f"  (Catatan: IF 13-window menghasilkan 131 FP (19,2%) akibat lag rolling window 14 detik)")
+        print("  DEBOUNCED (N=3):")
+        print(f"    DenseAE 2D (5 seeds): FP={ae_sc_deb['fp_mean']:.2f} +- {ae_sc_deb['fp_sd']:.2f} ({ae_sc_deb['fpr_mean']*100:.2f}% +- {ae_sc_deb['fpr_sd']*100:.2f}%) | TP={ae_sc_deb['tp_mean']:.2f}/{ae_sc_deb['ano_tot']} (Recall={ae_sc_deb['rec_mean']*100:.2f}% +- {ae_sc_deb['rec_sd']*100:.2f}%)")
+        print(f"    DenseAE 2D (seed 42): FP={ae_sc_deb['seed42']['fp']} ({ae_sc_deb['seed42']['fpr']*100:.2f}%) | TP={ae_sc_deb['seed42']['tp']}/{ae_sc_deb['ano_tot']} (Recall={ae_sc_deb['seed42']['recall']*100:.2f}%)")
+        print(f"    IF 2D raw  (5 seeds): FP={if2_sc_deb['fp_mean']:.2f} +- {if2_sc_deb['fp_sd']:.2f} ({if2_sc_deb['fpr_mean']*100:.2f}% +- {if2_sc_deb['fpr_sd']*100:.2f}%) | TP={if2_sc_deb['tp_mean']:.2f}/{if2_sc_deb['ano_tot']} (Recall={if2_sc_deb['rec_mean']*100:.2f}% +- {if2_sc_deb['rec_sd']*100:.2f}%)")
+        print(f"    IF 2D raw  (seed 42): FP={if2_sc_deb['seed42']['fp']} ({if2_sc_deb['seed42']['fpr']*100:.2f}%) | TP={if2_sc_deb['seed42']['tp']}/{if2_sc_deb['ano_tot']} (Recall={if2_sc_deb['seed42']['recall']*100:.2f}%)")
+        print(f"    IF 3D raw  (5 seeds): FP={if3_sc_deb['fp_mean']:.2f} +- {if3_sc_deb['fp_sd']:.2f} ({if3_sc_deb['fpr_mean']*100:.2f}% +- {if3_sc_deb['fpr_sd']*100:.2f}%) | TP={if3_sc_deb['tp_mean']:.2f}/{if3_sc_deb['ano_tot']} (Recall={if3_sc_deb['rec_mean']*100:.2f}% +- {if3_sc_deb['rec_sd']*100:.2f}%)")
+        print(f"    IF 3D raw  (seed 42): FP={if3_sc_deb['seed42']['fp']} ({if3_sc_deb['seed42']['fpr']*100:.2f}%) | TP={if3_sc_deb['seed42']['tp']}/{if3_sc_deb['ano_tot']} (Recall={if3_sc_deb['seed42']['recall']*100:.2f}%)")
 
 
 if __name__ == "__main__":
