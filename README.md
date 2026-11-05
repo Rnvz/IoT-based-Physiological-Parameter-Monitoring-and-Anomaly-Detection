@@ -226,27 +226,3 @@ During physical recording sessions:
 
 ---
 
-## 11. Before Demo Checklist
-
-Before running a live evaluation, public demonstration, or submitting recordings:
-
-- [ ] **Separate `CSV_DIR` for Real Recordings**:
-  Ensure physical device recordings are written to an isolated storage directory (default: `CSV_DIR=./data`), and never run simulator runs or integration tests against that directory (use `CSV_DIR=./data_sim` for simulated runs).
-- [ ] **Enforce Read Authentication when Sharing (`READ_AUTH_REQUIRED=true`)**:
-  When sharing the backend or dashboard link externally, configure `READ_AUTH_REQUIRED=true` in `.env` to prevent unauthorized visitors from accessing live patient telemetry, historical charts, and device state.
-- [ ] **Turn Off Direct Mode (`MODE: "api"`)**:
-  Confirm that `frontend/js/config.js` is set to `MODE: "api"` so all client requests are authenticated via the FastAPI backend rather than directly subscribing/publishing to the unauthenticated public MQTT broker.
-- [ ] **Rotate API Key**:
-  Generate a new random, high-entropy secret for `API_KEY` in `.env` before live demonstration or evaluation sessions, and do not commit `.env` to version control.
-
----
-
-## 12. Credits
-
-- **Firmware**: `<author/source>`
-- **Dashboard**: `<source>`
-- **AI-assisted development**: `<tool names and scope - to be filled by the author as required by the course policy>`
-- **Datasets**:
-  - *Human Vital Signs Dataset*: [https://www.kaggle.com/datasets/engrarri21/human-vital-signs](https://www.kaggle.com/datasets/engrarri21/human-vital-signs)
-  - *Human Vital Sign Dataset*: [https://www.kaggle.com/datasets/nasirayub2/human-vital-sign-dataset](https://www.kaggle.com/datasets/nasirayub2/human-vital-sign-dataset)
-  - *Synthetic Patient HealthCare Monitoring Dataset*: `UNVERIFIED` (source URL and origin not independently verified in repository data).
