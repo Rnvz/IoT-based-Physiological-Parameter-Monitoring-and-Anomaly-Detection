@@ -21,7 +21,7 @@ from typing import List, Dict, Any, Optional
 import numpy as np
 import pandas as pd
 
-from ml_eval.sessions import parse_timestamp
+from ml.eval.sessions import parse_timestamp
 
 DEFAULT_WINDOW_SIZE = 15
 DEFAULT_SAMPLE_GAP_SECONDS = 5.0

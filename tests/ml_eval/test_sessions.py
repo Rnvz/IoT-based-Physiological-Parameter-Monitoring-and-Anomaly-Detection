@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 import pandas as pd
 import pytest
 
-from ml_eval.sessions import (
+from ml.eval.sessions import (
     load_dataset,
     clean_for_modelling,
     segment_sessions,

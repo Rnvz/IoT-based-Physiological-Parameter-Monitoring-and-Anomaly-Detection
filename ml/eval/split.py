@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple, Optional, Union
 import pandas as pd
 
-from ml_eval.sessions import load_and_segment_sessions, summarize_sessions
+from ml.eval.sessions import load_and_segment_sessions, summarize_sessions
 
 def compute_content_sha256(content: str) -> str:
     """Computes SHA256 hex digest of a string."""

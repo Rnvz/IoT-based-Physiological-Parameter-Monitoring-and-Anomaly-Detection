@@ -30,7 +30,7 @@ from ml.artifacts.dl_v1.numpy_forward import (
     SCALER_MEAN,
     SCALER_SCALE
 )
-from ml_eval.public_split import load_public_split
+from ml.eval.public_split import load_public_split
 from ml.dl.evaluate import compute_metrics, patient_group_bootstrap
 
 def main():
@@ -186,7 +186,7 @@ def main():
     ocsvm_v3 = OneClassSVM(kernel="rbf", gamma="scale", nu=0.05).fit(scaler_v3.transform(norm_train.iloc[sub_idx][["Heart_Rate", "SpO2", "Temperature"]].values))
     ocsvm_v2 = OneClassSVM(kernel="rbf", gamma="scale", nu=0.05).fit(scaler_v2.transform(norm_train.iloc[sub_idx][["Heart_Rate", "SpO2"]].values))
 
-    weights_path = os.path.join(PROJECT_ROOT, "ml/artifacts/dl_v1/model_weights.npz")
+    weights_path = os.path.join(PROJECT_ROOT, "dl/artifacts/dl_v1/model_weights.npz")
     infer_ae_v2 = EdgeAutoencoderInference(weights_path)
     w_ae = infer_ae_v2.w
 

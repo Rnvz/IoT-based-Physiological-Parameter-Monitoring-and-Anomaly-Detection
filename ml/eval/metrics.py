@@ -31,7 +31,7 @@ from sklearn.metrics import (
     confusion_matrix
 )
 
-from ml_eval.sessions import parse_timestamp
+from ml.eval.sessions import parse_timestamp
 
 def compute_pr_roc_auc(y_true: np.ndarray, scores: np.ndarray) -> Tuple[Optional[float], Optional[float]]:
     """Computes PR-AUC and ROC-AUC safely, handling edge cases where only one class is present."""

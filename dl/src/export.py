@@ -24,7 +24,7 @@ except ImportError:
     ort = None
 import sklearn
 
-from ml.dl.models import DenseAutoencoder, NumPyAutoencoderForward
+from dl.src.models import DenseAutoencoder, NumPyAutoencoderForward
 
 def export_dl_model(
     model: DenseAutoencoder,

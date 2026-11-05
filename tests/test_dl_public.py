@@ -27,10 +27,10 @@ except ImportError:
     nn = None
 
 from ml_eval.public_split import split_public_dataset
-from ml.dl.models import DenseAutoencoder, DenseVAE, NumPyAutoencoderForward
-from ml.dl.train import fit_scaler, train_autoencoder
+from dl.src.models import DenseAutoencoder, DenseVAE, NumPyAutoencoderForward
+from dl.src.train import fit_scaler, train_autoencoder
 from ml.dl.evaluate import compute_metrics, patient_group_bootstrap
-from ml.dl.export import export_dl_model
+from dl.src.export import export_dl_model
 
 
 # ==============================================================================

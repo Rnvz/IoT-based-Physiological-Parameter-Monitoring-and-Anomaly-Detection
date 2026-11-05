@@ -28,12 +28,12 @@ import numpy as np
 import sklearn
 import joblib
 
-from ml_eval.sessions import load_and_segment_sessions, summarize_sessions
-from ml_eval.split import freeze_split, load_frozen_split
-from ml_eval.features import extract_features, CORE_FEATURE_NAMES, EXTENDED_FEATURE_NAMES
-from ml_eval.baselines import train_baselines
-from ml_eval.inject import inject_synthetic_anomalies
-from ml_eval.metrics import evaluate_model
+from ml.eval.sessions import load_and_segment_sessions, summarize_sessions
+from ml.eval.split import freeze_split, load_frozen_split
+from ml.eval.features import extract_features, CORE_FEATURE_NAMES, EXTENDED_FEATURE_NAMES
+from ml.eval.baselines import train_baselines
+from ml.eval.inject import inject_synthetic_anomalies
+from ml.eval.metrics import evaluate_model
 
 BANNER_TEXT = "SYNTHETIC FIXTURE DATA - NOT A RESULT"
 BANNER_BLOCK = f"""================================================================================

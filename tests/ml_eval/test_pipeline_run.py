@@ -6,7 +6,7 @@ import os
 import json
 import pytest
 
-from ml_eval.run import run_pipeline, BANNER_TEXT
+from ml.eval.run import run_pipeline, BANNER_TEXT
 
 
 def test_pipeline_fixture_banner_and_report_generation(tmp_path, synthetic_fixture_csv, capsys):

@@ -35,7 +35,7 @@ if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
 from app.rules.engine import evaluate_rules
-from ml.dl.models import DenseAutoencoder, DenseVAE
+from dl.src.models import DenseAutoencoder, DenseVAE
 
 FEATURE_VARIANTS = {
     "v3": ["Heart_Rate", "SpO2", "Temperature"],

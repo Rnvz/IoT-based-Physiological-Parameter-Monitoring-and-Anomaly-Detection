@@ -576,7 +576,7 @@ def main():
     with open(os.path.join(PROJECT_ROOT, "ml/artifacts/dl_v1/metadata.json"), "r") as f:
         v1_meta = json.load(f)
     v1_weights = dict(np.load(os.path.join(PROJECT_ROOT, "ml/artifacts/dl_v1/model_weights.npz")))
-    from ml.dl.models import NumPyAutoencoderForward
+    from dl.src.models import NumPyAutoencoderForward
     v1_forward = NumPyAutoencoderForward(v1_weights)
     scaler_mean = np.array(v1_meta["scaler"]["mean"], dtype=np.float32)
     scaler_scale = np.array(v1_meta["scaler"]["scale"], dtype=np.float32)

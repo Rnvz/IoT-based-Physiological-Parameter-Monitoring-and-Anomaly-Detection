@@ -24,7 +24,7 @@ try:
 except ImportError:
     torch = None
 
-from ml.dl.models import DenseAutoencoder, DenseVAE, NumPyAutoencoderForward
+from dl.src.models import DenseAutoencoder, DenseVAE, NumPyAutoencoderForward
 
 def compute_metrics(
     y_true: np.ndarray,

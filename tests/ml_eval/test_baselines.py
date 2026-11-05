@@ -6,8 +6,8 @@ import pandas as pd
 import numpy as np
 import pytest
 
-from ml_eval.features import extract_features
-from ml_eval.baselines import train_baselines, NORMAL_SCENARIOS
+from ml.eval.features import extract_features
+from ml.eval.baselines import train_baselines, NORMAL_SCENARIOS
 
 
 def test_threshold_chosen_on_val_only(synthetic_fixture_df):
@@ -15,8 +15,8 @@ def test_threshold_chosen_on_val_only(synthetic_fixture_df):
     Verify that operating thresholds are calibrated exclusively on validation sessions.
     Varying validation data must alter the threshold; test data must have zero influence.
     """
-    from ml_eval.sessions import load_and_segment_sessions
-    from ml_eval.split import split_session_ids
+    from ml.eval.sessions import load_and_segment_sessions
+    from ml.eval.split import split_session_ids
 
     segmented = load_and_segment_sessions(synthetic_fixture_df)
     sessions = sorted(segmented["session_id"].unique())

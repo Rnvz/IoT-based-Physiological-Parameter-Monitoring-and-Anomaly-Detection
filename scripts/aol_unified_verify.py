@@ -18,7 +18,7 @@ import onnxruntime as ort
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from ml_eval.public_split import load_public_split
+from ml.eval.public_split import load_public_split
 from ml.artifacts.dl_v1.numpy_forward import (
     EdgeAutoencoderInference,
     layer_norm_np,
@@ -184,8 +184,8 @@ def run_onnx_numpy_parity():
     print("6. ONNX VS NUMPY PARITY AUDIT")
     print("=" * 80)
 
-    onnx_path = os.path.join(PROJECT_ROOT, "ml/artifacts/dl_v1/model.onnx")
-    npz_path = os.path.join(PROJECT_ROOT, "ml/artifacts/dl_v1/model_weights.npz")
+    onnx_path = os.path.join(PROJECT_ROOT, "dl/artifacts/dl_v1/model.onnx")
+    npz_path = os.path.join(PROJECT_ROOT, "dl/artifacts/dl_v1/model_weights.npz")
 
     ort_session = ort.InferenceSession(onnx_path)
     weights = np.load(npz_path)

@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import pytest
 
-from ml_eval.features import (
+from ml.eval.features import (
     extract_session_features,
     extract_features,
     CORE_FEATURE_NAMES,

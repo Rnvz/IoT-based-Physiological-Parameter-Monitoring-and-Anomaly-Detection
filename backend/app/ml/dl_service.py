@@ -139,9 +139,9 @@ class DLService:
     def _resolve_path(self, filename: str) -> Optional[str]:
         candidates = [
             os.path.join(self.model_dir, filename),
-            os.path.join(os.path.dirname(__file__), "../../../ml/artifacts/dl_v1", filename),
-            os.path.join("ml/artifacts/dl_v1", filename),
-            os.path.join("../ml/artifacts/dl_v1", filename),
+            os.path.join(os.path.dirname(__file__), "../../../dl/artifacts/dl_v1", filename),
+            os.path.join("dl/artifacts/dl_v1", filename),
+            os.path.join("../dl/artifacts/dl_v1", filename),
         ]
         return next((p for p in candidates if os.path.exists(p)), None)
 

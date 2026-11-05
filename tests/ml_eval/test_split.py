@@ -6,7 +6,7 @@ import os
 import pytest
 import pandas as pd
 
-from ml_eval.split import (
+from ml.eval.split import (
     split_session_ids,
     freeze_split,
     load_frozen_split,
@@ -60,7 +60,7 @@ def test_split_determinism():
 
 def test_freeze_split_refuses_overwrite(tmp_path, synthetic_fixture_df):
     """Verify that freeze_split raises FileExistsError on existing file unless force=True."""
-    from ml_eval.sessions import load_and_segment_sessions
+    from ml.eval.sessions import load_and_segment_sessions
 
     segmented = load_and_segment_sessions(synthetic_fixture_df)
     target_json = tmp_path / "splits" / "split.json"
@@ -81,7 +81,7 @@ def test_freeze_split_refuses_overwrite(tmp_path, synthetic_fixture_df):
 
 def test_load_frozen_split(tmp_path, synthetic_fixture_df):
     """Verify loading and hash verification of frozen split."""
-    from ml_eval.sessions import load_and_segment_sessions
+    from ml.eval.sessions import load_and_segment_sessions
 
     segmented = load_and_segment_sessions(synthetic_fixture_df)
     target_json = tmp_path / "split.json"

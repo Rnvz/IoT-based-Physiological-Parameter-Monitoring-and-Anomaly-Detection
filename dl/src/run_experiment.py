@@ -13,8 +13,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-from ml.dl.models import DenseAutoencoder, DenseVAE, count_parameters
-from ml.dl.train import (
+from dl.src.models import DenseAutoencoder, DenseVAE, count_parameters
+from dl.src.train import (
     FEATURE_VARIANTS,
     SEEDS,
     set_seed,
@@ -23,15 +23,15 @@ from ml.dl.train import (
     train_vae,
     train_baselines
 )
-from ml.dl.evaluate import (
+from dl.src.evaluate import (
     compute_metrics,
     patient_group_bootstrap,
     compute_persistence_events,
     benchmark_model_speed_and_size,
     evaluate_domain_shift_stream
 )
-from ml.dl.export import export_dl_model
-from ml_eval.public_split import load_public_split
+from dl.src.export import export_dl_model
+from ml.eval.public_split import load_public_split
 
 def score_model(model_obj: Any, X: np.ndarray) -> np.ndarray:
     """Computes continuous anomaly score for given model object."""

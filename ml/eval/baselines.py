@@ -34,7 +34,7 @@ try:
 except ImportError:
     from backend.app.rules.engine import evaluate_rules
 
-from ml_eval.features import CORE_FEATURE_NAMES, EXTENDED_FEATURE_NAMES
+from ml.eval.features import CORE_FEATURE_NAMES, EXTENDED_FEATURE_NAMES
 
 NORMAL_SCENARIOS = {"REST", "TYPING"}
 
