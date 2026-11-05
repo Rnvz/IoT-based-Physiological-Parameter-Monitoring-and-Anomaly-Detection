@@ -33,7 +33,6 @@ from sklearn.metrics import (
 
 from ml_eval.sessions import parse_timestamp
 
-
 def compute_pr_roc_auc(y_true: np.ndarray, scores: np.ndarray) -> Tuple[Optional[float], Optional[float]]:
     """Computes PR-AUC and ROC-AUC safely, handling edge cases where only one class is present."""
     if len(np.unique(y_true)) < 2:
@@ -51,7 +50,6 @@ def compute_pr_roc_auc(y_true: np.ndarray, scores: np.ndarray) -> Tuple[Optional
         roc_auc_val = None
 
     return pr_auc_val, roc_auc_val
-
 
 def compute_false_alarms(
     benign_df: pd.DataFrame,
@@ -82,7 +80,6 @@ def compute_false_alarms(
         "false_alarms_per_hour": round(fa_per_hour, 2)
     }
 
-
 def compute_detection_latency(
     df: pd.DataFrame,
     preds: np.ndarray,
@@ -104,7 +101,6 @@ def compute_detection_latency(
 
     dts = df["dt"].tolist() if "dt" in df.columns else [parse_timestamp(x) for x in df["ts"]]
 
-    # Identify contiguous anomaly segments
     is_anom = (df["is_synthetic"] == True).values
     types = df["anomaly_type"].values
 
@@ -121,7 +117,6 @@ def compute_detection_latency(
             total_episodes += 1
             episode_preds = preds[start_idx:end_idx]
 
-            # Find first detection
             hits = np.where(episode_preds == 1)[0]
             if len(hits) > 0:
                 first_hit_idx = hits[0]
@@ -145,29 +140,24 @@ def compute_detection_latency(
         "mean_latency_seconds": round(mean_seconds, 2) if mean_seconds is not None else None
     }
 
-
 def benchmark_inference_speed_and_size(model_wrapper: Any, sample_df: pd.DataFrame) -> Tuple[Dict[str, float], Optional[int]]:
     """
     Benchmarks single-row inference speed and serialized model size.
     """
-    # 1. Serialized size
     size_bytes = None
     if model_wrapper.model is not None:
         buf = io.BytesIO()
         joblib.dump(model_wrapper.model, buf)
         size_bytes = buf.tell()
 
-    # 2. Timing
     if sample_df.empty:
         return {"mean_us": 0.0, "p95_us": 0.0}, size_bytes
 
     single_row = sample_df.iloc[[0]]
     times_us = []
-    # Warm-up
     for _ in range(20):
         _ = model_wrapper.score(single_row)
 
-    # Benchmark 300 iterations
     for _ in range(300):
         t0 = time.perf_counter()
         _ = model_wrapper.score(single_row)
@@ -178,7 +168,6 @@ def benchmark_inference_speed_and_size(model_wrapper: Any, sample_df: pd.DataFra
         "mean_us": round(float(np.mean(times_us)), 2),
         "p95_us": round(float(np.percentile(times_us, 95)), 2),
     }, size_bytes
-
 
 def evaluate_model(
     model_wrapper: Any,
@@ -193,7 +182,6 @@ def evaluate_model(
     - Detection latency on injected failure onset.
     - Computational footprint (inference time, artifact size).
     """
-    # 1. Predictions on injected dataset (contains labels y_true)
     injected_scores = model_wrapper.score(injected_test_df)
     injected_preds = model_wrapper.predict(injected_test_df)
     y_true = injected_test_df["y_true"].values.astype(int)
@@ -204,7 +192,6 @@ def evaluate_model(
     rec = float(recall_score(y_true, injected_preds, zero_division=0))
     cm = confusion_matrix(y_true, injected_preds).tolist()
 
-    # 2. Benign evaluation on clean physical recordings (y_true=0, REST/TYPING)
     benign_mask = real_test_df["scenario"].isin(["REST", "TYPING"])
     benign_df = real_test_df[benign_mask] if benign_mask.sum() > 0 else real_test_df
     benign_scores = model_wrapper.score(benign_df)
@@ -215,10 +202,7 @@ def evaluate_model(
         threshold=model_wrapper.threshold
     )
 
-    # 3. False alarms at target recall (e.g. Recall >= 90%)
     if len(np.unique(y_true)) >= 2:
-        # Find threshold where synthetic recall >= target_recall
-        # precision_recall_curve returns thresholds in ascending order
         p_curve, r_curve, th_curve = precision_recall_curve(y_true, injected_scores)
         eligible = np.where(r_curve[:-1] >= target_recall)[0]
         if len(eligible) > 0:
@@ -230,10 +214,8 @@ def evaluate_model(
     else:
         fa_at_target_rec = None
 
-    # 4. Latency
     latency_stats = compute_detection_latency(injected_test_df, injected_preds)
 
-    # 5. Speed and size
     speed_stats, size_bytes = benchmark_inference_speed_and_size(model_wrapper, real_test_df)
 
     return {

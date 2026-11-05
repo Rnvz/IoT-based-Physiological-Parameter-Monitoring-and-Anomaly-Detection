@@ -3,14 +3,11 @@
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 1. Environment & Secrets (Sangat Penting: Jangan commit kredensial!)
+# 1. Environment & Secrets
 # ------------------------------------------------------------------------------
 .env
 .env.*
-backend/.env
-backend/.env.*
 !.env.example
-!backend/.env.example
 secrets.h
 firmware/include/secrets.h
 !firmware/include/secrets.h.example
@@ -18,7 +15,7 @@ firmware/include/secrets.h
 Dashboard/
 
 # ------------------------------------------------------------------------------
-# 1.1 AI Agent Instructions & Internal Docs (Private Local Guides)
+# 1.1 AI Agent Instructions & Internal Docs
 # ------------------------------------------------------------------------------
 AGENTS.md
 CLAUDE.md
@@ -75,7 +72,6 @@ htmlcov/
 # ------------------------------------------------------------------------------
 # 3. Machine Learning Models & Datasets
 # ------------------------------------------------------------------------------
-# Default ignore untuk model biner besar
 *.joblib
 *.pkl
 *.pickle
@@ -85,22 +81,30 @@ htmlcov/
 *.pth
 *.onnx
 
-# Folder salinan lokal di root diabaikan agar tidak menduplikasi commit
-/models/
+# Track ML models
+!ml/models/
+ml/models/*
+!ml/models/.gitkeep
+!ml/models/*.joblib
+!ml/models/evaluation_report.txt
+!ml/models/physio_synthetic/
+!ml/models/physio_synthetic/**
 
-# Kecualikan dan track model resmi yang aktif digunakan untuk inference
+# Track DL artifacts
+!dl/artifacts/
+!dl/artifacts/**
+
+# Legacy model path
 !ml_pipeline/models/
 ml_pipeline/models/*
 !ml_pipeline/models/.gitkeep
 !ml_pipeline/models/*.joblib
 !ml_pipeline/models/evaluation_report.txt
-!ml_pipeline/models/evaluation_report.json
 !ml_pipeline/models/physio_synthetic/
 !ml_pipeline/models/physio_synthetic/**
 
-# Datasets (CSV, Excel, Zip, Parquet)
+# Datasets
 Dataset/
-/data/
 *.csv
 *.tsv
 *.xlsx
@@ -109,23 +113,21 @@ Dataset/
 *.tar.gz
 *.7z
 
-# Kecualikan folder data di ml_pipeline jika diperlukan
-!ml_pipeline/data/
-ml_pipeline/data/*
-!ml_pipeline/data/.gitkeep
+!ml/data/
+ml/data/*
+!ml/data/.gitkeep
 
-# Evaluation results & splits
 results/
 splits/
 
-# Preserve test fixtures
 !tests/fixtures/
 !tests/fixtures/**
 
 # ------------------------------------------------------------------------------
-# 4. Embedded / PlatformIO / Arduino Firmware
+# 4. Embedded Firmware
 # ------------------------------------------------------------------------------
 Esp/
+*.ino
 .pio/
 .pioenvs/
 .piolibdeps/
@@ -135,10 +137,6 @@ Esp/
 *.bin
 *.hex
 
-# Pastikan source code Arduino .ino tetap terlacak
-!*.ino
-!firmware/**/*.ino
-
 # ------------------------------------------------------------------------------
 # 5. Database & Local Storage
 # ------------------------------------------------------------------------------
@@ -146,13 +144,11 @@ Esp/
 *.sqlite
 *.sqlite3
 backend/data/*.db
-backend/data/*.csv
-backend/data/*.json
-!backend/data/supabase_schema.sql
 !backend/data/.gitkeep
+data/
 
 # ------------------------------------------------------------------------------
-# 6. Node.js & Dashboard / Frontend
+# 6. Node.js & Dashboard
 # ------------------------------------------------------------------------------
 node_modules/
 npm-debug.log*
@@ -168,8 +164,6 @@ pnpm-debug.log*
 logs/
 temp/
 tmp/
-scratch/
-*.tmp
 *.pdf
 *.docx
 
@@ -185,7 +179,6 @@ scratch/
 *.sublime-workspace
 *.sublime-project
 
-# OS specific
 .DS_Store
 Thumbs.db
 ehthumbs.db

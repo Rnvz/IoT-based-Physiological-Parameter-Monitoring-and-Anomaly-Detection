@@ -127,7 +127,7 @@ class CSVRepository(BaseRepository):
                 return
             header = reader[0]
             if "dl_score" in header:
-                return  # already migrated
+                return
 
             new_header = list(header) + ["dl_score", "dl_severity", "inference_ms"]
             new_rows = [new_header]
@@ -182,7 +182,7 @@ class CSVRepository(BaseRepository):
         async with self._lock:
             if device_id in self._latest_readings:
                 return self._latest_readings[device_id]
-        
+
         try:
             with open(self.readings_file, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
@@ -534,7 +534,6 @@ class CSVRepository(BaseRepository):
                 ])
                 yield buf.getvalue()
 
-
 def parse_actuator_payload(payload_json: str) -> Dict[str, Any]:
     """Parse actuator payload handling both flat and nested JSON schemas."""
     try:
@@ -566,7 +565,6 @@ def parse_actuator_payload(payload_json: str) -> Dict[str, Any]:
         "source": source
     }
 
-
 def as_of_join_actuator(
     reading_ts: str,
     actuator_timeline: List[Tuple[str, Dict[str, Any]]],
@@ -590,7 +588,6 @@ def as_of_join_actuator(
         return actuator_timeline[idx][1]
     return default_actuator
 
-
 def as_of_join_scenario(
     reading_ts: str,
     scenario_timeline: List[Tuple[str, str]],
@@ -605,5 +602,3 @@ def as_of_join_scenario(
     if idx >= 0:
         return scenario_timeline[idx][1]
     return default_scenario
-
-

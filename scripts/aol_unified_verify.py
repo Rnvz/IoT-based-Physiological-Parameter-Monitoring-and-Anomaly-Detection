@@ -29,14 +29,12 @@ from ml.artifacts.dl_v1.numpy_forward import (
     CRIT_THRESHOLD
 )
 
-
 def compute_sha256(filepath: str) -> str:
     h = hashlib.sha256()
     with open(filepath, "rb") as f:
         while chunk := f.read(65536):
             h.update(chunk)
     return h.hexdigest()
-
 
 def run_data_consistency():
     print("=" * 80)
@@ -79,7 +77,6 @@ def run_data_consistency():
                 p95_val = np.percentile(vals, 95)
                 print(f"    - {col:12s}: mean = {mean_val:8.4f}, std = {std_val:8.4f}, p5 = {p5_val:8.4f}, p95 = {p95_val:8.4f}")
 
-    # Split breakdown
     split_path = os.path.join(PROJECT_ROOT, "splits/public_split.json")
     split_meta, split_sha = load_public_split(split_path)
     print(f"\nSplit File: {split_path} (SHA-256: {split_sha})")
@@ -119,7 +116,6 @@ def run_data_consistency():
 
     print(pd.DataFrame(split_rows).to_string(index=False))
 
-    # Gap rows in engrarri21
     assigned_idx = set(split_meta["indices"]["train"]) | set(split_meta["indices"]["val"]) | set(split_meta["indices"]["test"])
     eng_df = df[df["Source"] == "engrarri21"]
     gap_df = eng_df[~eng_df["row_id"].isin(assigned_idx)]
@@ -128,21 +124,18 @@ def run_data_consistency():
     gap_class_counts = gap_df["OUTPUT"].value_counts().to_dict()
     print(f"Gap rows class breakdown: Normal(0) = {gap_class_counts.get(0, 0)}, Abnormal(1) = {gap_class_counts.get(1, 0)}")
 
-    # Verbatim quote from docs/KNOWN_LIMITATIONS.md
     print("\n--- VERBATIM QUOTE FROM docs/KNOWN_LIMITATIONS.md (LINES 28-35) ---")
     lim_path = os.path.join(PROJECT_ROOT, "docs/KNOWN_LIMITATIONS.md")
     with open(lim_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
     print("".join(lines[26:36]))
 
-    # Explanation of 896 vs 5,712
     print("--- EXPLANATION OF '896' VS 5,654 + 58 (5,712) ---")
     print("Total normal rows for engrarri21 in harmonized_vitals.csv = 5,712 (OUTPUT=0).")
     print("In public_split.json: train normal = 3,199, val normal = 2,306, test normal = 149 (Sum = 5,654).")
     print("Purge gap between chronological blocks: 58 normal rows (5,654 + 58 = 5,712).")
     print("The figure '896' reported in an earlier summary was a clerical typographical error conflating")
     print("an intermediate script count (890 test-set vitals rows or 896) with the full dataset count.")
-
 
 def run_spo2_and_uniqueness():
     print("\n" + "=" * 80)
@@ -167,7 +160,6 @@ def run_spo2_and_uniqueness():
     n_norm = int(np.sum(test_eng["OUTPUT"] == 0))
     n_abn = int(np.sum(test_eng["OUTPUT"] == 1))
 
-    # Features: [Heart_Rate, SpO2, Temperature]
     all_features = ["Heart_Rate", "SpO2", "Temperature"]
     hr_temp_only = ["Heart_Rate", "Temperature"]
 
@@ -187,7 +179,6 @@ def run_spo2_and_uniqueness():
     print(f"   - Unique normal    : {u_norm_all_features} / {n_norm} (Duplicate: {100 - u_norm_all_features/n_norm*100:.2f}%)")
     print(f"CONCLUSION: With all features, duplicate fraction is exactly 86.69% (~86%), matching literature audit note!")
 
-
 def run_onnx_numpy_parity():
     print("\n" + "=" * 80)
     print("6. ONNX VS NUMPY PARITY AUDIT")
@@ -200,24 +191,17 @@ def run_onnx_numpy_parity():
     weights = np.load(npz_path)
     w = {k: weights[k] for k in weights.files}
 
-    # Evaluate across 10,000 diverse test points:
-    # 1. Grid around normal/abnormal physiological vitals
-    # 2. Points with score in [0.005, 0.05] (around thresholds 0.013571 and 0.024805)
-    # 3. Extremes with score <= 10
     rng = np.random.RandomState(42)
 
-    # Base samples from normal distribution around vitals
     hr_norm = rng.normal(76.0, 15.0, size=5000)
     spo2_norm = rng.normal(97.0, 3.0, size=5000)
 
-    # Grid sweep around critical region
     hr_grid = np.linspace(40, 140, 50)
     spo2_grid = np.linspace(85, 100, 50)
     g_hr, g_spo2 = np.meshgrid(hr_grid, spo2_grid)
     hr_grid = g_hr.ravel()
     spo2_grid = g_spo2.ravel()
 
-    # Extreme samples
     hr_ext = rng.uniform(30, 200, size=2500)
     spo2_ext = rng.uniform(70, 100, size=2500)
 
@@ -227,11 +211,9 @@ def run_onnx_numpy_parity():
     raw_inputs = np.stack([all_hr, all_spo2], axis=1).astype(np.float32)
     norm_inputs = (raw_inputs - SCALER_MEAN) / SCALER_SCALE
 
-    # ONNX Forward
     onnx_rec = ort_session.run(None, {"input": norm_inputs})[0]
     onnx_scores = np.mean((norm_inputs - onnx_rec) ** 2, axis=1)
 
-    # NumPy Forward
     def numpy_forward_batch(norm: np.ndarray) -> np.ndarray:
         h = norm @ w["encoder.0.weight"].T + w["encoder.0.bias"]
         h = layer_norm_np(h, w["encoder.1.weight"], w["encoder.1.bias"])
@@ -255,14 +237,11 @@ def run_onnx_numpy_parity():
     abs_diff = np.abs(onnx_scores - numpy_scores)
     rel_diff = abs_diff / (np.maximum(onnx_scores, 1e-8))
 
-    # Mask for score <= 10
     mask_le10 = onnx_scores <= 10.0
     max_abs_le10 = float(np.max(abs_diff[mask_le10]))
 
-    # Max relative difference for all
     max_rel_all = float(np.max(rel_diff))
 
-    # Mask for score in [0.005, 0.05] (around thresholds 0.0136 / 0.0248)
     mask_thresh = (onnx_scores >= 0.005) & (onnx_scores <= 0.05)
     max_abs_thresh = float(np.max(abs_diff[mask_thresh])) if np.sum(mask_thresh) > 0 else 0.0
     max_rel_thresh = float(np.max(rel_diff[mask_thresh])) if np.sum(mask_thresh) > 0 else 0.0
@@ -283,7 +262,6 @@ def run_onnx_numpy_parity():
         "threshold_region_max_abs_diff": max_abs_thresh,
         "threshold_region_max_rel_diff": max_rel_thresh
     }
-
 
 if __name__ == "__main__":
     run_data_consistency()

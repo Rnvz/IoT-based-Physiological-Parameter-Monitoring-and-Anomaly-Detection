@@ -27,7 +27,7 @@ class SequenceManager:
                     return int(data.get("seq", random.randint(1000, 50000)))
             except Exception:
                 pass
-        
+
         initial_seq = random.randint(1000, 50000)
         self._save(initial_seq)
         return initial_seq

@@ -62,7 +62,7 @@ class TelemetryPayload(BaseModel):
     def normalize_input(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
-        
+
         if "telemetry" in data and isinstance(data["telemetry"], dict):
             t = data["telemetry"]
             data.setdefault("hr", t.get("heart_rate"))

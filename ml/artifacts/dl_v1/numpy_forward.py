@@ -13,16 +13,13 @@ WARN_THRESHOLD = 0.013571
 CRIT_THRESHOLD = 0.024805
 PERSISTENCE_N = 3
 
-
 def gelu_np(x: np.ndarray) -> np.ndarray:
     return (0.5 * x * (1.0 + erf(x / np.sqrt(2.0)))).astype(np.float32)
-
 
 def layer_norm_np(x: np.ndarray, weight: np.ndarray, bias: np.ndarray, eps: float = 1e-5) -> np.ndarray:
     mean = np.mean(x, axis=-1, keepdims=True)
     var = np.var(x, axis=-1, keepdims=True)
     return ((x - mean) / np.sqrt(var + eps)) * weight + bias
-
 
 class EdgeAutoencoderInference:
     def __init__(self, weights_path: str = "ml/artifacts/dl_v1/model_weights.npz"):
@@ -41,7 +38,6 @@ class EdgeAutoencoderInference:
         norm = (raw - SCALER_MEAN) / SCALER_SCALE
 
         w = self.w
-        # Encoder
         h = norm @ w["encoder.0.weight"].T + w["encoder.0.bias"]
         h = layer_norm_np(h, w["encoder.1.weight"], w["encoder.1.bias"])
         h = gelu_np(h)
@@ -50,7 +46,6 @@ class EdgeAutoencoderInference:
         h = gelu_np(h)
         z = h @ w["encoder.7.weight"].T + w["encoder.7.bias"]
 
-        # Decoder
         d = z @ w["decoder.0.weight"].T + w["decoder.0.bias"]
         d = layer_norm_np(d, w["decoder.1.weight"], w["decoder.1.bias"])
         d = gelu_np(d)
@@ -61,7 +56,6 @@ class EdgeAutoencoderInference:
 
         score = float(np.mean((norm - rec) ** 2))
 
-        # Persistence Filter
         if score >= CRIT_THRESHOLD:
             self.consecutive_crit += 1
         else:

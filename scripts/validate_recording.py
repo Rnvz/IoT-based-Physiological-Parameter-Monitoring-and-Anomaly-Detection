@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 scripts/validate_recording.py: Read-only Telemetry Recording Session Validator.
 
@@ -27,13 +26,11 @@ from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-# Protocol acceptance criteria thresholds (Strict Protocol Defaults)
 DEFAULT_MIN_SESSION_ROWS = 300
 MIN_FINGER_TRUE_PCT = 95.0
 MAX_ZERO_VITALS_PCT = 2.0
 MAX_INTRA_SESSION_GAP_SECONDS = 3.0
 INTER_SESSION_SPLIT_GAP_SECONDS = 600.0
-
 
 def parse_timestamp(val: Any) -> Optional[datetime]:
     """Parses timestamp string to timezone-aware UTC datetime."""
@@ -47,7 +44,6 @@ def parse_timestamp(val: Any) -> Optional[datetime]:
         return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
     except Exception:
         return None
-
 
 def resolve_csv_path(input_path: str) -> str:
     """
@@ -75,7 +71,6 @@ def resolve_csv_path(input_path: str) -> str:
         raise FileNotFoundError(f"No CSV files found in directory: {input_path}")
 
     raise ValueError(f"Invalid path type for: {input_path}")
-
 
 def validate_single_session_df(
     session_id: str,
@@ -108,7 +103,6 @@ def validate_single_session_df(
             "reasons": ["Sesi tidak memiliki baris data (0 rows)."]
         }
 
-    # Timestamp & Intra-session gaps
     dts = df_session["_dt"].dropna().sort_values().reset_index(drop=True)
     duration_s = 0.0
     gaps_gt_3s = 0
@@ -125,11 +119,9 @@ def validate_single_session_df(
     elif len(dts) == 1:
         duration_s = 1.0
 
-    # % finger == True
     finger_count = int(df_session["_finger"].sum())
     finger_true_pct = round(float(finger_count / total_rows) * 100, 2)
 
-    # % zero vitals when finger == True
     finger_mask = (df_session["_finger"] == True)
     if finger_count > 0:
         zero_vitals_mask = (
@@ -142,7 +134,6 @@ def validate_single_session_df(
     else:
         zero_vitals_pct = 100.0
 
-    # % null hum and room_temp
     def calc_null_pct(s: pd.Series) -> float:
         if len(s) == 0:
             return 100.0
@@ -152,12 +143,10 @@ def validate_single_session_df(
     null_hum_pct = calc_null_pct(df_session["_hum"])
     null_room_temp_pct = calc_null_pct(df_session["_room_temp"])
 
-    # Device ID check
     unique_dev_ids: List[str] = []
     if "device_id" in df_session.columns:
         unique_dev_ids = sorted(df_session["device_id"].dropna().astype(str).unique().tolist())
 
-    # Valid rows
     valid_mask = (
         finger_mask &
         (df_session["_hr"] > 0.0) &
@@ -166,7 +155,6 @@ def validate_single_session_df(
     )
     valid_rows = int(valid_mask.sum())
 
-    # Feature ranges (min, max, mean, std)
     metrics_to_calc = [
         ("HR", df_session.loc[valid_mask, "_hr"], "bpm"),
         ("SpO2", df_session.loc[valid_mask, "_spo2"], "%"),
@@ -197,7 +185,6 @@ def validate_single_session_df(
                 "unit": unit
             }
 
-    # Evaluate acceptance criteria
     reasons: List[str] = []
     if valid_rows < min_rows:
         reasons.append(f"Baris valid ({valid_rows}) kurang dari batas minimum ({min_rows} baris).")
@@ -217,7 +204,6 @@ def validate_single_session_df(
         if null_room_temp_pct > 0.0:
             reasons.append(f"Suhu ruangan (room_temp) memiliki {null_room_temp_pct:.1f}% data null/hilang.")
 
-    # Device ID validations
     if len(unique_dev_ids) > 1:
         reasons.append(f"Ditemukan campuran device_id dalam satu sesi: {unique_dev_ids}")
     elif expected_device_id is not None:
@@ -226,7 +212,6 @@ def validate_single_session_df(
         elif unique_dev_ids[0] != expected_device_id:
             reasons.append(f"device_id tidak sesuai: ditemukan {unique_dev_ids}, diharapkan '{expected_device_id}'.")
 
-    # Scenario label validations
     unique_scenarios: List[str] = []
     if "scenario" in df_session.columns:
         unique_scenarios = sorted(df_session["scenario"].dropna().astype(str).unique().tolist())
@@ -254,7 +239,6 @@ def validate_single_session_df(
         "reasons": reasons
     }
 
-
 def validate_recording(
     input_path: str,
     min_rows: int = DEFAULT_MIN_SESSION_ROWS,
@@ -281,7 +265,6 @@ def validate_recording(
             "reasons": ["File CSV kosong (0 baris)."]
         }
 
-    # Normalize column names
     col_map = {c: c.lower().strip() for c in df.columns}
     df = df.rename(columns=col_map)
 
@@ -306,7 +289,6 @@ def validate_recording(
     else:
         df["_dt"] = None
 
-    # Segment into sessions
     if "session_id" in df.columns:
         df["_session_id"] = df["session_id"].astype(str)
     else:
@@ -323,7 +305,6 @@ def validate_recording(
             session_ids.append(f"session_{cur_idx:03d}")
         df["_session_id"] = session_ids
 
-    # Validate each session
     session_results: Dict[str, Dict[str, Any]] = {}
     overall_reasons: List[str] = []
 
@@ -353,7 +334,6 @@ def validate_recording(
         "reasons": overall_reasons
     }
 
-
 def print_report(res: Dict[str, Any]):
     """Prints a clear structured report to stdout."""
     print("=" * 80)
@@ -380,7 +360,6 @@ def print_report(res: Dict[str, Any]):
         print(f"   - % Vital == 0.0           : {s['zero_vitals_pct']:.2f}%")
         print(f"   - % Null hum / room_temp   : {s['null_hum_pct']:.1f}% / {s['null_room_temp_pct']:.1f}%")
 
-        # Ranges
         print("   - Rentang Fitur:")
         for fname, fstats in s["feature_ranges"].items():
             if fstats["count"] > 0:
@@ -402,7 +381,6 @@ def print_report(res: Dict[str, Any]):
         for r in res["reasons"]:
             print(f"    * {r}")
     print("=" * 80)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Validasi sesi rekaman telemetri per-sesi sesuai docs/RECORDING_PROTOCOL.md.")
@@ -429,7 +407,6 @@ def main():
     except Exception as e:
         print(f"[ERROR] Gagal memvalidasi sesi: {e}", file=sys.stderr)
         sys.exit(2)
-
 
 if __name__ == "__main__":
     main()

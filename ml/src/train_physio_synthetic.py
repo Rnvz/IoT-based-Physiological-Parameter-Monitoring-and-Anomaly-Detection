@@ -41,7 +41,6 @@ FEATURE_COLS = [
     "Rate_of_Change"
 ]
 
-
 def extract_session_features(df: pd.DataFrame, window: int = 15) -> pd.DataFrame:
     """
     Mengekstrak 13 fitur temporal rolling window per sesi untuk menghindari data leakage antar sesi.
@@ -70,13 +69,11 @@ def extract_session_features(df: pd.DataFrame, window: int = 15) -> pd.DataFrame
         )
 
         if len(group) >= window:
-            # Lewati warm-up window
             group = group.iloc[window - 1:].reset_index(drop=True)
 
         session_features.append(group)
 
     return pd.concat(session_features, ignore_index=True)
-
 
 def train_and_evaluate(
     input_csv: str,
@@ -98,7 +95,6 @@ def train_and_evaluate(
     feat_df = extract_session_features(raw_df, window=window)
     logger.info(f"Total baris setelah warm-up window: {len(feat_df):,}")
 
-    # Pisahkan berdasarkan split_role
     train_df = feat_df[feat_df["split_role"] == "train"].copy().reset_index(drop=True)
     val_df = feat_df[feat_df["split_role"] == "val"].copy().reset_index(drop=True)
     test_df = feat_df[feat_df["split_role"] == "test"].copy().reset_index(drop=True)
@@ -110,7 +106,6 @@ def train_and_evaluate(
     logger.info(f"  Test:        {len(test_df):,} baris (Normal: {(test_df['OUTPUT']==0).sum():,}, Anomali: {(test_df['OUTPUT']==1).sum():,})")
     logger.info(f"  Report-only: {len(rep_df):,} baris")
 
-    # Fit RobustScaler hanya pada data Train (Normal)
     scaler = RobustScaler()
     X_train_scaled = pd.DataFrame(scaler.fit_transform(train_df[FEATURE_COLS]), columns=FEATURE_COLS)
     X_val_scaled = pd.DataFrame(scaler.transform(val_df[FEATURE_COLS]), columns=FEATURE_COLS)
@@ -125,7 +120,6 @@ def train_and_evaluate(
             X_test_scaled[c] = test_df[c].values
             X_rep_scaled[c] = rep_df[c].values
 
-    # Simpan fitur terproses
     train_feat_path = os.path.join(output_data_dir, "features_train.csv")
     val_feat_path = os.path.join(output_data_dir, "features_val.csv")
     test_feat_path = os.path.join(output_data_dir, "features_test.csv")
@@ -137,12 +131,10 @@ def train_and_evaluate(
     X_rep_scaled.to_csv(rep_feat_path, index=False)
     logger.info(f"Fitur terproses disimpan di {output_data_dir}")
 
-    # Simpan Scaler
     scaler_path = os.path.join(output_model_dir, "scaler.joblib")
     joblib.dump(scaler, scaler_path)
     logger.info(f"RobustScaler disimpan di {scaler_path}")
 
-    # Pelatihan Isolation Forest
     logger.info(f"Melatih IsolationForest (n_estimators={n_estimators}, contamination={contamination})...")
     X_train_fit = X_train_scaled[FEATURE_COLS].values
     clf = IsolationForest(
@@ -158,7 +150,6 @@ def train_and_evaluate(
     joblib.dump(clf, model_path)
     logger.info(f"Model IsolationForest disimpan di {model_path}")
 
-    # Evaluasi & Kalibrasi Ambang Batas
     scores_val = clf.decision_function(X_val_scaled[FEATURE_COLS].values)
     scores_test = clf.decision_function(X_test_scaled[FEATURE_COLS].values)
     scores_rep = clf.decision_function(X_rep_scaled[FEATURE_COLS].values)
@@ -208,12 +199,10 @@ def train_and_evaluate(
             "test_f1": f1_t
         })
 
-    # Simpan thresholds.joblib
     thr_joblib_path = os.path.join(output_model_dir, "thresholds.joblib")
     joblib.dump(threshold_dict, thr_joblib_path)
     logger.info(f"Thresholds tersimpan di {thr_joblib_path}")
 
-    # Evaluasi per skenario pada Test Set menggunakan Ambang Batas 3% dan 5%
     thr_3 = threshold_dict["fpr_03pct"]
     thr_5 = threshold_dict["fpr_05pct"]
 
@@ -252,7 +241,6 @@ def train_and_evaluate(
             }
         }
 
-    # Evaluasi report-only scenarios
     rep_df_eval = rep_df.copy()
     rep_df_eval["pred_3"] = (scores_rep < thr_3).astype(int)
     rep_df_eval["pred_5"] = (scores_rep < thr_5).astype(int)
@@ -300,7 +288,6 @@ def train_and_evaluate(
         json.dump(report_payload, f, indent=2)
     logger.info(f"Laporan evaluasi JSON disimpan di {report_json_path}")
 
-    # Buat ringkasan teks
     txt_lines = [
         "=" * 70,
         "LAPORAN PELATIHAN & EVALUASI ISOLATION FOREST",
@@ -342,7 +329,6 @@ def train_and_evaluate(
         f.write(report_txt_content)
     logger.info(f"Laporan evaluasi TXT disimpan di {report_txt_path}")
     print("\n" + report_txt_content)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Proses & Latih Model ML untuk physio_monitor_synthetic_dataset (1)")

@@ -29,7 +29,6 @@ except ImportError:
     TensorDataset = None
     DataLoader = None
 
-# Ensure backend rule engine is importable
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
 if BACKEND_DIR not in sys.path:
@@ -45,7 +44,6 @@ FEATURE_VARIANTS = {
 
 SEEDS = [42, 43, 44, 45, 46]
 
-
 def set_seed(seed: int):
     """Sets random seeds across all libraries for determinism."""
     random.seed(seed)
@@ -53,7 +51,6 @@ def set_seed(seed: int):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-
 
 def fit_scaler(train_df: pd.DataFrame, feature_cols: List[str]) -> StandardScaler:
     """
@@ -66,7 +63,6 @@ def fit_scaler(train_df: pd.DataFrame, feature_cols: List[str]) -> StandardScale
     scaler = StandardScaler()
     scaler.fit(normal_train[feature_cols].values)
     return scaler
-
 
 def train_autoencoder(
     X_train: np.ndarray,
@@ -122,14 +118,12 @@ def train_autoencoder(
         avg_train_loss = total_train_loss / max(1, n_batches)
         train_losses.append(avg_train_loss)
 
-        # Validation on normal validation set
         model.eval()
         with torch.no_grad():
             val_recon = model(val_tensor)
             val_loss = criterion(val_recon, val_tensor).item()
         val_losses.append(val_loss)
 
-        # Early stopping check
         if val_loss < best_val_loss - 1e-4:
             best_val_loss = val_loss
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
@@ -144,7 +138,6 @@ def train_autoencoder(
 
     model.eval()
     return model, train_losses, val_losses
-
 
 def train_vae(
     X_train: np.ndarray,
@@ -203,7 +196,6 @@ def train_vae(
         avg_train_loss = total_train_loss / max(1, n_batches)
         train_losses.append(avg_train_loss)
 
-        # Validation on normal validation set
         model.eval()
         with torch.no_grad():
             val_recon, _, _ = model(val_tensor)
@@ -224,11 +216,6 @@ def train_vae(
 
     model.eval()
     return model, train_losses, val_losses
-
-
-# ==============================================================================
-# BASELINES
-# ==============================================================================
 
 class RuleBaselineWrapper:
     """Clinical / Heuristic Rule Engine baseline."""
@@ -255,7 +242,6 @@ class RuleBaselineWrapper:
                 scores.append(0.0 if sev == 0 else (0.5 if sev == 1 else 1.0))
         return np.array(scores, dtype=np.float64)
 
-
 class ShallowBaselineWrapper:
     """Wrapper for Isolation Forest, LOF, and One-Class SVM."""
     def __init__(self, name: str, model: Any, scaler: StandardScaler, feature_cols: List[str]):
@@ -270,9 +256,7 @@ class ShallowBaselineWrapper:
         else:
             X = np.asarray(data)
         raw = self.model.decision_function(X)
-        # Invert so higher score = more anomalous
         return -raw.astype(np.float64)
-
 
 def train_baselines(
     train_normal_df: pd.DataFrame,
@@ -295,20 +279,16 @@ def train_baselines(
     else:
         X_sub = X_train
 
-    # 1. Rule Engine
     rule_model = RuleBaselineWrapper(variant=variant)
 
-    # 2. Isolation Forest
     iforest = IsolationForest(n_estimators=100, random_state=seed, contamination="auto")
     iforest.fit(X_train)
     if_wrapper = ShallowBaselineWrapper(f"Isolation Forest ({variant})", iforest, scaler, feature_cols)
 
-    # 3. Local Outlier Factor
     lof = LocalOutlierFactor(n_neighbors=20, novelty=True, contamination="auto")
     lof.fit(X_sub)
     lof_wrapper = ShallowBaselineWrapper(f"Local Outlier Factor ({variant})", lof, scaler, feature_cols)
 
-    # 4. One-Class SVM
     ocsvm = OneClassSVM(kernel="rbf", gamma="scale", nu=0.05)
     ocsvm.fit(X_sub)
     ocsvm_wrapper = ShallowBaselineWrapper(f"One-Class SVM ({variant})", ocsvm, scaler, feature_cols)

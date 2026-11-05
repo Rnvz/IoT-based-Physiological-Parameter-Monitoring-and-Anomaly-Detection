@@ -20,7 +20,6 @@ except ImportError:
     nn = None
     _Module = object
 
-
 class DenseAutoencoder(_Module):
     """
     Compact symmetric Autoencoder:
@@ -71,7 +70,6 @@ class DenseAutoencoder(_Module):
             x_rec = self.forward(x)
             mse = torch.mean((x - x_rec) ** 2, dim=-1)
         return mse
-
 
 class DenseVAE(_Module):
     """
@@ -141,23 +139,15 @@ class DenseVAE(_Module):
             mse = torch.mean((x - x_rec) ** 2, dim=-1)
         return mse
 
-
 def count_parameters(model: nn.Module) -> int:
     """Returns total trainable parameter count."""
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-
-# ==============================================================================
-# NUMPY FORWARD FALLBACK IMPLEMENTATION
-# ==============================================================================
-
 from scipy.special import erf
-
 
 def gelu_np(x: np.ndarray) -> np.ndarray:
     """Exact Gaussian Error Linear Unit in NumPy matching torch.nn.GELU()."""
     return (0.5 * x * (1.0 + erf(x / np.sqrt(2.0)))).astype(np.float32)
-
 
 def layer_norm_np(x: np.ndarray, weight: np.ndarray, bias: np.ndarray, eps: float = 1e-5) -> np.ndarray:
     """Layer normalization in NumPy across last dimension."""
@@ -165,7 +155,6 @@ def layer_norm_np(x: np.ndarray, weight: np.ndarray, bias: np.ndarray, eps: floa
     var = np.var(x, axis=-1, keepdims=True)
     x_norm = (x - mean) / np.sqrt(var + eps)
     return x_norm * weight + bias
-
 
 class NumPyAutoencoderForward:
     """
@@ -185,7 +174,6 @@ class NumPyAutoencoderForward:
 
     def forward(self, x: np.ndarray) -> np.ndarray:
         w = self.weights
-        # Encoder
         h = x @ w["encoder.0.weight"].T + w["encoder.0.bias"]
         h = layer_norm_np(h, w["encoder.1.weight"], w["encoder.1.bias"])
         h = gelu_np(h)
@@ -194,7 +182,6 @@ class NumPyAutoencoderForward:
         h = gelu_np(h)
         z = h @ w["encoder.7.weight"].T + w["encoder.7.bias"]
 
-        # Decoder
         d = z @ w["decoder.0.weight"].T + w["decoder.0.bias"]
         d = layer_norm_np(d, w["decoder.1.weight"], w["decoder.1.bias"])
         d = gelu_np(d)

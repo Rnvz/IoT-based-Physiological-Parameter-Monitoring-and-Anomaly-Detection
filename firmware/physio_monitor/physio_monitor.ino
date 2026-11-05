@@ -1,33 +1,3 @@
-// ============================================================
-// PHYSIO MONITOR
-// ESP32 + MAX30102 + DS18B20 + DHT22 + OLED SSD1306 + Buzzer
-// + Lampu RGB KY-016 + MQTT
-//
-// Fungsi utama program:
-// 1. Membaca detak jantung (HR) dan saturasi oksigen (SpO2)
-//    dari sensor MAX30102.
-// 2. Membaca suhu tubuh dari sensor DS18B20.
-// 3. Membaca suhu dan kelembapan ruangan dari sensor DHT22.
-// 4. Menampilkan hasil pengukuran pada layar OLED.
-// 5. Membunyikan buzzer jika terdeteksi kondisi anomali.
-// 6. Mengirim data ke broker MQTT dalam format JSON
-//    setiap 1 detik.
-// 7. Mengendalikan lampu RGB: mode AUTO (mengikuti hasil model
-//    dari backend) dan mode MANUAL (perintah dari dashboard),
-//    lalu melaporkan status lampu ke backend.
-// 8. Selama WiFi belum/tidak terhubung, OLED menampilkan
-//    "Trying to connect to Wi-Fi..." dan lampu RGB berwarna ungu.
-//
-// Library tambahan yang dibutuhkan (Library Manager):
-// - DHT sensor library + Adafruit Unified Sensor
-// - ArduinoJson
-// ============================================================
-
-
-// ============================================================
-// LIBRARY
-// ============================================================
-
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <Wire.h>
@@ -41,6 +11,7 @@
 #include <DHT.h>
 #include <ArduinoJson.h>
 
+<<<<<<< HEAD
 
 // ============================================================
 // WIFI
@@ -48,68 +19,45 @@
 
 const char* WIFI_SSID = "iQOO 12";
 const char* WIFI_PASS = "Password123";
-
-
-// ============================================================
-// MQTT
-// TOPIC_PREFIX harus unik dan sama persis dengan konfigurasi
-// backend dan dashboard.
-// ============================================================
+=======
+const char* WIFI_SSID = "iQOO 15R";
+const char* WIFI_PASS = "password";
+>>>>>>> af17c59 (refactor: reorganize ML and DL into separate folders and clean source code comments)
 
 const char* MQTT_BROKER = "broker.hivemq.com";
 const int MQTT_PORT = 1883;
 
 #define TOPIC_PREFIX "physiomonitor/8009455779hsr801164603"
 
-// Data sensor: ESP32 -> backend
 const char* MQTT_TOPIC = TOPIC_PREFIX "/data";
 
-// Hasil model: backend -> ESP32
 const char* TOPIC_RESULT = TOPIC_PREFIX "/result";
 
-// Perintah lampu: backend -> ESP32
 const char* TOPIC_CMD = TOPIC_PREFIX "/cmd";
 
-// Konfirmasi status lampu: ESP32 -> backend
 const char* TOPIC_ACTUATOR = TOPIC_PREFIX "/actuator";
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
-
-// ============================================================
-// PIN
-// ============================================================
-
-// MAX30102 (I2C bus 0)
 #define MAX_SDA 21
 #define MAX_SCL 22
 
-// DS18B20 (OneWire)
 #define DS18B20_PIN 4
 
-// OLED (I2C bus 1)
 #define OLED_SDA 16
 #define OLED_SCL 17
 
-// Buzzer (active-low: LOW = bunyi, HIGH = diam)
 #define BUZZER_PIN 25
 #define BUZZER_NYALA LOW
 #define BUZZER_MATI HIGH
 
-// DHT22 (suhu dan kelembapan ruangan)
 #define DHT_PIN 14
 #define DHT_TYPE DHT22
 
-// Lampu RGB KY-016 (common cathode). Verifikasi dengan wiring.
 #define LED_R_PIN 26
 #define LED_G_PIN 27
 #define LED_B_PIN 32
-
-
-// ============================================================
-// OLED
-// ============================================================
 
 TwoWire oledWire = TwoWire(1);
 
@@ -120,22 +68,12 @@ Adafruit_SSD1306 display(
   -1
 );
 
-
-// ============================================================
-// SENSOR OBJECT
-// ============================================================
-
 MAX30105 particleSensor;
 
 OneWire oneWire(DS18B20_PIN);
 DallasTemperature sensors(&oneWire);
 
 DHT dht(DHT_PIN, DHT_TYPE);
-
-
-// ============================================================
-// MAX30102 CONFIG
-// ============================================================
 
 const byte LED_BRIGHTNESS = 0x3F;
 const byte SAMPLE_AVERAGE = 4;
@@ -144,24 +82,13 @@ const int SAMPLE_RATE = 100;
 const int PULSE_WIDTH = 411;
 const int ADC_RANGE = 4096;
 
-// Laju sampel efektif FIFO: 100 / 4 = 25 sampel/detik
 const float FIFO_SAMPLE_RATE = 25.0;
-
-
-// ============================================================
-// FINGER DETECTION
-// ============================================================
 
 const long FINGER_THRESHOLD = 12000;
 const unsigned long FINGER_TIMEOUT = 2000;
 
 unsigned long lastFingerDetected = 0;
 bool fingerPresent = false;
-
-
-// ============================================================
-// HEART RATE
-// ============================================================
 
 float bpmRaw = 0;
 float bpmFiltered = 0;
@@ -178,11 +105,6 @@ float hrHistory[HR_FILTER_SIZE] = {
 
 int hrHistoryIndex = 0;
 int hrHistoryCount = 0;
-
-
-// ============================================================
-// SPO2 BUFFER
-// ============================================================
 
 #define SPO2_BUFFER_SIZE 100
 
@@ -207,11 +129,6 @@ int spo2HistoryCount = 0;
 
 float spo2Filtered = 0;
 
-
-// ============================================================
-// TEMPERATURE (DS18B20 - suhu tubuh)
-// ============================================================
-
 float suhuAktual = 0;
 bool suhuValid = false;
 
@@ -222,36 +139,15 @@ bool suhuSedangDiproses = false;
 const unsigned long SUHU_INTERVAL = 1000;
 const unsigned long SUHU_CONVERSION_TIME = 100;
 
-
-// ============================================================
-// DHT22 (suhu dan kelembapan ruangan)
-// ============================================================
-
 float kelembapan = 0;
 float suhuRuangan = 0;
 bool dhtValid = false;
 
 unsigned long lastDHTRead = 0;
 
-// DHT22 minimal 2 detik antar pembacaan
 const unsigned long DHT_INTERVAL = 2000;
 
-
-// ============================================================
-// STATUS
-// Status lokal firmware ini menunjukkan kondisi pembacaan sensor:
-// "MENUNGGU SENSOR" jika jari belum terdeteksi, atau "MENDETEKSI"
-// jika sensor sedang mengumpulkan/membaca vitals.
-// Keputusan normal/anomali dan tingkat keparahan sepenuhnya
-// diterima dari model backend lewat topik /result.
-// ============================================================
-
 String statusSistem = "MENUNGGU SENSOR";
-
-
-// ============================================================
-// TIMER
-// ============================================================
 
 unsigned long lastOLEDUpdate = 0;
 unsigned long lastMQTTPublish = 0;
@@ -260,42 +156,21 @@ unsigned long lastMQTTAttempt = 0;
 unsigned long lastBuzzerTime = 0;
 unsigned long buzzerOffTime = 0;
 
-
-// ============================================================
-// CONNECTION STATE
-// ============================================================
-
 bool wifiConnecting = false;
 bool mqttConnecting = false;
-
-
-// ============================================================
-// LAMPU RGB - PARAMETER
-// ============================================================
 
 #define LED_PWM_FREQ 5000
 #define LED_PWM_BITS 8
 
-// Koreksi kecerahan per kanal (persen). Pada 3.3V kanal hijau
-// dan biru bisa tampak lebih redup. Sesuaikan setelah melihat
-// warnanya langsung (maksimal 100).
 const uint8_t GAIN_R = 60;
 const uint8_t GAIN_G = 100;
 const uint8_t GAIN_B = 100;
 
-// MANUAL otomatis kembali ke AUTO setelah waktu ini
 const unsigned long MANUAL_TIMEOUT = 300000UL;
 
-// Hasil model lebih tua dari ini dianggap tidak ada
 const unsigned long RESULT_TIMEOUT = 10000UL;
 
-// Status lampu dipublish ulang tiap interval ini (heartbeat)
 const unsigned long ACTUATOR_HEARTBEAT = 5000UL;
-
-
-// ============================================================
-// LAMPU RGB - WARNA
-// ============================================================
 
 struct NamedColor {
   const char* name;
@@ -315,11 +190,6 @@ const NamedColor COLORS[] = {
 };
 
 const int COLOR_COUNT = sizeof(COLORS) / sizeof(COLORS[0]);
-
-
-// ============================================================
-// LAMPU RGB - STATE
-// ============================================================
 
 enum LedMode { MODE_AUTO, MODE_MANUAL };
 
@@ -342,17 +212,9 @@ char currentSource[20] = "";
 bool statusDirty = true;
 unsigned long lastActuatorPublish = 0;
 
-// Tes buzzer dari dashboard (toggle). Hanya untuk memastikan buzzer
-// berfungsi; otomatis mati setelah batas waktu agar tidak tertinggal.
 bool buzzerTest = false;
 unsigned long buzzerTestUntil = 0;
 const unsigned long BUZZER_TEST_TIMEOUT = 30000UL;
-
-
-// ============================================================
-// RESET VITALS
-// Mengosongkan seluruh data HR dan SpO2 saat jari dilepas.
-// ============================================================
 
 void resetVitals() {
 
@@ -384,17 +246,10 @@ void resetVitals() {
   firstBeatDetected = false;
   lastBeatSample = 0;
 
-  // Reset juga status hasil model & buzzer agar tidak membawa anomali dari sesi sebelumnya
   haveResult = false;
   lastSeverity = 0;
   lastResultMs = 0;
 }
-
-
-// ============================================================
-// ADD HR HISTORY
-// Moving average 5 nilai BPM terakhir. Nilai di luar 40-180 dibuang.
-// ============================================================
 
 void addHR(float value) {
 
@@ -420,19 +275,12 @@ void addHR(float value) {
     total += hrHistory[i];
   }
 
-  // Butuh minimal 3 detak valid agar denyut jantung stabil dan tidak membaca noise awal
   if (hrHistoryCount >= 3) {
     bpmFiltered = total / hrHistoryCount;
   } else {
     bpmFiltered = 0.0;
   }
 }
-
-
-// ============================================================
-// ADD SPO2 HISTORY
-// Moving average SpO2. Nilai di luar 70-100 dibuang.
-// ============================================================
 
 void addSpO2(float value) {
 
@@ -461,12 +309,6 @@ void addSpO2(float value) {
   spo2Filtered = total / spo2HistoryCount;
 }
 
-
-// ============================================================
-// PROCESS HEART RATE
-// Memakai sample count berdasarkan FIFO 25 Hz.
-// ============================================================
-
 void processHeartRate(uint32_t irValue) {
 
   bool beat = checkForBeat(irValue);
@@ -480,7 +322,6 @@ void processHeartRate(uint32_t irValue) {
   Serial.print("[BEAT] Sample=");
   Serial.print(currentSample);
 
-  // Detak pertama hanya sebagai referensi
   if (!firstBeatDetected) {
 
     firstBeatDetected = true;
@@ -496,7 +337,6 @@ void processHeartRate(uint32_t irValue) {
   Serial.print(" | DeltaSamples=");
   Serial.print(deltaSamples);
 
-  // 8 sampel = 187.5 BPM, 38 sampel = 39.5 BPM
   if (deltaSamples < 8) {
 
     Serial.println(" | REJECTED: TOO FAST");
@@ -535,22 +375,13 @@ void processHeartRate(uint32_t irValue) {
   }
 }
 
-
-// Deklarasi awal (dipanggil sebelum didefinisikan)
 void calculateSpO2();
-
-
-// ============================================================
-// ADD SPO2 SAMPLE
-// Setelah buffer penuh, SpO2 dihitung ulang tiap 25 sampel baru.
-// ============================================================
 
 void addSpO2Sample(
   uint32_t redValue,
   uint32_t irValue
 ) {
 
-  // Tahap 1: isi buffer 100 sampel pertama
   if (!spo2BufferReady) {
 
     redBuffer[spo2BufferCount] = redValue;
@@ -569,7 +400,6 @@ void addSpO2Sample(
     return;
   }
 
-  // Tahap 2: sliding window, geser 75 sampel terakhir ke depan
   if (spo2NewSamples == 0) {
 
     for (int i = 25; i < SPO2_BUFFER_SIZE; i++) {
@@ -592,11 +422,6 @@ void addSpO2Sample(
   }
 }
 
-
-// ============================================================
-// CALCULATE SPO2
-// ============================================================
-
 void calculateSpO2() {
 
   int32_t tempSpO2;
@@ -614,7 +439,6 @@ void calculateSpO2() {
     &tempValidHeartRate
   );
 
-  // HR sengaja TIDAK memakai tempHeartRate (dari checkForBeat)
   if (
     tempValidSpO2 &&
     tempSpO2 >= 70 &&
@@ -639,11 +463,6 @@ void calculateSpO2() {
   }
 }
 
-
-// ============================================================
-// PROCESS MAX30102 FIFO
-// ============================================================
-
 void processMAX30102() {
 
   particleSensor.check();
@@ -655,13 +474,11 @@ void processMAX30102() {
 
     totalSamples++;
 
-    // Deteksi jari
     if (irValue > FINGER_THRESHOLD) {
 
       fingerPresent = true;
       lastFingerDetected = millis();
 
-      // HR dan SpO2 hanya dihitung jika jari menempel
       processHeartRate(irValue);
 
       addSpO2Sample(redValue, irValue);
@@ -670,11 +487,6 @@ void processMAX30102() {
     particleSensor.nextSample();
   }
 }
-
-
-// ============================================================
-// CHECK FINGER TIMEOUT
-// ============================================================
 
 void checkFingerTimeout() {
 
@@ -692,16 +504,10 @@ void checkFingerTimeout() {
   }
 }
 
-
-// ============================================================
-// TEMPERATURE (DS18B20) - non-blocking
-// ============================================================
-
 void updateTemperature() {
 
   unsigned long now = millis();
 
-  // Tahap 1: minta konversi suhu
   if (
     !suhuSedangDiproses &&
     now - waktuSuhuTerakhir >= SUHU_INTERVAL
@@ -715,7 +521,6 @@ void updateTemperature() {
     suhuSedangDiproses = true;
   }
 
-  // Tahap 2: baca hasil setelah waktu konversi
   if (
     suhuSedangDiproses &&
     now - waktuRequestSuhu >= SUHU_CONVERSION_TIME
@@ -740,13 +545,6 @@ void updateTemperature() {
     suhuSedangDiproses = false;
   }
 }
-
-
-// ============================================================
-// DHT22 - suhu dan kelembapan ruangan
-// Dibaca setiap DHT_INTERVAL (2 detik). Jika gagal, dhtValid
-// menjadi false dan payload MQTT mengirim null.
-// ============================================================
 
 void updateDHT() {
 
@@ -774,12 +572,6 @@ void updateDHT() {
   suhuRuangan = t;
   dhtValid = true;
 }
-
-
-// ============================================================
-// LAMPU RGB - OUTPUT
-// Dua versi API LEDC: ESP32 core 3.x dan 2.x.
-// ============================================================
 
 const NamedColor* findColor(const char* name) {
 
@@ -831,7 +623,6 @@ void ledWriteRaw(uint8_t r, uint8_t g, uint8_t b) {
 #endif
 }
 
-// brightness 0-100 (persen)
 void setLed(const char* colorName, uint8_t brightness) {
 
   const NamedColor* c = findColor(colorName);
@@ -854,13 +645,6 @@ void setLed(const char* colorName, uint8_t brightness) {
 
   ledWriteRaw((uint8_t)r, (uint8_t)g, (uint8_t)b);
 }
-
-
-// ============================================================
-// LAMPU RGB - PUBLISH STATUS
-// Melaporkan perintah yang sedang dijalankan firmware, bukan
-// hasil pengukuran kecerahan.
-// ============================================================
 
 void publishActuatorStatus() {
 
@@ -905,12 +689,6 @@ void publishActuatorStatus() {
   Serial.println(buf);
 }
 
-
-// ============================================================
-// LAMPU RGB - MQTT CALLBACK
-// Menangani topik result (hasil model) dan cmd (perintah).
-// ============================================================
-
 void actuatorOnMessage(
   char* topic,
   byte* payload,
@@ -933,9 +711,6 @@ void actuatorOnMessage(
     return;
   }
 
-
-  // ---------------- HASIL MODEL ----------------
-
   if (strcmp(topic, TOPIC_RESULT) == 0) {
 
     int newSev = doc["severity"] | 0;
@@ -949,19 +724,14 @@ void actuatorOnMessage(
     return;
   }
 
-
-  // ---------------- PERINTAH ----------------
-
   if (strcmp(topic, TOPIC_CMD) == 0) {
 
     long seq = doc["seq"] | -1L;
 
-    // Abaikan perintah duplikat (seq sama dengan yang terakhir)
     if (seq >= 0 && seq == lastCmdSeq) {
       return;
     }
 
-    // Tes buzzer (toggle): {"buzzer_test":true,"seq":n}
     bool hasBuzzer = doc["buzzer_test"].is<bool>();
 
     if (hasBuzzer) {
@@ -972,7 +742,6 @@ void actuatorOnMessage(
 
     const char* mode = doc["mode"] | "";
 
-    // Perintah yang hanya berisi tes buzzer, tanpa mode lampu
     if (mode[0] == '\0' && hasBuzzer) {
 
       lastCmdSeq = seq;
@@ -989,8 +758,6 @@ void actuatorOnMessage(
 
       const char* color = doc["color"] | manualColor;
 
-      // Tolak warna di luar daftar (PURPLE sekarang boleh dipilih
-      // manual, selain dipakai otomatis saat WiFi belum terhubung)
       if (findColor(color) == nullptr) {
 
         Serial.println("CMD ditolak: warna tidak dikenal");
@@ -1020,12 +787,6 @@ void actuatorOnMessage(
   }
 }
 
-
-// ============================================================
-// LAMPU RGB - SERVICE
-// Dipanggil di setup() dan loop().
-// ============================================================
-
 void actuatorBegin() {
 
   ledInit();
@@ -1035,8 +796,6 @@ void actuatorBegin() {
   mqttClient.setCallback(actuatorOnMessage);
 }
 
-// Langganan hilang saat koneksi putus, jadi harus diulang
-// setiap MQTT berhasil terhubung kembali.
 void actuatorOnMqttConnected() {
 
   mqttClient.subscribe(TOPIC_RESULT);
@@ -1049,8 +808,6 @@ void actuatorUpdate() {
 
   unsigned long now = millis();
 
-
-  // MANUAL kedaluwarsa, kembali ke AUTO
   if (
     ledMode == MODE_MANUAL &&
     (long)(now - manualUntil) >= 0
@@ -1061,15 +818,12 @@ void actuatorUpdate() {
     statusDirty = true;
   }
 
-
   const char* color;
   uint8_t brightness;
   const char* source;
 
-
   if (WiFi.status() != WL_CONNECTED) {
 
-    // WiFi belum/tidak terhubung: lampu ungu (prioritas tertinggi)
     color = "PURPLE";
     brightness = 50;
     source = "NO_WIFI";
@@ -1082,7 +836,6 @@ void actuatorUpdate() {
 
   } else if (!fingerPresent) {
 
-    // Kondisi teknis ditentukan lokal oleh firmware
     color = "BLUE";
     brightness = 15;
     source = "LOCAL_NO_FINGER";
@@ -1115,7 +868,6 @@ void actuatorUpdate() {
     source = "ML_RESULT";
   }
 
-
   if (
     strcmp(color, currentColor) != 0 ||
     brightness != currentBrightness ||
@@ -1135,7 +887,6 @@ void actuatorUpdate() {
     statusDirty = true;
   }
 
-
   if (
     statusDirty ||
     now - lastActuatorPublish >= ACTUATOR_HEARTBEAT
@@ -1144,11 +895,6 @@ void actuatorUpdate() {
     publishActuatorStatus();
   }
 }
-
-
-// ============================================================
-// WIFI SERVICE - non-blocking
-// ============================================================
 
 void serviceWiFi() {
 
@@ -1161,7 +907,6 @@ void serviceWiFi() {
     return;
   }
 
-  // Sedang connecting: tunggu hingga 15 detik
   if (wifiConnecting) {
 
     if (millis() - lastWiFiAttempt > 15000) {
@@ -1178,7 +923,6 @@ void serviceWiFi() {
     }
   }
 
-  // Jeda minimal 5 detik antar percobaan
   if (millis() - lastWiFiAttempt < 5000) {
 
     return;
@@ -1195,11 +939,6 @@ void serviceWiFi() {
 
   wifiConnecting = true;
 }
-
-
-// ============================================================
-// MQTT SERVICE
-// ============================================================
 
 void serviceMQTT() {
 
@@ -1238,7 +977,6 @@ void serviceMQTT() {
 
     Serial.println("MQTT connected");
 
-    // Langganan ulang topik result dan cmd
     actuatorOnMqttConnected();
 
     mqttConnecting = false;
@@ -1252,11 +990,6 @@ void serviceMQTT() {
   }
 }
 
-
-// ============================================================
-// STATUS (lokal, untuk OLED dan indikator sensor)
-// ============================================================
-
 void updateStatus() {
 
   if (!fingerPresent) {
@@ -1269,22 +1002,9 @@ void updateStatus() {
   statusSistem = "MENDETEKSI";
 }
 
-
-// ============================================================
-// BUZZER - Mengikuti keputusan model dari backend & manual test
-// Buzzer berbunyi beep 150 ms per 1000 ms jika model mendeteksi
-// anomali (lastSeverity >= 2), atau menyala terus jika buzzerTest aktif.
-// ============================================================
-
 void updateBuzzer() {
 
   unsigned long now = millis();
-
-  // ----------------------------------------------------------
-  // Tes buzzer dari dashboard
-  // Selama aktif, buzzer menyala terus. Berhenti jika dimatikan
-  // atau melewati BUZZER_TEST_TIMEOUT.
-  // ----------------------------------------------------------
 
   if (buzzerTest) {
 
@@ -1304,10 +1024,6 @@ void updateBuzzer() {
     }
   }
 
-  // Jika tidak dalam kondisi test, buzzer hanya berbunyi jika:
-  // 1. Jari masih menempel di sensor
-  // 2. Hasil model valid dan belum timeout
-  // 3. Tingkat keparahan anomali kritis (lastSeverity >= 2)
   bool isModelAnomaly = fingerPresent && haveResult && (now - lastResultMs <= RESULT_TIMEOUT) && (lastSeverity >= 2);
 
   if (!isModelAnomaly) {
@@ -1336,14 +1052,6 @@ void updateBuzzer() {
   }
 }
 
-
-// ============================================================
-// OLED - refresh setiap 200 ms
-// Layout: judul, HR, SpO2, suhu tubuh, kelembapan, status.
-// Suhu tubuh tampil "--" selama jari belum menempel di MAX30102.
-// Saat WiFi belum terhubung, layar hanya menampilkan pesan koneksi.
-// ============================================================
-
 void updateOLED() {
 
   if (millis() - lastOLEDUpdate < 200) {
@@ -1358,11 +1066,9 @@ void updateOLED() {
 
   display.setTextSize(1);
 
-  // Title
   display.setCursor(0, 0);
   display.println("PHYSIO MONITOR");
 
-  // WiFi belum/tidak terhubung: tampilkan pesan saja
   if (WiFi.status() != WL_CONNECTED) {
 
     display.setCursor(0, 28);
@@ -1374,7 +1080,6 @@ void updateOLED() {
     return;
   }
 
-  // HR
   display.setCursor(0, 11);
   display.print("HR: ");
 
@@ -1385,7 +1090,6 @@ void updateOLED() {
     display.println("--");
   }
 
-  // SpO2
   display.setCursor(0, 21);
   display.print("SpO2: ");
 
@@ -1396,7 +1100,6 @@ void updateOLED() {
     display.println("--");
   }
 
-  // Suhu tubuh
   display.setCursor(0, 31);
   display.print("Temp: ");
 
@@ -1407,7 +1110,6 @@ void updateOLED() {
     display.println("--");
   }
 
-  // Kelembapan ruangan
   display.setCursor(0, 41);
   display.print("Hum: ");
 
@@ -1418,23 +1120,11 @@ void updateOLED() {
     display.println("--");
   }
 
-  // Status
   display.setCursor(0, 54);
   display.print(fingerPresent ? "MENDETEKSI" : "MENUNGGU SENSOR");
 
   display.display();
 }
-
-
-// ============================================================
-// MQTT PUBLISH - setiap 1 detik
-// Contoh payload:
-// {"hr":75.0,"spo2":98.0,"temp":36.5,"hum":62.3,
-//  "room_temp":29.1,"finger":true,"status":"NORMAL"}
-// hr/spo2/temp = 0.0 jika belum tersedia (kompatibel dashboard lama).
-// hum/room_temp = null jika DHT22 gagal baca.
-// Field status adalah status lokal firmware, bukan keputusan model.
-// ============================================================
 
 void publishMQTT() {
 
@@ -1450,31 +1140,24 @@ void publishMQTT() {
 
   String payload = "{";
 
-  // HR
   payload += "\"hr\":";
   payload += (bpmFiltered > 0) ? String(bpmFiltered, 1) : String("0.0");
 
-  // SpO2
   payload += ",\"spo2\":";
   payload += (spo2Filtered > 0) ? String(spo2Filtered, 1) : String("0.0");
 
-  // Suhu tubuh
   payload += ",\"temp\":";
   payload += suhuValid ? String(suhuAktual, 1) : String("0.0");
 
-  // Kelembapan ruangan
   payload += ",\"hum\":";
   payload += dhtValid ? String(kelembapan, 1) : String("null");
 
-  // Suhu ruangan
   payload += ",\"room_temp\":";
   payload += dhtValid ? String(suhuRuangan, 1) : String("null");
 
-  // Jari menempel atau tidak (penanda data valid untuk model)
   payload += ",\"finger\":";
   payload += fingerPresent ? "true" : "false";
 
-  // Status
   payload += ",\"status\":\"";
   payload += statusSistem;
   payload += "\"}";
@@ -1484,11 +1167,6 @@ void publishMQTT() {
   Serial.print("MQTT -> ");
   Serial.println(payload);
 }
-
-
-// ============================================================
-// DEBUG SERIAL - setiap 1 detik
-// ============================================================
 
 void printDebug(uint32_t irValue, uint32_t redValue) {
 
@@ -1563,11 +1241,6 @@ void printDebug(uint32_t irValue, uint32_t redValue) {
   Serial.println(mqttClient.connected() ? "OK" : "OFF");
 }
 
-
-// ============================================================
-// SETUP
-// ============================================================
-
 void setup() {
 
   Serial.begin(115200);
@@ -1582,11 +1255,9 @@ void setup() {
   Serial.println(" Lampu RGB AUTO / MANUAL");
   Serial.println("========================================");
 
-  // Buzzer
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, BUZZER_MATI);
 
-  // MAX30102
   Wire.begin(MAX_SDA, MAX_SCL);
   Wire.setClock(400000);
 
@@ -1614,16 +1285,13 @@ void setup() {
   particleSensor.setPulseAmplitudeIR(LED_BRIGHTNESS);
   particleSensor.setPulseAmplitudeGreen(0);
 
-  // DS18B20
   sensors.begin();
   sensors.setResolution(9);
   sensors.setWaitForConversion(false);
 
-  // DHT22
   dht.begin();
   lastDHTRead = millis();
 
-  // OLED
   oledWire.begin(OLED_SDA, OLED_SCL, 400000);
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
@@ -1642,21 +1310,16 @@ void setup() {
     display.display();
   }
 
-  // MQTT
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
 
-  // Payload JSON lebih panjang dari default 256 byte
   mqttClient.setBufferSize(512);
 
-  // Lampu RGB dan callback MQTT (harus setelah setBufferSize)
   actuatorBegin();
 
-  // WiFi
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.persistent(false);
 
-  // Pembacaan suhu pertama langsung dimulai di loop pertama
   waktuSuhuTerakhir = millis() - SUHU_INTERVAL;
 
   Serial.println();
@@ -1665,48 +1328,30 @@ void setup() {
   Serial.println();
 }
 
-
-// ============================================================
-// LOOP
-// Seluruh tugas non-blocking.
-// ============================================================
-
 void loop() {
 
-  // 1. Sensor MAX30102 (HR dan SpO2)
   processMAX30102();
 
-  // 2. Cek jari dilepas
   checkFingerTimeout();
 
-  // 3. Suhu tubuh DS18B20
   updateTemperature();
 
-  // 4. Suhu dan kelembapan ruangan DHT22
   updateDHT();
 
-  // 5. Status lokal (OLED dan buzzer)
   updateStatus();
 
-  // 6. Lampu RGB (AUTO dari model / MANUAL dari dashboard)
   actuatorUpdate();
 
-  // 7. WiFi
   serviceWiFi();
 
-  // 8. MQTT
   serviceMQTT();
 
-  // 9. Publish data sensor
   publishMQTT();
 
-  // 10. OLED
   updateOLED();
 
-  // 11. Buzzer
   updateBuzzer();
 
-  // Debug: simpan nilai IR dan RED terakhir
   static uint32_t lastIR = 0;
   static uint32_t lastRED = 0;
 

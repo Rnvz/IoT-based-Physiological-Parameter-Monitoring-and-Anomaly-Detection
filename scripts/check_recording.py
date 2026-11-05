@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 scripts/check_recording.py: Dataset Quality & Session Integrity Checker (Read-Only).
 
@@ -23,11 +22,9 @@ from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-# ml_eval threshold constraints
-ML_EVAL_MIN_WINDOW_ROWS = 15      # Minimum required for rolling feature extraction
-ML_EVAL_RECOMMENDED_SESSION_ROWS = 300  # ~5 minutes at 1 Hz for reliable evaluation
-STUCK_SENSOR_THRESHOLD_SECONDS = 30.0   # Consecutive identical vitals spanning > 30s
-
+ML_EVAL_MIN_WINDOW_ROWS = 15
+ML_EVAL_RECOMMENDED_SESSION_ROWS = 300
+STUCK_SENSOR_THRESHOLD_SECONDS = 30.0
 
 def parse_timestamp(val: Any) -> Optional[datetime]:
     """Parses timestamp string to timezone-aware UTC datetime."""
@@ -41,7 +38,6 @@ def parse_timestamp(val: Any) -> Optional[datetime]:
         return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
     except Exception:
         return None
-
 
 def resolve_csv_path(input_path: str) -> str:
     """
@@ -58,12 +54,10 @@ def resolve_csv_path(input_path: str) -> str:
         return abs_path
 
     if os.path.isdir(abs_path):
-        # Look for readings.csv first
         candidate = os.path.join(abs_path, "readings.csv")
         if os.path.isfile(candidate):
             return candidate
 
-        # Look for any CSV file
         csv_files = [os.path.join(abs_path, f) for f in sorted(os.listdir(abs_path)) if f.lower().endswith(".csv")]
         if csv_files:
             return csv_files[0]
@@ -71,7 +65,6 @@ def resolve_csv_path(input_path: str) -> str:
         raise FileNotFoundError(f"No CSV files found in directory: {input_path}")
 
     raise ValueError(f"Invalid path type for: {input_path}")
-
 
 def analyze_recording(input_path: str) -> Dict[str, Any]:
     """
@@ -100,11 +93,9 @@ def analyze_recording(input_path: str) -> Dict[str, Any]:
             }
         }
 
-    # Normalize columns to lowercase
     col_map = {c: c.lower().strip() for c in df.columns}
     df = df.rename(columns=col_map)
 
-    # 1. Parsing and Normalization
     def parse_finger(v: Any) -> bool:
         if isinstance(v, (bool, np.bool_)):
             return bool(v)
@@ -119,13 +110,11 @@ def analyze_recording(input_path: str) -> Dict[str, Any]:
     df["_hum"] = pd.to_numeric(df.get("hum", pd.Series(dtype=float)), errors="coerce")
     df["_room_temp"] = pd.to_numeric(df.get("room_temp", pd.Series(dtype=float)), errors="coerce")
 
-    # Timestamp parsing
     if "ts" in df.columns:
         df["_dt"] = df["ts"].apply(parse_timestamp)
     else:
         df["_dt"] = None
 
-    # 2. Valid Rows Filter (finger=True and hr > 0 and spo2 > 0 and temp > 0)
     valid_mask = (
         (df["_finger"] == True) &
         (df["_hr"] > 0.0) &
@@ -135,7 +124,6 @@ def analyze_recording(input_path: str) -> Dict[str, Any]:
     valid_rows = int(valid_mask.sum())
     valid_ratio = round(float(valid_rows / total_rows) * 100, 2) if total_rows > 0 else 0.0
 
-    # 3. Null / Missing Percentages for hum and room_temp
     def calc_null_pct(series: pd.Series) -> float:
         if len(series) == 0:
             return 100.0
@@ -145,8 +133,6 @@ def analyze_recording(input_path: str) -> Dict[str, Any]:
     hum_null_pct = calc_null_pct(df["_hum"])
     room_temp_null_pct = calc_null_pct(df["_room_temp"])
 
-    # 4. Sensor Stats: Range (min, max) and Std for HR, SpO2, temp, hum, room_temp
-    # Evaluated on valid rows for vitals, and non-null for environmental
     metrics_to_compute = [
         ("HR", df.loc[valid_mask, "_hr"], "bpm"),
         ("SpO2", df.loc[valid_mask, "_spo2"], "%"),
@@ -181,8 +167,6 @@ def analyze_recording(input_path: str) -> Dict[str, Any]:
                 "unit": unit
             }
 
-    # 5. Stuck Sensor Values Check (> 30 seconds with identical values)
-    # Consecutive rows where hr, spo2, and temp are identical
     stuck_rows_count = 0
     stuck_streaks_count = 0
     streak_rows = 0
@@ -214,11 +198,9 @@ def analyze_recording(input_path: str) -> Dict[str, Any]:
             streak_start_dt = cur_dt
             prev_tuple = cur_tuple
 
-    # 6. Simulator Indicators
     sim_reasons: List[str] = []
     is_simulator = False
 
-    # Check device_id
     if "device_id" in df.columns:
         dev_ids = df["device_id"].dropna().astype(str).unique().tolist()
         sim_keywords = ["sim", "mock", "fake", "test", "dummy"]
@@ -227,7 +209,6 @@ def analyze_recording(input_path: str) -> Dict[str, Any]:
                 sim_reasons.append(f"Kolom device_id teridentifikasi simulator: '{d}'")
                 is_simulator = True
 
-    # Check zero or unnatural variance in vitals
     if sensor_stats.get("temp", {}).get("count", 0) > 30:
         t_std = sensor_stats["temp"]["std"]
         if t_std is not None and t_std == 0.0:
@@ -240,7 +221,6 @@ def analyze_recording(input_path: str) -> Dict[str, Any]:
             sim_reasons.append("Detak jantung (HR) memiliki std = 0.00 (nilai konstan mutlak)")
             is_simulator = True
 
-    # Check constant synthetic DHT values
     if sensor_stats.get("room_temp", {}).get("count", 0) > 50:
         rt_std = sensor_stats["room_temp"]["std"]
         rt_mean = sensor_stats["room_temp"]["mean"]
@@ -253,7 +233,6 @@ def analyze_recording(input_path: str) -> Dict[str, Any]:
     else:
         sim_summary = f"Terindikasi Simulator ({'; '.join(sim_reasons)})"
 
-    # 7. ml_eval Qualification Check
     ml_eval_reasons: List[str] = []
     if valid_rows < ML_EVAL_MIN_WINDOW_ROWS:
         ml_eval_reasons.append(
@@ -291,7 +270,6 @@ def analyze_recording(input_path: str) -> Dict[str, Any]:
         "ml_eval_qualified": ml_eval_qualified,
         "ml_eval_reasons": ml_eval_reasons
     }
-
 
 def print_report(res: Dict[str, Any]):
     """Prints a structured text report to stdout."""
@@ -348,7 +326,6 @@ def print_report(res: Dict[str, Any]):
             print(f"     * {reason}")
     print("=" * 80)
 
-
 def main():
     parser = argparse.ArgumentParser(
         description="Audit kualitas perekaman sesi telemetri IoT untuk ml_eval."
@@ -366,7 +343,6 @@ def main():
     except Exception as e:
         print(f"[ERROR] Gagal menganalisis perekaman: {e}", file=sys.stderr)
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

@@ -24,7 +24,6 @@ from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
 
-# Ensure backend app is importable for rule engine reuse
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
 if BACKEND_DIR not in sys.path:
@@ -33,14 +32,11 @@ if BACKEND_DIR not in sys.path:
 try:
     from app.rules.engine import evaluate_rules
 except ImportError:
-    # Fallback to local import if backend is already on path
     from backend.app.rules.engine import evaluate_rules
 
 from ml_eval.features import CORE_FEATURE_NAMES, EXTENDED_FEATURE_NAMES
 
-
 NORMAL_SCENARIOS = {"REST", "TYPING"}
-
 
 class BaselineModelWrapper:
     """Wrapper encapsulating a baseline model, scaler, operating threshold, and feature set."""
@@ -62,7 +58,6 @@ class BaselineModelWrapper:
             scores = []
             for _, r in df_features.iterrows():
                 sev, _ = evaluate_rules(r["hr"], r["spo2"], r["temp"])
-                # 0: normal (0.0), 1: warning (0.5), 2: critical (1.0)
                 scores.append(0.0 if sev == 0 else (0.5 if sev == 1 else 1.0))
             return np.array(scores, dtype=np.float64)
 
@@ -70,8 +65,6 @@ class BaselineModelWrapper:
         if self.scaler is not None:
             X = self.scaler.transform(X)
 
-        # Scikit-learn convention: decision_function returns negative values for anomalies.
-        # We invert it: anomaly_score = -decision_function(X) so higher = more anomalous.
         raw = self.model.decision_function(X)
         return -raw.astype(np.float64)
 
@@ -82,7 +75,6 @@ class BaselineModelWrapper:
         """
         scores = self.score(df_features)
         return (scores >= self.threshold).astype(int)
-
 
 def train_baselines(
     train_df: pd.DataFrame,
@@ -106,21 +98,17 @@ def train_baselines(
     """
     feature_names = CORE_FEATURE_NAMES if feature_set.lower() == "core" else EXTENDED_FEATURE_NAMES
 
-    # 1. Filter Train data to NORMAL scenarios only (REST or TYPING)
     train_normal_mask = train_df["scenario"].isin(NORMAL_SCENARIOS)
     if train_normal_mask.sum() == 0:
-        # Fallback if unlabelled or different scenario tags
         train_normal = train_df
     else:
         train_normal = train_df[train_normal_mask]
 
     X_train = train_normal[feature_names].values
 
-    # 2. Fit StandardScaler on TRAIN ONLY
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
 
-    # 3. Instantiate and fit ML models on Train
     models = {
         "Rule Engine": BaselineModelWrapper("Rule Engine", None, None, feature_names),
         "Isolation Forest": BaselineModelWrapper(
@@ -147,12 +135,10 @@ def train_baselines(
         )
     }
 
-    # Fit ML models
     models["Isolation Forest"].model.fit(X_train_scaled)
     models["Local Outlier Factor"].model.fit(X_train_scaled)
     models["One-Class SVM"].model.fit(X_train_scaled)
 
-    # 4. Calibrate operating threshold EXCLUSIVELY on Validation sessions
     val_normal_mask = val_df["scenario"].isin(NORMAL_SCENARIOS)
     if val_normal_mask.sum() == 0:
         val_normal = val_df
@@ -162,10 +148,9 @@ def train_baselines(
     for name, wrapper in models.items():
         wrapper.target_fpr = target_fpr
         if name == "Rule Engine":
-            wrapper.threshold = 0.5  # Fixed deterministic boundary
+            wrapper.threshold = 0.5
         else:
             val_scores = wrapper.score(val_normal)
-            # Pick threshold at (1 - target_fpr) percentile of normal validation scores
             pct = 100.0 * (1.0 - target_fpr)
             wrapper.threshold = float(np.percentile(val_scores, pct))
 

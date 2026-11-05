@@ -10,19 +10,16 @@ from app.ml.inference import MLInferenceResult
 
 logger = logging.getLogger(__name__)
 
-
 def gelu_np(x: np.ndarray) -> np.ndarray:
     """Exact GELU using erf."""
     from scipy.special import erf
     return (0.5 * x * (1.0 + erf(x / np.sqrt(2.0)))).astype(np.float32)
-
 
 def layer_norm_np(x: np.ndarray, weight: np.ndarray, bias: np.ndarray, eps: float = 1e-5) -> np.ndarray:
     """NumPy LayerNorm implementation matching PyTorch LayerNorm."""
     mean = np.mean(x, axis=-1, keepdims=True)
     var = np.var(x, axis=-1, keepdims=True)
     return ((x - mean) / np.sqrt(var + eps)) * weight + bias
-
 
 class NumPyAutoencoderForward:
     """Self-contained NumPy forward pass from model_weights.npz."""
@@ -32,7 +29,6 @@ class NumPyAutoencoderForward:
 
     def forward(self, norm: np.ndarray) -> np.ndarray:
         w = self.w
-        # Encoder
         h = norm @ w["encoder.0.weight"].T + w["encoder.0.bias"]
         h = layer_norm_np(h, w["encoder.1.weight"], w["encoder.1.bias"])
         h = gelu_np(h)
@@ -41,7 +37,6 @@ class NumPyAutoencoderForward:
         h = gelu_np(h)
         z = h @ w["encoder.7.weight"].T + w["encoder.7.bias"]
 
-        # Decoder
         d = z @ w["decoder.0.weight"].T + w["decoder.0.bias"]
         d = layer_norm_np(d, w["decoder.1.weight"], w["decoder.1.bias"])
         d = gelu_np(d)
@@ -50,7 +45,6 @@ class NumPyAutoencoderForward:
         d = gelu_np(d)
         rec = d @ w["decoder.7.weight"].T + w["decoder.7.bias"]
         return rec
-
 
 class DeviceDLState:
     """
@@ -87,7 +81,6 @@ class DeviceDLState:
             self.reset()
         self.last_timestamp = now
 
-        # Raw threshold evaluation
         if score >= thr_crit:
             raw_sev = 2
             self.consecutive_crit += 1
@@ -101,7 +94,6 @@ class DeviceDLState:
             self.consecutive_crit = 0
             self.consecutive_warn = 0
 
-        # Persistence escalation logic
         if self.consecutive_crit >= self.persistence_n:
             self.active_severity = 2
         elif self.consecutive_warn >= self.persistence_n:
@@ -111,13 +103,11 @@ class DeviceDLState:
 
         return raw_sev, self.active_severity
 
-
 class DLInferenceResult(MLInferenceResult):
     dl_score: Optional[float] = None
     dl_severity: Optional[int] = None
     margin: Optional[float] = None
     inference_ms: Optional[float] = None
-
 
 class DLService:
     """
@@ -172,7 +162,6 @@ class DLService:
             except Exception as e:
                 logger.error(f"[DLService] Error parsing metadata.json: {e}")
 
-        # Attempt loading ONNX model via onnxruntime
         onnx_path = self._resolve_path("model.onnx")
         if onnx_path:
             try:
@@ -183,7 +172,6 @@ class DLService:
                 logger.warning(f"[DLService] Failed loading ONNX runtime ({e}). Will attempt NumPy fallback.")
                 self.ort_session = None
 
-        # Load NumPy fallback weights
         weights_path = self._resolve_path("model_weights.npz")
         if weights_path:
             try:
@@ -263,7 +251,6 @@ class DLService:
                 timestamp=timestamp
             )
 
-            # Normalized margin clipped to [-1.0, 2.0] for dashboard display
             denom = max(1e-9, self.thr_crit - self.thr_warn)
             raw_margin = (score - self.thr_warn) / denom
             margin = round(float(np.clip(raw_margin, -1.0, 2.0)), 4)
@@ -293,7 +280,6 @@ class DLService:
                 raw_severity=None,
                 debounced_severity=None
             )
-
 
 _dl_service_instance: Optional[DLService] = None
 

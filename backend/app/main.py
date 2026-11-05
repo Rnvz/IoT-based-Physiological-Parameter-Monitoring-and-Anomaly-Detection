@@ -70,4 +70,3 @@ mount_dir = frontend_dir if os.path.isdir(frontend_dir) else legacy_dashboard_di
 if os.path.isdir(mount_dir):
     from fastapi.staticfiles import StaticFiles
     app.mount("/dashboard", StaticFiles(directory=mount_dir, html=True), name="dashboard")
-

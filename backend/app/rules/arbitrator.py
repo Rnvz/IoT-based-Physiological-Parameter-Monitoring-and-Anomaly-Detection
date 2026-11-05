@@ -61,8 +61,6 @@ def arbitrate(
             )
         else:
             is_warmup = bool(ml_result and getattr(ml_result, 'is_warmup', False))
-            # Selama fase warm-up (mengumpulkan window 15 sampel awal), jangan bunyikan alarm buzzer (sev 2)
-            # dari detak awal transisi sensor. Tahan sebagai NORMAL (severity 0) hingga window stabil.
             pub_sev = 0 if is_warmup else rule_severity
             pub_label = "NORMAL" if is_warmup else rule_label
             source = "WARMUP" if is_warmup else "RULE_FALLBACK"

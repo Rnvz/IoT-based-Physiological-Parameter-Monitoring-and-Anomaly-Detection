@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Simulasi Pengiriman Data Telemetri ESP32 ke Broker MQTT
 Script ini mensimulasikan firmware ESP32 yang terhubung ke broker MQTT (HiveMQ)
@@ -45,7 +44,6 @@ latest_result: Dict[str, Any] = {}
 received_results: List[Dict[str, Any]] = []
 received_cmds: List[Dict[str, Any]] = []
 
-
 def print_banner(host: str, port: int, topic: str, prefix: str, device_id: str, base_temp: float, use_color: bool = True):
     print(BOX_SEP)
     t1 = "ESP32 TELEMETRY SIMULATOR - PHYSIOMONITOR REBUILD"
@@ -70,11 +68,9 @@ def print_banner(host: str, port: int, topic: str, prefix: str, device_id: str, 
         print(f"| {w3[:INNER_WIDTH]:<{INNER_WIDTH}} |")
     print(BOX_SEP)
 
-
 def print_status_msg(msg: str):
     clean_msg = msg[:INNER_WIDTH]
     print(f"| {clean_msg:<{INNER_WIDTH}} |")
-
 
 def print_section(title: str, use_color: bool = True):
     print(SEP)
@@ -84,7 +80,6 @@ def print_section(title: str, use_color: bool = True):
     else:
         print(f"| {clean_title:<{INNER_WIDTH}} |")
     print(SEP)
-
 
 def print_actuator_box(mode: str, color: str, brightness: Any, buzzer: bool, seq: Any, use_color: bool = True):
     buzz_str = "ON" if buzzer else "OFF"
@@ -96,7 +91,6 @@ def print_actuator_box(mode: str, color: str, brightness: Any, buzzer: bool, seq
     else:
         print(f"| {clean_text:<{INNER_WIDTH}} |")
     print(SEP)
-
 
 def print_row(
     sample_no: int,
@@ -148,7 +142,6 @@ def print_row(
     )
     print(row)
 
-
 def print_summary(total_sent: int, total_res: int, total_cmd: int, elapsed_s: float):
     l1 = "RINGKASAN SIMULASI"
     l2 = f"Total Data Terkirim    : {total_sent} sampel ({elapsed_s:.1f} detik)"
@@ -157,7 +150,6 @@ def print_summary(total_sent: int, total_res: int, total_cmd: int, elapsed_s: fl
     for line in [l1, l2, l3, l4]:
         print(f"| {line[:INNER_WIDTH]:<{INNER_WIDTH}} |")
     print(BOX_SEP)
-
 
 def create_mqtt_client(prefix: str, use_color: bool = True) -> mqtt.Client:
     result_topic = f"{prefix}/result"
@@ -212,7 +204,6 @@ def create_mqtt_client(prefix: str, use_color: bool = True) -> mqtt.Client:
     client.on_connect = on_connect
     client.on_message = on_message
     return client
-
 
 def send_data_packet(
     client: mqtt.Client,
@@ -299,7 +290,6 @@ def send_data_packet(
     if sleep_time > 0:
         time.sleep(sleep_time)
 
-
 def run_interactive_scenarios(
     client: mqtt.Client,
     topic: str,
@@ -385,7 +375,6 @@ def run_interactive_scenarios(
 
     return sample_no
 
-
 def run_fast_1200(
     client: mqtt.Client,
     topic: str,
@@ -440,7 +429,6 @@ def run_fast_1200(
         )
 
     return total_records
-
 
 def main():
     parser = argparse.ArgumentParser(description="Simulasi ESP32 Telemetry untuk Backend Rebuild")
@@ -513,7 +501,6 @@ def main():
             total_cmd=len(received_cmds),
             elapsed_s=elapsed
         )
-
 
 if __name__ == "__main__":
     main()

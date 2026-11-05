@@ -26,7 +26,6 @@ except ImportError:
 
 from ml.dl.models import DenseAutoencoder, DenseVAE, NumPyAutoencoderForward
 
-
 def compute_metrics(
     y_true: np.ndarray,
     scores: np.ndarray,
@@ -48,7 +47,6 @@ def compute_metrics(
             "recall_at_5pct_fpr": None
         }
 
-    # 1. PR-AUC & ROC-AUC
     prec_curve, rec_curve, _ = precision_recall_curve(y_true, scores)
     pr_auc_val = float(auc(rec_curve, prec_curve))
 
@@ -57,14 +55,11 @@ def compute_metrics(
     except Exception:
         roc_auc_val = None
 
-    # 2. Metrics at fixed warning threshold
     preds = (scores >= warn_threshold).astype(int)
     f1_val = float(f1_score(y_true, preds, zero_division=0))
     prec_val = float(precision_score(y_true, preds, zero_division=0))
     rec_val = float(recall_score(y_true, preds, zero_division=0))
 
-    # 3. Recall at fixed 5% FPR on normal rows (y_true == 0) without interpolation
-    # Robust to tied/discrete scores by selecting the ROC operating point with FPR <= 0.05
     fpr_curve, tpr_curve, _ = roc_curve(y_true, scores)
     valid_fpr_idx = np.where(fpr_curve <= 0.05 + 1e-9)[0]
     rec_at_5pct = float(np.max(tpr_curve[valid_fpr_idx])) if len(valid_fpr_idx) > 0 else 0.0
@@ -77,7 +72,6 @@ def compute_metrics(
         "recall": rec_val,
         "recall_at_5pct_fpr": rec_at_5pct
     }
-
 
 def patient_group_bootstrap(
     df: pd.DataFrame,
@@ -105,7 +99,6 @@ def patient_group_bootstrap(
     boot_rec_5pcts = []
 
     if n_pts == n_samples:
-        # Cross-sectional where every patient is exactly 1 row
         for _ in range(n_bootstrap):
             sampled_idx = rng.integers(0, n_samples, size=n_samples)
             sub_y = y_true[sampled_idx]
@@ -125,7 +118,6 @@ def patient_group_bootstrap(
                 boot_rec_5pcts.append(m["recall_at_5pct_fpr"])
 
     elif n_pts > 1:
-        # Mixed pooled dataset with some multi-row patients
         pt_idx_list = [np.array(idxs, dtype=np.int64) for idxs in df.groupby("Patient_ID").indices.values()]
         for _ in range(n_bootstrap):
             chosen = rng.integers(0, len(pt_idx_list), size=len(pt_idx_list))
@@ -148,7 +140,6 @@ def patient_group_bootstrap(
                 boot_rec_5pcts.append(m["recall_at_5pct_fpr"])
 
     else:
-        # Block bootstrap for single patient stream (50-row blocks)
         block_size = 50
         n_blocks = max(1, n_samples // block_size)
 
@@ -189,7 +180,6 @@ def patient_group_bootstrap(
         "recall_at_5pct_fpr": get_ci(boot_rec_5pcts)
     }
 
-
 def compute_persistence_events(
     scores: np.ndarray,
     y_true: np.ndarray,
@@ -200,7 +190,6 @@ def compute_persistence_events(
     Computes false alarm persistence events per 1000 normal rows on time-ordered data.
     An alarm event triggers when score >= threshold for N consecutive samples.
     """
-    # Evaluate only on normal segments (y_true == 0)
     normal_mask = (y_true == 0)
     normal_scores = scores[normal_mask]
     n_normal = len(normal_scores)
@@ -230,12 +219,9 @@ def compute_persistence_events(
         "events_per_1000_normal_rows": round(events_per_1000, 2)
     }
 
-
 def benchmark_model_speed_and_size(model_obj: Any, sample_x: np.ndarray) -> Tuple[float, int]:
     """Measures inference time per sample (microseconds) and in-memory serialized size (bytes)."""
-    # Timing
     times = []
-    # Warmup
     for _ in range(20):
         if hasattr(model_obj, "score"):
             _ = model_obj.score(sample_x[:1])
@@ -255,7 +241,6 @@ def benchmark_model_speed_and_size(model_obj: Any, sample_x: np.ndarray) -> Tupl
 
     mean_us = float(np.mean(times))
 
-    # Size
     size_bytes = 0
     if isinstance(model_obj, torch.nn.Module):
         buf = io.BytesIO()
@@ -268,11 +253,6 @@ def benchmark_model_speed_and_size(model_obj: Any, sample_x: np.ndarray) -> Tupl
         size_bytes = buf.tell()
 
     return round(mean_us, 1), size_bytes
-
-
-# ==============================================================================
-# DOMAIN SHIFT / DEPLOYMENT SANITY (PART 6)
-# ==============================================================================
 
 def generate_synthetic_resting_stream(
     temp_target: float,
@@ -296,7 +276,6 @@ def generate_synthetic_resting_stream(
         "Patient_ID": f"synthetic_resting_{temp_target}C"
     })
 
-
 def evaluate_domain_shift_stream(
     score_func: Any,
     scaler: Any,
@@ -318,7 +297,6 @@ def evaluate_domain_shift_stream(
 
         scores = score_func(X)
 
-        # Apply persistence filter N
         consec_warn = 0
         consec_crit = 0
         sev_active = 0
@@ -337,7 +315,6 @@ def evaluate_domain_shift_stream(
             else:
                 consec_warn = 0
 
-            # State resolution
             if consec_crit >= persistence_n:
                 sev_active = 2
             elif consec_warn >= persistence_n:

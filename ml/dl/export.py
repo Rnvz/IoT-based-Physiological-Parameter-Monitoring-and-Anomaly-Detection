@@ -18,11 +18,13 @@ try:
     import onnx
 except ImportError:
     onnx = None
-import onnxruntime as ort
+try:
+    import onnxruntime as ort
+except ImportError:
+    ort = None
 import sklearn
 
 from ml.dl.models import DenseAutoencoder, NumPyAutoencoderForward
-
 
 def export_dl_model(
     model: DenseAutoencoder,
@@ -50,7 +52,6 @@ def export_dl_model(
     input_dim = len(feature_cols)
     dummy_input = torch.randn(1, input_dim, dtype=torch.float32)
 
-    # 1. Export ONNX
     onnx_path = os.path.join(output_dir, "model.onnx")
     torch.onnx.export(
         model,
@@ -62,7 +63,6 @@ def export_dl_model(
         opset_version=17
     )
 
-    # 2. Export NumPy Weights & Fallback
     weights = {k: v.cpu().numpy() for k, v in model.state_dict().items()}
     npz_path = os.path.join(output_dir, "model_weights.npz")
     np.savez(npz_path, **weights)
@@ -82,16 +82,13 @@ WARN_THRESHOLD = {float(warn_th):.6f}
 CRIT_THRESHOLD = {float(crit_th):.6f}
 PERSISTENCE_N = 3
 
-
 def gelu_np(x: np.ndarray) -> np.ndarray:
     return (0.5 * x * (1.0 + erf(x / np.sqrt(2.0)))).astype(np.float32)
-
 
 def layer_norm_np(x: np.ndarray, weight: np.ndarray, bias: np.ndarray, eps: float = 1e-5) -> np.ndarray:
     mean = np.mean(x, axis=-1, keepdims=True)
     var = np.var(x, axis=-1, keepdims=True)
     return ((x - mean) / np.sqrt(var + eps)) * weight + bias
-
 
 class EdgeAutoencoderInference:
     def __init__(self, weights_path: str = "{npz_path}"):
@@ -158,7 +155,6 @@ class EdgeAutoencoderInference:
     with open(py_path, "w", encoding="utf-8") as f:
         f.write(numpy_fallback_code)
 
-    # 3. Export metadata.json
     metadata = {
         "model_version": model_version,
         "variant": variant,
@@ -189,7 +185,6 @@ class EdgeAutoencoderInference:
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
 
-    # 4. Export MODEL_CARD.md
     model_card = f"""# Model Card: {model_version} ({variant.upper()})
 
 ## Model Overview
@@ -227,7 +222,6 @@ class EdgeAutoencoderInference:
     with open(card_path, "w", encoding="utf-8") as f:
         f.write(model_card)
 
-    # 5. Parity verification
     test_x = np.random.randn(50, input_dim).astype(np.float32)
     with torch.no_grad():
         pt_out = model(torch.from_numpy(test_x)).numpy()

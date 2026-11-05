@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Baseline Statistics & Threshold Calibration Suggester
 Membaca dataset perekaman readings.csv (data mentah dengan finger=True),

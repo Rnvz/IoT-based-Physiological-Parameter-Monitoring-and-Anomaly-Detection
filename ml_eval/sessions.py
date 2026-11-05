@@ -16,13 +16,11 @@ from typing import Dict, Any, Optional, Union
 import pandas as pd
 import numpy as np
 
-# Biological validity bounds for modelling
 HR_MIN, HR_MAX = 30.0, 220.0
 SPO2_MIN, SPO2_MAX = 70.0, 100.0
 TEMP_MIN, TEMP_MAX = 25.0, 45.0
 
-DEFAULT_MAX_GAP_SECONDS = 600.0  # 10 minutes
-
+DEFAULT_MAX_GAP_SECONDS = 600.0
 
 def parse_timestamp(val: Any) -> datetime:
     """Parses ISO timestamp string to timezone-aware UTC datetime."""
@@ -34,7 +32,6 @@ def parse_timestamp(val: Any) -> datetime:
         return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
     except Exception as e:
         raise ValueError(f"Could not parse timestamp '{val}': {e}")
-
 
 def load_dataset(source: Union[str, pd.DataFrame]) -> pd.DataFrame:
     """
@@ -52,17 +49,14 @@ def load_dataset(source: Union[str, pd.DataFrame]) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Dataset is missing required columns: {sorted(missing)}")
 
-    # Ensure scenario column exists (defaults to 'UNLABELED')
     if "scenario" not in df.columns:
         df["scenario"] = "UNLABELED"
     else:
         df["scenario"] = df["scenario"].fillna("UNLABELED").astype(str)
 
-    # Parse and sort by timestamp
     df["dt"] = df["ts"].apply(parse_timestamp)
     df = df.sort_values("dt").reset_index(drop=True)
     return df
-
 
 def clean_for_modelling(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -71,7 +65,6 @@ def clean_for_modelling(df: pd.DataFrame) -> pd.DataFrame:
     """
     df = df.copy()
 
-    # Normalize finger boolean
     def parse_finger(v: Any) -> bool:
         if isinstance(v, (bool, np.bool_)):
             return bool(v)
@@ -84,7 +77,6 @@ def clean_for_modelling(df: pd.DataFrame) -> pd.DataFrame:
     df["spo2_num"] = pd.to_numeric(df["spo2"], errors="coerce")
     df["temp_num"] = pd.to_numeric(df["temp"], errors="coerce")
 
-    # Optional ambient columns
     if "room_temp" in df.columns:
         df["room_temp_num"] = pd.to_numeric(df["room_temp"], errors="coerce")
     else:
@@ -95,7 +87,6 @@ def clean_for_modelling(df: pd.DataFrame) -> pd.DataFrame:
     else:
         df["hum_num"] = np.nan
 
-    # Filter conditions
     valid_mask = (
         (df["finger_bool"] == True) &
         (df["hr_num"] >= HR_MIN) & (df["hr_num"] <= HR_MAX) &
@@ -105,7 +96,6 @@ def clean_for_modelling(df: pd.DataFrame) -> pd.DataFrame:
 
     clean_df = df[valid_mask].copy()
 
-    # Overwrite columns with cleaned numeric values
     clean_df["hr"] = clean_df["hr_num"]
     clean_df["spo2"] = clean_df["spo2_num"]
     clean_df["temp"] = clean_df["temp_num"]
@@ -117,7 +107,6 @@ def clean_for_modelling(df: pd.DataFrame) -> pd.DataFrame:
     clean_df = clean_df.drop(columns=[c for c in drop_cols if c in clean_df.columns])
     clean_df = clean_df.reset_index(drop=True)
     return clean_df
-
 
 def segment_sessions(df: pd.DataFrame, max_gap_seconds: float = DEFAULT_MAX_GAP_SECONDS) -> pd.DataFrame:
     """
@@ -146,7 +135,6 @@ def segment_sessions(df: pd.DataFrame, max_gap_seconds: float = DEFAULT_MAX_GAP_
 
     df["session_id"] = session_ids
     return df
-
 
 def summarize_sessions(df: pd.DataFrame) -> Dict[str, Any]:
     """
@@ -184,7 +172,6 @@ def summarize_sessions(df: pd.DataFrame) -> Dict[str, Any]:
 
     return summary
 
-
 def load_and_segment_sessions(
     source: Union[str, pd.DataFrame],
     max_gap_seconds: float = DEFAULT_MAX_GAP_SECONDS
@@ -196,7 +183,6 @@ def load_and_segment_sessions(
     cleaned_df = clean_for_modelling(raw_df)
     segmented_df = segment_sessions(cleaned_df, max_gap_seconds=max_gap_seconds)
     return segmented_df
-
 
 def main():
     parser = argparse.ArgumentParser(description="Session segmentation and validation for physiological datasets.")
@@ -224,7 +210,6 @@ def main():
     if args.output:
         df.to_csv(args.output, index=False)
         print(f"Saved segmented dataset with 'session_id' to: {args.output}")
-
 
 if __name__ == "__main__":
     main()

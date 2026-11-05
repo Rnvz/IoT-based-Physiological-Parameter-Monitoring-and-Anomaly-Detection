@@ -40,7 +40,6 @@ EXTENDED_FEATURE_NAMES: List[str] = CORE_FEATURE_NAMES + [
     "room_temp_delta", "hum_delta", "temp_sub_room_delta"
 ]
 
-
 def extract_session_features(
     session_df: pd.DataFrame,
     window_size: int = DEFAULT_WINDOW_SIZE,
@@ -64,21 +63,18 @@ def extract_session_features(
     last_dt: Optional[pd.Timestamp] = None
     output_rows = []
 
-    # Check ambient columns for extended feature set
     has_ambient = "room_temp" in df.columns and "hum" in df.columns
 
     for i in range(len(df)):
         row = df.iloc[i]
         curr_dt = row["dt"]
 
-        # Finger check
         finger_val = row.get("finger", True)
         if isinstance(finger_val, str):
             finger_ok = finger_val.strip().lower() in ("true", "1", "t", "yes")
         else:
             finger_ok = bool(finger_val)
 
-        # Gap check
         if last_dt is not None:
             gap = (curr_dt - last_dt).total_seconds()
             if gap > max_gap_seconds or gap < 0:
@@ -106,13 +102,11 @@ def extract_session_features(
         buffer.append(vec)
         last_dt = curr_dt
 
-        # Warm-up condition: require full window before producing features
         if len(buffer) < window_size:
             continue
 
-        buf_arr = np.array(buffer)  # Shape: (window_size, 6)
+        buf_arr = np.array(buffer)
 
-        # Compute stats
         curr = buf_arr[-1]
         prev = buf_arr[-2]
         delta = curr - prev
@@ -137,7 +131,6 @@ def extract_session_features(
             "temp_delta": delta[2],
         }
 
-        # Preserve synthetic evaluation labels if present
         if "y_true" in row:
             feat_dict["y_true"] = int(row["y_true"])
         if "is_synthetic" in row:
@@ -164,7 +157,6 @@ def extract_session_features(
         output_rows.append(feat_dict)
 
     return pd.DataFrame(output_rows)
-
 
 def extract_features(
     df: pd.DataFrame,

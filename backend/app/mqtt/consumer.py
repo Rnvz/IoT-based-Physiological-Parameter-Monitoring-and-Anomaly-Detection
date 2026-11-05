@@ -94,7 +94,7 @@ class MQTTService:
 
     async def handle_message(self, topic: str, payload_bytes: bytes):
         payload_str = payload_bytes.decode("utf-8", errors="replace")
-        
+
         try:
             payload_dict = json.loads(payload_str)
         except json.JSONDecodeError as e:

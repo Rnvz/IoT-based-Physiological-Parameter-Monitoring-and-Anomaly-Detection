@@ -178,14 +178,14 @@
       isAnomalyAlarm = false;
       setBand("NO_FINGER", "Place your finger on the MAX30102 sensor to start measuring.");
     } else if (!hasVitals) {
-      // Jari sudah terdeteksi tetapi BPM / SpO2 masih dalam proses kalkulasi awal
+
       isAnomalyAlarm = false;
       setBand("CALCULATING", "Detecting pulse and calculating heart rate...");
     } else if (data.local_status) {
       isAnomalyAlarm = false;
       renderLocalBand(data.local_status);
     } else if (prediction && LABELS[prediction.label]) {
-      // Alarm buzzer aktif HANYA ketika kondisi terkonfirmasi anomali
+
       isAnomalyAlarm = prediction.label === "ANOMALY" || Number(prediction.severity) >= 2;
       const scoreStr = activeScore != null ? ` Anomaly score: ${Number(activeScore).toFixed(6)} (margin: ${activeMargin != null ? (activeMargin > 0 ? "+" + Number(activeMargin).toFixed(2) : Number(activeMargin).toFixed(2)) : "--"}).` : "";
       setBand(prediction.label, "Model result indicates unusual data patterns, not a medical diagnosis." + scoreStr);
@@ -237,9 +237,6 @@
     bb.setAttribute("aria-pressed", String(buzzerTestOn));
     bb.textContent = buzzerTestOn ? "Buzzer: on (click to turn off)" : "Buzzer: off";
 
-    /* --- UPDATE INDIKATOR CARD BARU --- */
-
-    // 1. Indikator Lampu (Glow effect berdasarkan brightness)
     const indLamp = $("ind-lamp");
     const indLampText = $("ind-lamp-text");
 
@@ -252,13 +249,12 @@
       const hexColor = COLOR_HEX[color] || COLOR_HEX.OFF;
       indLamp.style.background = hexColor;
       indLamp.style.borderColor = hexColor;
-      // Efek cahaya (glow) menyesuaikan tingkat kecerahan
+
       const glowSpread = (brightness / 100) * 12;
       indLamp.style.boxShadow = `0 0 ${glowSpread}px ${glowSpread / 2}px ${hexColor}`;
       indLampText.textContent = color;
     }
 
-    // 2. Indikator Buzzer
     updateBuzzerIndicator();
   }
 
@@ -424,10 +420,10 @@
     let rowsHtml = "";
     recent.forEach((p) => {
       const timeStr = new Date(p.ts).toLocaleTimeString();
-      const ruleSevBadge = p.rule_severity != null 
+      const ruleSevBadge = p.rule_severity != null
         ? `<span class="sev-badge sev-${p.rule_severity}">Sev ${p.rule_severity}</span>`
         : `<span class="muted">-</span>`;
-      
+
       const dlVal = p.dl_severity != null ? p.dl_severity : p.ml_severity;
       const dlSevBadge = dlVal != null
         ? `<span class="sev-badge sev-${dlVal}">Sev ${dlVal}</span>`
@@ -504,12 +500,12 @@
     try {
       renderHistory(await api("/history?minutes=" + cfg.HISTORY_MINUTES));
     } catch (e) {
-      // ignore
+
     }
     try {
       renderPredictions(await api("/predictions?limit=30"));
     } catch (e) {
-      // ignore
+
     }
   }
 

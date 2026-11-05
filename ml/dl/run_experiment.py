@@ -33,13 +33,10 @@ from ml.dl.evaluate import (
 from ml.dl.export import export_dl_model
 from ml_eval.public_split import load_public_split
 
-
 def score_model(model_obj: Any, X: np.ndarray) -> np.ndarray:
     """Computes continuous anomaly score for given model object."""
     if hasattr(model_obj, "score") and not isinstance(model_obj, torch.nn.Module):
-        # Wrapper or sklearn object
         if hasattr(model_obj, "scaler") and model_obj.scaler is not None:
-            # Already scaled or expects DataFrame
             pass
         return model_obj.score(pd.DataFrame(X, columns=["Heart_Rate", "SpO2", "Temperature"][:X.shape[1]]))
     elif isinstance(model_obj, torch.nn.Module):
@@ -50,7 +47,6 @@ def score_model(model_obj: Any, X: np.ndarray) -> np.ndarray:
         return scores.astype(np.float64)
     else:
         raise ValueError(f"Unknown model type: {type(model_obj)}")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Run complete DL physiological anomaly detection benchmark.")
@@ -65,7 +61,6 @@ def main():
     print("PHYSIOLOGICAL IOT ANOMALY DETECTION: BENCHMARK & DEPLOYMENT RUNNER")
     print("=" * 80)
 
-    # 1. Load data and split
     print(f"Loading data from: {args.data}")
     df = pd.read_csv(args.data)
     df["row_id"] = np.arange(len(df))
@@ -84,20 +79,17 @@ def main():
 
     print(f"Partitions: Train={len(train_df)}, Val={len(val_df)}, Test={len(test_df)}")
 
-    # 2. Scaler fit on TRAIN NORMAL ONLY
     scalers = {}
     for v_name, cols in FEATURE_VARIANTS.items():
         scalers[v_name] = fit_scaler(train_df, cols)
         print(f"[{v_name}] Scaler fitted on normal train (mean={scalers[v_name].mean_.round(2)}, scale={scalers[v_name].scale_.round(2)})")
 
-    # 3. Train Baselines (v3 and v2)
     print("\n--- Training Shallow Baselines on Normal Train Data ---")
     baselines = {}
     for v_name, cols in FEATURE_VARIANTS.items():
         norm_train = train_df[train_df["OUTPUT"] == 0]
         baselines[v_name] = train_baselines(norm_train, scalers[v_name], cols, variant=v_name, seed=42)
 
-    # 4. Train Deep Learning Models (DenseAE & DenseVAE across 5 seeds for v3 and v2)
     print("\n--- Training Deep Learning Architectures (5 seeds: [42, 43, 44, 45, 46]) ---")
     dl_models: Dict[str, Dict[str, List[Any]]] = {
         "v3": {"DenseAE": [], "DenseVAE": []},
@@ -121,7 +113,6 @@ def main():
             dl_models[v_name]["DenseVAE"].append(vae)
             print(f"  Seed {s} fitted in {time.time()-t0:.1f}s | AE val loss: {val_l[-1]:.4f} | VAE val loss: {vval_l[-1]:.4f}")
 
-    # 5. Pre-Registered Validation Model Selection
     print("\n" + "=" * 80)
     print("PART 2 & 4: PRE-REGISTERED VALIDATION MODEL SELECTION (PR-AUC on Full Val)")
     print("=" * 80)
@@ -132,7 +123,6 @@ def main():
     for v_name, cols in FEATURE_VARIANTS.items():
         X_val_all = scalers[v_name].transform(val_df[cols].values)
 
-        # Baselines on val
         for b_name, b_mod in baselines[v_name].items():
             sc = b_mod.score(val_df) if b_name == "Rule Engine" else -b_mod.model.decision_function(X_val_all)
             pr_auc_val, roc_auc_val = compute_metrics(y_val, sc, 0.5)["pr_auc"], compute_metrics(y_val, sc, 0.5)["roc_auc"]
@@ -144,7 +134,6 @@ def main():
                 "val_roc_auc": roc_auc_val
             })
 
-        # DL models on val (average over 5 seeds)
         for arch in ["DenseAE", "DenseVAE"]:
             seed_pr_aucs = []
             seed_roc_aucs = []
@@ -167,20 +156,17 @@ def main():
     val_df_summary = pd.DataFrame(val_selection_results).sort_values("val_pr_auc", ascending=False)
     print(val_df_summary.to_string(index=False))
 
-    # Identify best DL variant and architecture based on Validation PR-AUC
     dl_rows = [r for r in val_selection_results if r["type"] == "deep_learning"]
     best_dl = max(dl_rows, key=lambda x: x["val_pr_auc"])
     best_arch = "DenseAE" if "DenseAE" in best_dl["model"] else "DenseVAE"
     best_variant = best_dl["variant"]
     print(f"\n>>> PRE-REGISTERED WINNER: {best_dl['model']} (Val PR-AUC: {best_dl['val_pr_auc']:.4f})")
 
-    # Calibrate thresholds on Normal Validation rows for all models
     thresholds = {}
     for v_name, cols in FEATURE_VARIANTS.items():
         thresholds[v_name] = {}
         X_val_norm = scalers[v_name].transform(val_norm[cols].values)
 
-        # Baselines
         for b_name, b_mod in baselines[v_name].items():
             if b_name == "Rule Engine":
                 thresholds[v_name][b_name] = {"warn": 0.5, "crit": 1.0}
@@ -191,7 +177,6 @@ def main():
                     "crit": float(np.percentile(sc, 99.0))
                 }
 
-        # DL models (using seed 42 representative model)
         for arch in ["DenseAE", "DenseVAE"]:
             rep_m = dl_models[v_name][arch][0]
             sc = score_model(rep_m, X_val_norm)
@@ -200,7 +185,6 @@ def main():
                 "crit": float(np.percentile(sc, 99.0))
             }
 
-    # 6. Evaluation on Held-Out Test Partition (Scored ONCE)
     print("\n" + "=" * 80)
     print("PART 5: STANDARDIZED TEST EVALUATION (POOLED & PER-SOURCE)")
     print("=" * 80)
@@ -210,16 +194,13 @@ def main():
 
     test_results_table = []
 
-    # Helper function to evaluate one model configuration
     def evaluate_model_full(m_name: str, score_func_or_list: Any, v_name: str, th_dict: dict, is_dl: bool = False):
         cols = FEATURE_VARIANTS[v_name]
 
-        # Check caveat on sources
         caveats = {
             "gourangomandal": "[CAVEAT: Rule agrees with labels by 95.5%; labels derived from thresholds]"
         }
 
-        # Subsets to evaluate: Pooled + each source
         subsets = [("POOLED", test_df)] + [(s, test_df[test_df["Source"] == s]) for s in sources]
 
         for s_name, s_df in subsets:
@@ -227,7 +208,6 @@ def main():
             X_sub = scalers[v_name].transform(s_df[cols].values)
 
             if is_dl:
-                # 5 seeds
                 seed_metrics = []
                 all_scores = []
                 for seed_idx, m in enumerate(score_func_or_list):
@@ -247,7 +227,6 @@ def main():
                 rep_sc = all_scores[0]
                 ci_dict = patient_group_bootstrap(s_df, rep_sc, th_dict["warn"], n_bootstrap=args.n_bootstrap, seed=42)
 
-                # Persistence on engrarri21
                 pers_stat = None
                 if s_name == "engrarri21":
                     pers_stat = compute_persistence_events(rep_sc, s_y, th_dict["warn"], N=3)["events_per_1000_normal_rows"]
@@ -269,7 +248,6 @@ def main():
                 })
 
             else:
-                # Single baseline
                 if m_name == "Rule Engine":
                     sc = score_func_or_list.score(s_df)
                 else:
@@ -298,7 +276,6 @@ def main():
                     "Caveat": caveats.get(s_name, "")
                 })
 
-    # Evaluate Baselines & DL models
     for v_name in ["v3", "v2"]:
         for b_name in ["Rule Engine", "Isolation Forest", "Local Outlier Factor", "One-Class SVM"]:
             evaluate_model_full(b_name, baselines[v_name][b_name], v_name, thresholds[v_name][b_name], is_dl=False)
@@ -310,7 +287,6 @@ def main():
     print("\n--- TEST EVALUATION SUMMARY TABLE ---")
     print(test_summary_df[["Model", "Source", "PR-AUC (Mean+-SD)", "PR-AUC 95% CI", "F1 Score", "Persistence FA/1k", "Inf (us)", "Caveat"]].to_string(index=False))
 
-    # 7. Leave-One-Source-Out (LOSO) Folds Evaluation
     print("\n" + "=" * 80)
     print("PART 5: LEAVE-ONE-SOURCE-OUT (LOSO) GENERALIZATION TABLE")
     print("=" * 80)
@@ -323,7 +299,6 @@ def main():
         tr_df = df.iloc[f_info["train_indices"]]
         te_df = df.iloc[f_info["test_indices"]]
 
-        # Train normal only for LOSO
         tr_norm = tr_df[tr_df["OUTPUT"] == 0]
 
         for v_name in ["v3", "v2"]:
@@ -331,14 +306,11 @@ def main():
             l_scaler = fit_scaler(tr_df, cols)
             X_tr = l_scaler.transform(tr_norm[cols].values)
 
-            # Fit representative DenseAE
             ae, _, _ = train_autoencoder(X_tr, X_tr[:500], input_dim=len(cols), seed=42, epochs=15)
 
-            # Threshold from train normal 95th pct
             tr_scores = score_model(ae, X_tr)
             th_warn = float(np.percentile(tr_scores, 95.0))
 
-            # Score held-out source
             X_te = l_scaler.transform(te_df[cols].values)
             te_y = te_df["OUTPUT"].values
             te_scores = score_model(ae, X_te)
@@ -355,7 +327,6 @@ def main():
 
     print(pd.DataFrame(loso_results).to_string(index=False))
 
-    # 8. Domain-Shift & Deployment Sanity Checks (Part 6)
     print("\n" + "=" * 80)
     print("PART 6: DOMAIN-SHIFT / DEPLOYMENT SANITY (NOT A TEST RESULT)")
     print("=" * 80)
@@ -376,7 +347,6 @@ def main():
                 persistence_n=3
             )
 
-            # Check pre-registered 33 °C criterion: alarm share < 5%
             share_33 = stream_res["33.0C"]["warning_share_pct"]
             passes_33 = share_33 < 5.0
 
@@ -392,14 +362,11 @@ def main():
 
     print(pd.DataFrame(deployment_audit).to_string(index=False))
 
-    # Single subject device replay check
     if os.path.exists(args.device_csv):
         print(f"\nReplaying Single Subject Device Recording: {args.device_csv}")
         dev_df = pd.read_csv(args.device_csv)
-        # Check alarms per hour for best model
         rep_m = dl_models[best_variant]["DenseAE"][0]
         th_w = thresholds[best_variant]["DenseAE"]["warn"]
-        # Standardize column names if fixture uses short names (hr, spo2, temp)
         rename_map = {"hr": "Heart_Rate", "spo2": "SpO2", "temp": "Temperature"}
         dev_df = dev_df.rename(columns={k: v for k, v in rename_map.items() if k in dev_df.columns})
         dev_norm = dev_df[dev_df.get("scenario", pd.Series(["REST"] * len(dev_df))).isin(["REST", "TYPING"])]
@@ -411,7 +378,6 @@ def main():
             fa_per_h = fa_count / max(dur_h, 1e-4)
             print(f"[Single Subject Sanity Check] Duration: {dur_h:.2f} h | Alarms: {fa_count} | False Alarms/hr: {fa_per_h:.1f}")
 
-    # 9. Export Winning Model (Part 7)
     print("\n" + "=" * 80)
     print(f"PART 7: EXPORTING PRE-REGISTERED WINNER ({best_dl['model']}) TO {args.output_dir}")
     print("=" * 80)
@@ -440,7 +406,6 @@ def main():
     print(f"  - PyTorch vs ONNX Max Diff : {export_res['pt_onnx_diff']:.2e} (Passed < 1e-5)")
     print(f"  - PyTorch vs NumPy Max Diff: {export_res['pt_np_diff']:.2e} (Passed < 1e-5)")
     print("=" * 80)
-
 
 if __name__ == "__main__":
     main()

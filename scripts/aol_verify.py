@@ -33,16 +33,14 @@ from ml.artifacts.dl_v1.numpy_forward import (
 from ml_eval.public_split import load_public_split
 from ml.dl.evaluate import compute_metrics, patient_group_bootstrap
 
-
 def main():
     print("=" * 80)
     print("AOL VERIFICATION AUDIT (dl-public)")
     print("=" * 80)
 
-    # 1. LOAD DATA & FROZEN SPLIT
     harm_path = os.path.join(PROJECT_ROOT, "ml_pipeline/data/harmonized_vitals.csv")
     split_path = os.path.join(PROJECT_ROOT, "splits/public_split.json")
-    
+
     harm = pd.read_csv(harm_path)
     harm["row_id"] = np.arange(len(harm))
     split_meta, split_sha = load_public_split(split_path)
@@ -50,7 +48,6 @@ def main():
     print(f"Dataset : {harm_path} (Total rows: {len(harm)})")
     print(f"Split   : {split_path} (SHA256: {split_sha})")
 
-    # Partitions
     train_idx = split_meta["indices"]["train"]
     val_idx = split_meta["indices"]["val"]
     test_idx = split_meta["indices"]["test"]
@@ -62,7 +59,6 @@ def main():
     norm_train = train_df[train_df["OUTPUT"] == 0]
     norm_val = val_df[val_df["OUTPUT"] == 0]
 
-    # Scalers fit strictly on normal train
     scaler_v3 = StandardScaler().fit(norm_train[["Heart_Rate", "SpO2", "Temperature"]].values)
     scaler_v2 = StandardScaler().fit(norm_train[["Heart_Rate", "SpO2"]].values)
 
@@ -71,9 +67,6 @@ def main():
         "evaluated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
 
-    # =========================================================================
-    # TASK 1: RECALCULATE ALL SPLIT & CLASS COUNTS
-    # =========================================================================
     print("\n" + "=" * 80)
     print("TASK 1: RECALCULATED COUNTS (PER SOURCE x SPLIT x CLASS)")
     print("=" * 80)
@@ -100,7 +93,6 @@ def main():
                 "Prevalence_pct": round(prev * 100, 2)
             })
 
-    # Pooled rows
     for sp in splits:
         idx = set(split_meta["indices"][sp])
         sp_df = harm[harm["row_id"].isin(idx)]
@@ -121,7 +113,6 @@ def main():
     print(df_counts.to_string(index=False))
     results_payload["counts_table"] = count_rows
 
-    # Uniqueness in test engrarri21
     test_eng = harm[(harm["Source"] == "engrarri21") & (harm["row_id"].isin(set(test_idx)))]
     vitals_cols = ["Heart_Rate", "SpO2", "Temperature"]
     all_cols = ["Patient_ID", "Heart_Rate", "SpO2", "Temperature", "OUTPUT"]
@@ -129,7 +120,7 @@ def main():
     n_eng_tot = len(test_eng)
     n_eng_vitals_uniq = len(test_eng.drop_duplicates(subset=vitals_cols))
     n_eng_all_uniq = len(test_eng.drop_duplicates(subset=all_cols))
-    
+
     eng_norm = test_eng[test_eng["OUTPUT"] == 0]
     n_eng_norm_tot = len(eng_norm)
     n_eng_norm_vitals_uniq = len(eng_norm.drop_duplicates(subset=vitals_cols))
@@ -152,7 +143,6 @@ def main():
         "unique_normal_all_cols_test": n_eng_norm_all_uniq
     }
 
-    # Agreement Rule Engine vs OUTPUT
     print("\n--- RULE VS OUTPUT AGREEMENT (CIRCULARITY AUDIT ON REAL DATA) ---")
     circ_records = {}
     for src in sources:
@@ -170,14 +160,10 @@ def main():
         print(f"Source: {src:15s} | N={len(sdf):6d} | Rule vs OUTPUT Agreement: {acc:.2f}%")
     results_payload["rule_circularity_agreement_pct"] = circ_records
 
-    # =========================================================================
-    # TASK 2: RECALCULATED TEST METRICS WITH FIXED ROC RECALL@5%FPR
-    # =========================================================================
     print("\n" + "=" * 80)
     print("TASK 2: COMPREHENSIVE TEST METRICS (WITH TIED-SCORE ROC REC@5%FPR)")
     print("=" * 80)
 
-    # Models & Scoring Functions
     def score_rule(df, variant="v3"):
         scores = []
         for _, row in df.iterrows():
@@ -189,7 +175,6 @@ def main():
             scores.append(score)
         return np.array(scores, dtype=np.float64)
 
-    # Train shallow baselines on norm_train
     print("Training shallow baselines on train normal...")
     if_v3 = IsolationForest(n_estimators=100, random_state=42).fit(scaler_v3.transform(norm_train[["Heart_Rate", "SpO2", "Temperature"]].values))
     if_v2 = IsolationForest(n_estimators=100, random_state=42).fit(scaler_v2.transform(norm_train[["Heart_Rate", "SpO2"]].values))
@@ -201,7 +186,6 @@ def main():
     ocsvm_v3 = OneClassSVM(kernel="rbf", gamma="scale", nu=0.05).fit(scaler_v3.transform(norm_train.iloc[sub_idx][["Heart_Rate", "SpO2", "Temperature"]].values))
     ocsvm_v2 = OneClassSVM(kernel="rbf", gamma="scale", nu=0.05).fit(scaler_v2.transform(norm_train.iloc[sub_idx][["Heart_Rate", "SpO2"]].values))
 
-    # DenseAE v2 NumPy forward
     weights_path = os.path.join(PROJECT_ROOT, "ml/artifacts/dl_v1/model_weights.npz")
     infer_ae_v2 = EdgeAutoencoderInference(weights_path)
     w_ae = infer_ae_v2.w
@@ -235,7 +219,6 @@ def main():
         ("DenseAE (v2) [Seed 42]", "v2", lambda df, X: score_dense_ae_v2(X)),
     ]
 
-    # Subsets to evaluate: POOLED, nasirayub2, engrarri21 (all), engrarri21 (unique), gourangomandal
     eng_test_unique_df = test_eng.drop_duplicates(subset=vitals_cols).reset_index(drop=True)
     subsets_eval = [
         ("POOLED", test_df),
@@ -279,9 +262,6 @@ def main():
     print(df_metrics.to_string(index=False))
     results_payload["metrics_table"] = metrics_table
 
-    # =========================================================================
-    # TASK 3: BOOTSTRAP AUDIT FOR ENGRARRI21
-    # =========================================================================
     print("\n" + "=" * 80)
     print("TASK 3: BOOTSTRAP RESAMPLING AUDIT FOR ENGRARRI21")
     print("=" * 80)
@@ -296,14 +276,10 @@ def main():
     df_eng_comp = df_metrics[df_metrics["Source"].isin(["engrarri21", "engrarri21_unique"])].copy()
     print(df_eng_comp[["Model", "Source", "PR-AUC", "PR - Prev", "ROC-AUC", "Rec@5%FPR", "F1"]].to_string(index=False))
 
-    # =========================================================================
-    # TASK 5: SENSITIVITY TESTING (LABEL: BUKAN HASIL TEST)
-    # =========================================================================
     print("\n" + "=" * 80)
     print("TASK 5: SENSITIVITY TESTING (BUKAN HASIL TEST) — DENSEAE v2 SEED 42 vs RULE")
     print("=" * 80)
 
-    # 5a. False Alarm Grid
     print("\n--- 5a. FALSE ALARM GRID (20 SEEDS x 400 SAMPLES, PERSISTENCE N=3) ---")
     hr_means = [55, 60, 72, 85, 95]
     spo2_means = [95, 96, 98]
@@ -323,7 +299,6 @@ def main():
                 hr_seq = rng.normal(hr_m, 3.0, size=400)
                 spo2_seq = np.clip(rng.normal(sp_m, 0.5, size=400), 80.0, 100.0)
 
-                # DenseAE v2 inference with state tracking (N=3)
                 ae_infer = EdgeAutoencoderInference(weights_path)
                 ae_sevs = []
                 for h_val, s_val in zip(hr_seq, spo2_seq):
@@ -333,7 +308,6 @@ def main():
                 ae_warn_shares.append(np.mean(np.array(ae_sevs) >= 1) * 100)
                 ae_crit_shares.append(np.mean(np.array(ae_sevs) == 2) * 100)
 
-                # Rule Raw (Produksi tanpa persistensi) & Rule N=3
                 raw_sevs = []
                 n3_sevs = []
                 rule_crit_count = 0
@@ -382,9 +356,7 @@ def main():
     print(df_grid.to_string(index=False))
     results_payload["grid_sensitivity"] = grid_results
 
-    # 5b. 1D Sweeps
     print("\n--- 5b. 1D THRESHOLD CROSSING SWEEPS ---")
-    # Sweep HR 40..140 with SpO2=98
     hr_sweep = np.linspace(40.0, 140.0, 1001)
     hr_ae_scores = []
     for h in hr_sweep:
@@ -394,8 +366,6 @@ def main():
         hr_ae_scores.append(sc)
     hr_ae_scores = np.array(hr_ae_scores)
 
-    # Crossing points for HR
-    # Normal center is ~76 BPM
     hr_low_warn = hr_sweep[np.where(hr_ae_scores >= WARN_THRESHOLD)[0]]
     hr_low_warn_val = hr_low_warn[hr_low_warn < 76][-1] if any(hr_low_warn < 76) else None
     hr_high_warn_val = hr_low_warn[hr_low_warn > 76][0] if any(hr_low_warn > 76) else None
@@ -404,7 +374,6 @@ def main():
     hr_low_crit_val = hr_low_crit[hr_low_crit < 76][-1] if any(hr_low_crit < 76) else None
     hr_high_crit_val = hr_low_crit[hr_low_crit > 76][0] if any(hr_low_crit > 76) else None
 
-    # Sweep SpO2 80..100 with HR=72
     spo2_sweep = np.linspace(80.0, 100.0, 201)
     spo2_ae_scores = []
     for sp in spo2_sweep:
@@ -439,13 +408,11 @@ def main():
         "spo2_crit_ae": spo2_crit_val,
     }
 
-    # 5c. Graded Injections
     print("\n--- 5c. GRADED ANOMALY INJECTIONS (20 EPISODES PER LEVEL) ---")
     hr_spikes = [10.0, 20.0, 30.0, 40.0]
     spo2_drops = [95.0, 93.0, 91.0, 89.0]
     injection_records = []
 
-    # HR Spike Graded Injections
     for delta_hr in hr_spikes:
         ae_recalls = []
         ae_latencies = []
@@ -459,7 +426,6 @@ def main():
             base_hr = rng.normal(72.0, 2.0, size=20) + delta_hr
             base_spo2 = np.clip(rng.normal(98.0, 0.4, size=20), 80.0, 100.0)
 
-            # AE (N=3)
             ae_infer = EdgeAutoencoderInference(weights_path)
             ae_hits = []
             for h, s in zip(base_hr, base_spo2):
@@ -470,7 +436,6 @@ def main():
             if hit:
                 ae_latencies.append(ae_hits.index(True))
 
-            # Rule Raw (tanpa persistensi / perilaku produksi) & Rule N=3
             rule_raw_hits = []
             rule_n3_hits = []
             c_w = 0
@@ -501,7 +466,6 @@ def main():
             "Rule_N3_Med_Lat": int(np.median(rule_n3_latencies)) if len(rule_n3_latencies) > 0 else "-"
         })
 
-    # SpO2 Drop Graded Injections
     for target_sp in spo2_drops:
         ae_recalls = []
         ae_latencies = []
@@ -515,7 +479,6 @@ def main():
             base_hr = rng.normal(72.0, 2.0, size=20)
             base_spo2 = rng.normal(target_sp, 0.4, size=20)
 
-            # AE (N=3)
             ae_infer = EdgeAutoencoderInference(weights_path)
             ae_hits = []
             for h, s in zip(base_hr, base_spo2):
@@ -526,7 +489,6 @@ def main():
             if hit:
                 ae_latencies.append(ae_hits.index(True))
 
-            # Rule Raw & Rule N=3
             rule_raw_hits = []
             rule_n3_hits = []
             c_w = 0
@@ -561,14 +523,12 @@ def main():
     print(df_inj.to_string(index=False))
     results_payload["graded_injections"] = injection_records
 
-    # Save to results/
     results_dir = os.path.join(PROJECT_ROOT, "results")
     os.makedirs(results_dir, exist_ok=True)
     json_path = os.path.join(results_dir, "aol_verification.json")
     with open(json_path, "w") as f:
         json.dump(results_payload, f, indent=2)
     print(f"\n[✓] Full verification payload saved to: {json_path}")
-
 
 if __name__ == "__main__":
     main()

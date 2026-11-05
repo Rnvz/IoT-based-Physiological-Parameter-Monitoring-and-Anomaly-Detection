@@ -16,17 +16,17 @@ def apply_biological_filters(df: pd.DataFrame) -> pd.DataFrame:
     - Temperature: 25 - 42 °C
     """
     initial_len = len(df)
-    
+
     valid_hr = (df['Heart_Rate'] >= 30) & (df['Heart_Rate'] <= 220)
     valid_spo2 = (df['SpO2'] >= 70) & (df['SpO2'] <= 100)
     valid_temp = (df['Temperature'] >= 25) & (df['Temperature'] <= 42)
-    
+
     df_filtered = df[valid_hr & valid_spo2 & valid_temp].copy()
-    
+
     dropped = initial_len - len(df_filtered)
     if dropped > 0:
         logging.info(f"Dihapus {dropped:,} baris karena nilai berada di luar rentang biologis.")
-        
+
     return df_filtered
 
 def process_engrarri21(file_path: str) -> Optional[pd.DataFrame]:
@@ -34,7 +34,7 @@ def process_engrarri21(file_path: str) -> Optional[pd.DataFrame]:
     try:
         df = pd.read_csv(file_path, encoding='latin1')
         df.columns = df.columns.str.strip()
-        
+
         rename_map = {}
         for col in df.columns:
             if 'HR' in col:
@@ -44,10 +44,10 @@ def process_engrarri21(file_path: str) -> Optional[pd.DataFrame]:
             elif 'TEMP' in col or 'temp' in col.lower():
                 rename_map[col] = 'Temperature'
         df.rename(columns=rename_map, inplace=True)
-        
+
         output_series = df['OUTPUT'].astype(str).str.strip().str.lower()
         output_binary = np.where(output_series == 'normal', 0, 1)
-        
+
         result = pd.DataFrame({
             'Patient_ID': 'engrarri21_stream',
             'Heart_Rate': pd.to_numeric(df['Heart_Rate'], errors='coerce'),
@@ -68,14 +68,14 @@ def process_nasirayub2(file_path: str) -> Optional[pd.DataFrame]:
     try:
         df = pd.read_csv(file_path, encoding='latin1')
         df.columns = df.columns.str.strip()
-        
+
         hr = pd.to_numeric(df['Heart Rate'], errors='coerce')
         spo2 = pd.to_numeric(df['Oxygen Saturation'], errors='coerce')
         temp = pd.to_numeric(df['Body Temperature'], errors='coerce')
-        
+
         risk = df['Risk Category'].astype(str).str.strip().str.lower()
         output_binary = np.where(risk == 'low risk', 0, 1)
-        
+
         patient_id = df['Patient ID'].astype(str) if 'Patient ID' in df.columns else df.index.astype(str)
         result = pd.DataFrame({
             'Patient_ID': 'nasirayub2_' + patient_id,
@@ -97,13 +97,13 @@ def process_rishanmascarenhas(file_path: str) -> Optional[pd.DataFrame]:
     try:
         df = pd.read_csv(file_path, encoding='latin1')
         df.columns = df.columns.str.strip()
-        
+
         hr = pd.to_numeric(df['PulseRate'], errors='coerce')
         spo2 = pd.to_numeric(df['Oxygen'], errors='coerce')
         temp_f = pd.to_numeric(df['Temperature'], errors='coerce')
-        
+
         temp_c = (temp_f - 32.0) * (5.0 / 9.0)
-        
+
         p_id = df['ID'].astype(str) if 'ID' in df.columns else df.index.astype(str)
         result = pd.DataFrame({
             'Patient_ID': 'rishan_' + p_id,
@@ -131,22 +131,22 @@ def process_gourangomandal(file_path: str) -> Optional[pd.DataFrame]:
     try:
         df = pd.read_csv(file_path, encoding='latin1')
         df.columns = df.columns.str.strip()
-        
+
         temp_col = [c for c in df.columns if 'temp' in c.lower() and 'alert' not in c.lower()][0]
         hr_col = [c for c in df.columns if 'heart' in c.lower() and 'alert' not in c.lower()][0]
         spo2_col = [c for c in df.columns if 'spo2' in c.lower() and 'alert' not in c.lower()][0]
-        
+
         hr = pd.to_numeric(df[hr_col], errors='coerce')
         spo2 = pd.to_numeric(df[spo2_col], errors='coerce')
         temp = pd.to_numeric(df[temp_col], errors='coerce')
-        
+
         hr_alert = df['Heart Rate Alert'].astype(str).str.strip().str.upper()
         spo2_alert = df['SpO2 Level Alert'].astype(str).str.strip().str.upper()
         temp_alert = df['Temperature Alert'].astype(str).str.strip().str.upper()
-        
+
         is_normal = (hr_alert == 'NORMAL') & (spo2_alert == 'NORMAL') & (temp_alert == 'NORMAL')
         output_binary = np.where(is_normal, 0, 1)
-        
+
         p_id = df['Patient Number'].astype(str) if 'Patient Number' in df.columns else df.index.astype(str)
         result = pd.DataFrame({
             'Patient_ID': 'gourango_' + p_id,
@@ -166,17 +166,17 @@ def process_gourangomandal(file_path: str) -> Optional[pd.DataFrame]:
 def main(input_dir: str, output_path: str):
     """Pipeline pembersihan & harmonisasi semua dataset."""
     logging.info(f"Mencari dataset di direktori: {input_dir}")
-    
+
     datasets: List[pd.DataFrame] = []
-    
+
     files = glob.glob(os.path.join(input_dir, '**', '*.*'), recursive=True)
-    
+
     for file in files:
         if not file.endswith(('.csv', '.xlsx')):
             continue
-            
+
         fname_lower = os.path.basename(file).lower()
-        
+
         if 'human_vital_signs_r' in fname_lower or 'engrarri' in fname_lower:
             logging.info(f"Mendeteksi engrarri21: {file}")
             df = process_engrarri21(file)
@@ -191,22 +191,22 @@ def main(input_dir: str, output_path: str):
             df = process_gourangomandal(file)
         else:
             continue
-            
+
         if df is not None:
             datasets.append(df)
-            
+
     if not datasets:
         logging.error(f"Tidak ada dataset valid yang berhasil dimuat dari {input_dir}.")
         return
-        
+
     combined_df = pd.concat(datasets, ignore_index=True)
     logging.info(f"Total baris gabungan sebelum pembersihan: {len(combined_df):,}")
-    
+
     combined_df.dropna(subset=['Heart_Rate', 'SpO2', 'Temperature'], inplace=True)
-    
+
     cleaned_df = apply_biological_filters(combined_df)
     logging.info(f"Total baris bersih yang valid: {len(cleaned_df):,}")
-    
+
     print("\n" + "="*50)
     print("RINGKASAN DATASET HARMONISASI")
     print("="*50)
@@ -216,7 +216,7 @@ def main(input_dir: str, output_path: str):
     print("\nStatistik Deskriptif Parameter Fisiologis:")
     print(cleaned_df[['Heart_Rate', 'SpO2', 'Temperature']].describe().round(2))
     print("="*50 + "\n")
-    
+
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     cleaned_df.to_csv(output_path, index=False)
     logging.info(f"Dataset harmonisasi tersimpan di: {output_path}")
@@ -225,9 +225,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pembersihan & Harmonisasi Dataset IoT Anomaly Detection")
     default_input = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'Dataset'))
     default_output = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'harmonized_vitals.csv'))
-    
+
     parser.add_argument('--input', type=str, default=default_input, help='Direktori input dataset')
     parser.add_argument('--output', type=str, default=default_output, help='Path output dataset harmonisasi')
-    
+
     args = parser.parse_args()
     main(args.input, args.output)

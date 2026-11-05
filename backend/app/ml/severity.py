@@ -13,16 +13,16 @@ class ThresholdEvaluator:
       - Higher score: more normal
       - Lower score: more anomalous
     Mapping:
-      - score >= thr[0.13] -> severity 0 (NORMAL)
-      - thr[0.05] <= score < thr[0.13] -> severity 1 (ANOMALY / warning)
-      - score < thr[0.05] -> severity 2 (ANOMALY / critical)
+      - score >= thr_warn -> severity 0 (NORMAL)
+      - thr_crit <= score < thr_warn -> severity 1 (ANOMALY / warning)
+      - score < thr_crit -> severity 2 (ANOMALY / critical)
     """
 
     def __init__(self, thresholds_path: str = settings.thresholds_path):
         self.thresholds_path = thresholds_path
-        self.thr_013: float = 0.252450
-        self.thr_005: float = 0.097345
-        self.thresholds: Dict[float, float] = {}
+        self.thr_013: float = 0.048891
+        self.thr_005: float = -0.016385
+        self.thresholds: Dict = {}
         self.load_thresholds()
 
     def load_thresholds(self):
@@ -42,8 +42,18 @@ class ThresholdEvaluator:
         if resolved:
             try:
                 self.thresholds = joblib.load(resolved)
-                self.thr_013 = float(self.thresholds.get(0.13, 0.252450))
-                self.thr_005 = float(self.thresholds.get(0.05, 0.097345))
+                self.thr_013 = float(
+                    self.thresholds.get("fpr_10pct")
+                    or self.thresholds.get("fpr_13pct")
+                    or self.thresholds.get(0.13)
+                    or 0.048891
+                )
+                self.thr_005 = float(
+                    self.thresholds.get("fpr_05pct")
+                    or self.thresholds.get(0.05)
+                    or -0.016385
+                )
+                logger.info(f"[ThresholdEvaluator] Loaded thresholds from {resolved}: thr_warn={self.thr_013}, thr_crit={self.thr_005}")
             except Exception as e:
                 logger.error(f"[ThresholdEvaluator] Error loading thresholds from {resolved}: {e}")
 

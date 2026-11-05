@@ -37,24 +37,20 @@ class MLService:
     def load_artifacts(self):
         candidate_model_paths = [
             settings.model_path,
-            os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/physio_synthetic/isolation_forest_model.joblib"),
-            os.path.join(os.path.dirname(__file__), "../../../models/physio_synthetic/isolation_forest_model.joblib"),
-            "ml_pipeline/models/physio_synthetic/isolation_forest_model.joblib",
-            "../ml_pipeline/models/physio_synthetic/isolation_forest_model.joblib",
-            "models/physio_synthetic/isolation_forest_model.joblib",
-            "../models/physio_synthetic/isolation_forest_model.joblib",
+            os.path.join(os.path.dirname(__file__), "../../../ml/models/isolation_forest_model.joblib"),
+            "ml/models/isolation_forest_model.joblib",
+            os.path.join(os.path.dirname(__file__), "../../../ml/models/physio_synthetic/isolation_forest_model.joblib"),
+            "ml/models/physio_synthetic/isolation_forest_model.joblib",
             os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/isolation_forest_model.joblib"),
             "ml_pipeline/models/isolation_forest_model.joblib",
             "../ml_pipeline/models/isolation_forest_model.joblib",
         ]
         candidate_scaler_paths = [
             settings.scaler_path,
-            os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/physio_synthetic/scaler.joblib"),
-            os.path.join(os.path.dirname(__file__), "../../../models/physio_synthetic/scaler.joblib"),
-            "ml_pipeline/models/physio_synthetic/scaler.joblib",
-            "../ml_pipeline/models/physio_synthetic/scaler.joblib",
-            "models/physio_synthetic/scaler.joblib",
-            "../models/physio_synthetic/scaler.joblib",
+            os.path.join(os.path.dirname(__file__), "../../../ml/models/scaler.joblib"),
+            "ml/models/scaler.joblib",
+            os.path.join(os.path.dirname(__file__), "../../../ml/models/physio_synthetic/scaler.joblib"),
+            "ml/models/physio_synthetic/scaler.joblib",
             os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/scaler.joblib"),
             "ml_pipeline/models/scaler.joblib",
             "../ml_pipeline/models/scaler.joblib",
@@ -124,7 +120,8 @@ class MLService:
                 features_input = pd.DataFrame(features_2d, columns=cols)
                 features_scaled = self.scaler.transform(features_input)
                 features_scaled_input = pd.DataFrame(features_scaled, columns=cols)
-                score = float(self.model.decision_function(features_scaled_input)[0])
+                model_input = features_scaled_input if hasattr(self.model, "feature_names_in_") else features_scaled
+                score = float(self.model.decision_function(model_input)[0])
             else:
                 features_scaled = self.scaler.transform(features_2d)
                 score = float(self.model.decision_function(features_scaled)[0])

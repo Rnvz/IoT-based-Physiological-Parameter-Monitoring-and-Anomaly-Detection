@@ -19,11 +19,9 @@ import pandas as pd
 
 from ml_eval.sessions import load_and_segment_sessions, summarize_sessions
 
-
 def compute_content_sha256(content: str) -> str:
     """Computes SHA256 hex digest of a string."""
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
-
 
 def compute_file_sha256(filepath: str) -> str:
     """Computes SHA256 hex digest of a file's raw bytes."""
@@ -32,7 +30,6 @@ def compute_file_sha256(filepath: str) -> str:
         while chunk := f.read(65536):
             h.update(chunk)
     return h.hexdigest()
-
 
 def split_session_ids(
     session_ids: List[str],
@@ -52,7 +49,6 @@ def split_session_ids(
             f"Found only {n} session(s): {unique_sessions}. At least 3 sessions are required."
         )
 
-    # Deterministic shuffle
     rng = random.Random(seed)
     shuffled = list(unique_sessions)
     rng.shuffle(shuffled)
@@ -66,12 +62,10 @@ def split_session_ids(
         val = [shuffled[2]]
         test = [shuffled[3]]
     else:
-        # Standard ratio partitioning ensuring >=1 in each
         n_test = max(1, int(round(n * ratios[2])))
         n_val = max(1, int(round(n * ratios[1])))
         n_train = n - n_test - n_val
 
-        # Safety adjustment
         if n_train < 1:
             n_train = 1
             if n_test > 1:
@@ -83,13 +77,11 @@ def split_session_ids(
         val = shuffled[n_train:n_train + n_val]
         test = shuffled[n_train + n_val:]
 
-    # Return sorted session lists
     return {
         "train": sorted(train),
         "val": sorted(val),
         "test": sorted(test)
     }
-
 
 def freeze_split(
     df: pd.DataFrame,
@@ -119,7 +111,6 @@ def freeze_split(
     partitions = split_session_ids(sessions, seed=seed)
     summary = summarize_sessions(df)
 
-    # Build frozen metadata (deterministic given df and seed)
     split_meta = {
         "protocol_version": "1.0",
         "seed": seed,
@@ -139,7 +130,6 @@ def freeze_split(
     sha256_hash = compute_file_sha256(abs_path)
     return split_meta, sha256_hash
 
-
 def load_frozen_split(split_path: str = "splits/split.json") -> Tuple[Dict[str, Any], str]:
     """
     Loads an existing frozen split.json and verifies its SHA256 digest.
@@ -154,7 +144,6 @@ def load_frozen_split(split_path: str = "splits/split.json") -> Tuple[Dict[str, 
 
     return split_meta, sha256_hash
 
-
 def main():
     parser = argparse.ArgumentParser(description="Freeze session-wise train/val/test split.")
     parser.add_argument("--input", "-i", required=True, help="Input CSV dataset with or without session_id")
@@ -163,7 +152,6 @@ def main():
     parser.add_argument("--force", action="store_true", help="Force overwrite existing frozen split file")
     args = parser.parse_args()
 
-    # Load and segment if needed
     df = pd.read_csv(args.input)
     if "session_id" not in df.columns:
         print("Segmenting sessions from dataset...")
@@ -193,7 +181,6 @@ def main():
     print(f"Val Sessions   ({len(split_meta['val_sessions'])}): {split_meta['val_sessions']}")
     print(f"Test Sessions  ({len(split_meta['test_sessions'])}): {split_meta['test_sessions']}")
     print("=" * 80)
-
 
 if __name__ == "__main__":
     main()

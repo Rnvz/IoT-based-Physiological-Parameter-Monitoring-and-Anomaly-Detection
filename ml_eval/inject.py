@@ -17,7 +17,6 @@ import copy
 import pandas as pd
 import numpy as np
 
-
 def inject_synthetic_anomalies(
     test_df: pd.DataFrame,
     seed: int = 42,
@@ -39,23 +38,19 @@ def inject_synthetic_anomalies(
 
     rng = np.random.default_rng(seed)
 
-    # 1. Real test copy (unmodified baseline)
     real_test = test_df.copy(deep=True)
     real_test["y_true"] = 0
     real_test["is_synthetic"] = False
     real_test["anomaly_type"] = "NONE"
 
-    # 2. Injected copy
     injected_test = test_df.copy(deep=True)
     injected_test["y_true"] = 0
     injected_test["is_synthetic"] = False
     injected_test["anomaly_type"] = "NONE"
 
-    # Ensure required columns are float
     for col in ["hr", "spo2", "temp"]:
         injected_test[col] = injected_test[col].astype(float)
 
-    # Group by session_id to inject inside session segments
     sessions = injected_test["session_id"].unique() if "session_id" in injected_test.columns else ["default"]
 
     for sid in sessions:
@@ -64,16 +59,13 @@ def inject_synthetic_anomalies(
         n_samples = len(sess_indices)
 
         if n_samples < episode_length * 2:
-            # Session too short for clean anomaly insertion
             continue
 
-        # Allocate non-overlapping windows for each anomaly type
         max_episodes = min(len(anomalies), n_samples // (episode_length + 15))
         if max_episodes < 1:
             continue
 
         selected_anomalies = anomalies[:max_episodes]
-        # Spaced start indices
         step = n_samples // (len(selected_anomalies) + 1)
 
         for i, a_type in enumerate(selected_anomalies):
@@ -85,17 +77,14 @@ def inject_synthetic_anomalies(
                 continue
 
             if a_type == "HR_SPIKE":
-                # Tachycardia spike: add 45-60 BPM (clamped <= 180)
                 spike = rng.uniform(45.0, 60.0)
                 injected_test.loc[target_idx, "hr"] = np.clip(
                     injected_test.loc[target_idx, "hr"] + spike, 40.0, 185.0
                 )
             elif a_type == "SPO2_DROP":
-                # Hypoxemia desaturation: drop to 81-87%
                 target_spo2 = rng.uniform(81.0, 87.0)
                 injected_test.loc[target_idx, "spo2"] = target_spo2
             elif a_type == "FLAT_SIGNAL":
-                # Sensor freeze: constant value for all channels
                 freeze_hr = float(injected_test.loc[target_idx[0], "hr"])
                 freeze_spo2 = float(injected_test.loc[target_idx[0], "spo2"])
                 freeze_temp = float(injected_test.loc[target_idx[0], "temp"])

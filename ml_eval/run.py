@@ -40,7 +40,6 @@ BANNER_BLOCK = f"""=============================================================
 {BANNER_TEXT}
 ================================================================================"""
 
-
 def get_library_versions() -> Dict[str, str]:
     """Captures exact runtime library versions for protocol reproducibility."""
     versions = {
@@ -52,7 +51,6 @@ def get_library_versions() -> Dict[str, str]:
         "os": platform.platform()
     }
     return versions
-
 
 def detect_is_fixture(source_path: str, df: Optional[pd.DataFrame] = None, force_fixture: bool = False) -> bool:
     """
@@ -75,7 +73,6 @@ def detect_is_fixture(source_path: str, df: Optional[pd.DataFrame] = None, force
         if "scenario" in df.columns and any(df["scenario"].astype(str).str.upper().str.contains("FIXTURE")):
             return True
 
-    # Check for metadata header comment in CSV file if it exists
     if os.path.exists(source_path):
         try:
             with open(source_path, "r", encoding="utf-8") as f:
@@ -86,7 +83,6 @@ def detect_is_fixture(source_path: str, df: Optional[pd.DataFrame] = None, force
             pass
 
     return False
-
 
 def generate_markdown_report(report_dict: Dict[str, Any]) -> str:
     """Formats evaluation results dictionary into a structured Markdown report."""
@@ -162,7 +158,6 @@ def generate_markdown_report(report_dict: Dict[str, Any]) -> str:
 
     return "\n".join(lines) + "\n"
 
-
 def run_pipeline(
     dataset_path: str,
     split_path: str = "splits/split.json",
@@ -179,10 +174,8 @@ def run_pipeline(
     """
     Executes steps 1-6 end to end and writes results/<split_sha>/report.json and report.md.
     """
-    # 1. Load and segment sessions
     raw_df = pd.read_csv(dataset_path)
 
-    # Detect fixture status
     fixture_status = detect_is_fixture(
         source_path=dataset_path,
         df=raw_df,
@@ -201,7 +194,6 @@ def run_pipeline(
     if not quiet:
         print(f"Identified {summary['total_sessions']} sessions ({summary['total_valid_rows']} valid rows).")
 
-    # 2. Partition sessions (or load existing frozen split)
     if os.path.exists(split_path) and not force_split:
         if not quiet:
             print(f"Loading existing frozen split from: {split_path}")
@@ -222,7 +214,6 @@ def run_pipeline(
         print(f"Val sessions  : {split_meta['val_sessions']}")
         print(f"Test sessions : {split_meta['test_sessions']}")
 
-    # Partition segmented rows
     train_raw = segmented_df[segmented_df["session_id"].isin(split_meta["train_sessions"])].copy()
     val_raw = segmented_df[segmented_df["session_id"].isin(split_meta["val_sessions"])].copy()
     test_raw = segmented_df[segmented_df["session_id"].isin(split_meta["test_sessions"])].copy()
@@ -234,7 +225,6 @@ def run_pipeline(
             f"Check that session IDs in {split_path} match the dataset."
         )
 
-    # 3. Feature Extraction on Train and Val
     if not quiet:
         print(f"Extracting '{feature_set}' rolling features (window=15, causal, session-isolated)...")
 
@@ -244,7 +234,6 @@ def run_pipeline(
     if train_feats.empty or val_feats.empty:
         raise ValueError("Feature extraction yielded 0 rows for train or validation sets.")
 
-    # 4. Train Baselines & Calibrate Thresholds on Validation
     if not quiet:
         print(f"Fitting baselines on normal train data and calibrating thresholds on val (target_fpr={target_fpr})...")
 
@@ -256,7 +245,6 @@ def run_pipeline(
         seed=seed
     )
 
-    # 5. Inject Synthetic Anomalies on Test Copies
     if not quiet:
         print("Injecting synthetic anomalies into copies of test sessions (originals unchanged)...")
 
@@ -269,7 +257,6 @@ def run_pipeline(
     real_test_feats = extract_features(real_test_raw, feature_set=feature_set)
     injected_test_feats = extract_features(injected_test_raw, feature_set=feature_set)
 
-    # 6. Evaluate All Models
     if not quiet:
         print("Scoring all baseline models using standardized metrics...")
 
@@ -283,7 +270,6 @@ def run_pipeline(
         )
         evaluated_models[m_name] = res
 
-    # 7. Write Results
     feat_names = CORE_FEATURE_NAMES if feature_set.lower() == "core" else EXTENDED_FEATURE_NAMES
     report_dict: Dict[str, Any] = {
         "banner": BANNER_TEXT if fixture_status else None,
@@ -307,7 +293,6 @@ def run_pipeline(
         "models": evaluated_models
     }
 
-    # Destination directory: results/<split_sha>/
     dest_dir = os.path.join(output_dir, split_sha)
     os.makedirs(dest_dir, exist_ok=True)
 
@@ -331,7 +316,6 @@ def run_pipeline(
         print(md_content)
 
     return report_dict
-
 
 def main():
     parser = argparse.ArgumentParser(description="Run standardized ML evaluation protocol.")
@@ -360,7 +344,6 @@ def main():
         target_recall=args.target_recall,
         max_gap_seconds=args.max_gap
     )
-
 
 if __name__ == "__main__":
     main()

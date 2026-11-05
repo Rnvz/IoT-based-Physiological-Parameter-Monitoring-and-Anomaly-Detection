@@ -23,7 +23,6 @@ from typing import Dict, Any, List, Tuple
 import pandas as pd
 import numpy as np
 
-
 def compute_file_sha256(filepath: str) -> str:
     """Computes SHA256 hex digest of file."""
     h = hashlib.sha256()
@@ -31,7 +30,6 @@ def compute_file_sha256(filepath: str) -> str:
         while chunk := f.read(65536):
             h.update(chunk)
     return h.hexdigest()
-
 
 def split_public_dataset(
     df: pd.DataFrame,
@@ -47,7 +45,6 @@ def split_public_dataset(
     if missing:
         raise ValueError(f"Dataset missing required columns: {sorted(missing)}")
 
-    # Add row_idx for exact index tracking
     df = df.copy()
     if "row_id" not in df.columns:
         df["row_id"] = np.arange(len(df))
@@ -63,16 +60,13 @@ def split_public_dataset(
         src_rows = src_df["row_id"].values
 
         if src == "engrarri21":
-            # Longitudinal / sequential block split
             N = len(src_rows)
             n_tr = int(round(0.60 * N))
             n_val = int(round(0.20 * N))
 
             tr_idx = src_rows[0:n_tr].tolist()
-            # 60 row gap
             val_start = n_tr + gap_rows
             val_idx = src_rows[val_start:val_start + n_val].tolist()
-            # 60 row gap
             te_start = val_start + n_val + gap_rows
             te_idx = src_rows[te_start:].tolist()
 
@@ -86,7 +80,6 @@ def split_public_dataset(
                 "purged_rows": N - (len(tr_idx) + len(val_idx) + len(te_idx))
             }
         else:
-            # Cross-sectional: Group split by Patient_ID
             patients = sorted(src_df["Patient_ID"].unique())
             rng = random.Random(seed)
             shuffled_patients = list(patients)
@@ -120,7 +113,6 @@ def split_public_dataset(
         val_indices.extend(val_idx)
         test_indices.extend(te_idx)
 
-    # Class breakdown per partition
     def class_breakdown(indices: List[int]) -> Dict[str, Any]:
         sub = df.loc[indices]
         return {
@@ -137,7 +129,6 @@ def split_public_dataset(
             }
         }
 
-    # Leave-One-Source-Out (LOSO) folds
     sources = sorted(df["Source"].unique().tolist())
     loso_folds = {}
     for held_out in sources:
@@ -177,7 +168,6 @@ def split_public_dataset(
 
     return split_dict
 
-
 def freeze_public_split(
     df: pd.DataFrame,
     output_path: str = "splits/public_split.json",
@@ -207,7 +197,6 @@ def freeze_public_split(
     sha256_hash = compute_file_sha256(abs_path)
     return split_dict, sha256_hash
 
-
 def load_public_split(split_path: str = "splits/public_split.json") -> Tuple[Dict[str, Any], str]:
     """Loads frozen public split and verifies its SHA256 digest."""
     abs_path = os.path.abspath(split_path)
@@ -218,7 +207,6 @@ def load_public_split(split_path: str = "splits/public_split.json") -> Tuple[Dic
     with open(abs_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
     return meta, sha256
-
 
 def main():
     parser = argparse.ArgumentParser(description="Freeze public dataset train/val/test and LOSO splits.")
@@ -250,7 +238,6 @@ def main():
     for src, info in split_dict["source_breakdown"].items():
         print(f"[{src}] Type: {info['type']} | Train: {info['train_rows']}, Val: {info['val_rows']}, Test: {info['test_rows']}")
     print("=" * 80)
-
 
 if __name__ == "__main__":
     main()

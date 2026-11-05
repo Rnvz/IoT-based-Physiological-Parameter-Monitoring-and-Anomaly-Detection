@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 CLI Helper to Tag Benign Recording Scenarios
 Communicates with FastAPI backend (/session/scenario).

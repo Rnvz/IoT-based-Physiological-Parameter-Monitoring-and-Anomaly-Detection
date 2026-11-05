@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Dataset Quality and Integrity Checker for Physiological Telemetry CSVs.
 Validates recorded datasets against thesis evaluation protocol requirements.

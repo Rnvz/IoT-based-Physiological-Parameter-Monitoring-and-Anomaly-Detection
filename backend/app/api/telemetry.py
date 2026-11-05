@@ -40,10 +40,8 @@ async def get_latest(
 
     prediction_dict = None
     if prediction:
-        # Jika sensor sedang tidak ada jari atau vitals belum terdeteksi (HR / SpO2 masih proses awal),
-        # jangan kembalikan record prediksi lama dari sesi sebelumnya agar dashboard tidak menampilkan false alarm.
         has_fresh_vitals = bool(reading and reading.finger and (reading.hr is not None) and (reading.spo2 is not None))
-        
+
         is_fresh = False
         if has_fresh_vitals and reading and reading.ts and prediction.ts:
             try:
@@ -184,7 +182,7 @@ async def export_readings_csv(_auth: str = Depends(verify_api_key)):
     Protected with X-API-Key.
     """
     csv_file = os.path.abspath(os.path.join(settings.csv_dir, "readings.csv"))
-    
+
     if not os.path.exists(csv_file):
         async def empty_stream():
             yield "ts,device_id,hr,spo2,temp,hum,room_temp,finger,fw_status\n"

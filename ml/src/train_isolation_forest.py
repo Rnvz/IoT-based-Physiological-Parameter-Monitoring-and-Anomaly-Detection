@@ -29,7 +29,7 @@ def calibrate_threshold(scores_normal: np.ndarray, target_fpr: float) -> float:
     """
     Cari threshold skor anomali sehingga persentase sampel NORMAL
     yang salah ditandai anomali == target_fpr.
-    
+
     Isolation Forest decision_function: skor rendah = lebih anomali.
     FPR = fraksi sampel normal yang skor-nya < threshold.
     """

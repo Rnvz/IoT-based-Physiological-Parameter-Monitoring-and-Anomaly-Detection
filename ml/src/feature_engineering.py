@@ -15,13 +15,13 @@ def compute_temporal_features_timeseries(df: pd.DataFrame, window: int = 15) -> 
         df[f'{col}_Delta'] = df[col].diff().fillna(0)
         df[f'MA_{col}'] = df[col].rolling(window, min_periods=1).mean()
         df[f'Var_{col}'] = df[col].rolling(window, min_periods=2).var().fillna(0)
-        
+
     df['Rate_of_Change'] = (
-        df['Heart_Rate_Delta'].abs() / df['Heart_Rate'].mean() + 
-        df['SpO2_Delta'].abs() / df['SpO2'].mean() + 
+        df['Heart_Rate_Delta'].abs() / df['Heart_Rate'].mean() +
+        df['SpO2_Delta'].abs() / df['SpO2'].mean() +
         df['Temperature_Delta'].abs() / df['Temperature'].mean()
     )
-    
+
     if len(df) >= window:
         df = df.iloc[window-1:].reset_index(drop=True)
     return df
@@ -32,7 +32,7 @@ def compute_temporal_features_cross_sectional(df: pd.DataFrame) -> pd.DataFrame:
         df[f'{col}_Delta'] = 0.0
         df[f'MA_{col}'] = df[col]
         df[f'Var_{col}'] = 0.0
-        
+
     df['Rate_of_Change'] = 0.0
     return df.reset_index(drop=True)
 
@@ -50,7 +50,7 @@ def process_features(df: pd.DataFrame, window: int = 15) -> pd.DataFrame:
 def main(input_path: str, output_train: str, output_val: str, output_test: str, scaler_path: str, window: int):
     logging.info(f"Memuat data dari {input_path}")
     df = pd.read_csv(input_path)
-    
+
     train_dfs, val_dfs, test_dfs = [], [], []
     for source in df['Source'].unique():
         source_df = df[df['Source'] == source].reset_index(drop=True)
@@ -72,30 +72,30 @@ def main(input_path: str, output_train: str, output_val: str, output_test: str, 
             train_dfs.append(tr)
             val_dfs.append(va)
             test_dfs.append(te)
-            
+
     df_train_raw = pd.concat(train_dfs, ignore_index=True)
     df_val_raw = pd.concat(val_dfs, ignore_index=True)
     df_test_raw = pd.concat(test_dfs, ignore_index=True)
-    
+
     logging.info(f"Train: {len(df_train_raw)}, Val: {len(df_val_raw)}, Test: {len(df_test_raw)}")
-    
+
     df_train_feat = process_features(df_train_raw, window)
     df_val_feat = process_features(df_val_raw, window)
     df_test_feat = process_features(df_test_raw, window)
-    
+
     feature_cols = [
-        'Heart_Rate', 'SpO2', 'Temperature', 
-        'Heart_Rate_Delta', 'SpO2_Delta', 'Temperature_Delta', 
-        'MA_Heart_Rate', 'MA_SpO2', 'MA_Temperature', 
-        'Var_Heart_Rate', 'Var_SpO2', 'Var_Temperature', 
+        'Heart_Rate', 'SpO2', 'Temperature',
+        'Heart_Rate_Delta', 'SpO2_Delta', 'Temperature_Delta',
+        'MA_Heart_Rate', 'MA_SpO2', 'MA_Temperature',
+        'Var_Heart_Rate', 'Var_SpO2', 'Var_Temperature',
         'Rate_of_Change'
     ]
-    
+
     scaler = RobustScaler()
     X_train_scaled = pd.DataFrame(scaler.fit_transform(df_train_feat[feature_cols]), columns=feature_cols)
     X_val_scaled = pd.DataFrame(scaler.transform(df_val_feat[feature_cols]), columns=feature_cols)
     X_test_scaled = pd.DataFrame(scaler.transform(df_test_feat[feature_cols]), columns=feature_cols)
-    
+
     meta_cols = ['OUTPUT', 'Source', 'Metadata', 'Patient_ID']
     for col in meta_cols:
         if col in df_train_feat:
@@ -104,10 +104,10 @@ def main(input_path: str, output_train: str, output_val: str, output_test: str, 
             X_val_scaled[col] = df_val_feat[col].values
         if col in df_test_feat:
             X_test_scaled[col] = df_test_feat[col].values
-            
+
     os.makedirs(os.path.dirname(scaler_path), exist_ok=True)
     joblib.dump(scaler, scaler_path)
-    
+
     X_train_scaled.to_csv(output_train, index=False)
     X_val_scaled.to_csv(output_val, index=False)
     X_test_scaled.to_csv(output_test, index=False)
@@ -122,7 +122,7 @@ if __name__ == "__main__":
     parser.add_argument('--scaler', type=str, default='../models/scaler.joblib')
     parser.add_argument('--window', type=int, default=15)
     args = parser.parse_args()
-    
+
     basedir = os.path.dirname(__file__)
     main(
         os.path.abspath(os.path.join(basedir, args.input)),
@@ -132,4 +132,3 @@ if __name__ == "__main__":
         os.path.abspath(os.path.join(basedir, args.scaler)),
         args.window
     )
-
