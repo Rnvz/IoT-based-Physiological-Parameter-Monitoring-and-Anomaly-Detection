@@ -48,6 +48,27 @@ def test_api_health_details_endpoint(client_and_repo):
     assert "mqtt_connected" in data
     assert "decision_mode" in data
 
+def test_api_health_details_model_kind_dl(client_and_repo, monkeypatch):
+    from app.ml.dl_service import DLService
+    client, _, _ = client_and_repo
+    monkeypatch.setattr(settings, "model_kind", "dl")
+
+    import app.main as main_mod
+    mock_mqtt = MagicMock()
+    mock_mqtt.client.is_connected.return_value = True
+    dl_svc = DLService()
+    mock_mqtt.ml_service = dl_svc
+    monkeypatch.setattr(main_mod, "mqtt_service", mock_mqtt)
+
+    res = client.get("/health/details")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ok"
+    assert data["model_version"] == "ae_v1"
+    assert data["model_loaded"] is True
+    assert data["fallback_reason"] is None
+
+
 def test_api_empty_database_responses(client_and_repo):
     client, _, _ = client_and_repo
 

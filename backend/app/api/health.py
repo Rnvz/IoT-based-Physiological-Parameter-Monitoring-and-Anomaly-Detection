@@ -16,6 +16,7 @@ def health_details():
     
     model_loaded = False
     fallback_reason: Optional[str] = None
+    model_version = settings.model_version
 
     if mqtt_service and mqtt_service.ml_service:
         svc = mqtt_service.ml_service
@@ -26,6 +27,11 @@ def health_details():
         elif hasattr(svc, "ort_session") or hasattr(svc, "numpy_model"):
             model_loaded = bool(svc.ort_session is not None or svc.numpy_model is not None)
 
+        if hasattr(svc, "model_version") and svc.model_version:
+            model_version = svc.model_version
+    elif getattr(settings, "model_kind", "ml").lower() == "dl":
+        model_version = "ae_v1"
+
     if not model_loaded:
         fallback_reason = "Model artifacts not loaded or ML service uninitialized"
 
@@ -35,6 +41,6 @@ def health_details():
         "decision_mode": settings.decision_mode,
         "model_loaded": model_loaded,
         "fallback_reason": fallback_reason,
-        "model_version": settings.model_version,
+        "model_version": model_version,
         "db_backend": settings.db_backend,
     }
