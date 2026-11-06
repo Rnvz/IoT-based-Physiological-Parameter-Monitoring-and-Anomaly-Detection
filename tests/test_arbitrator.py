@@ -63,9 +63,9 @@ def test_arbitrator_ml_mode_fallback_on_warmup():
         mode="ML"
     )
     assert res.decision_mode == "ML"
-    assert res.decision_source == "RULE_FALLBACK"
-    assert res.published_severity == 2
+    assert res.published_severity == 2, f"Expected rule fallback severity 2, got {res.published_severity}"
     assert res.published_label == "ANOMALY"
+    assert res.decision_source == "RULE_FALLBACK"
     assert res.rule_severity == 2
     assert res.ml_severity is None
     assert res.is_fallback is True
