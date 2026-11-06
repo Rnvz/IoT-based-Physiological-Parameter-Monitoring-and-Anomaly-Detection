@@ -61,9 +61,9 @@ def arbitrate(
             )
         else:
             is_warmup = bool(ml_result and getattr(ml_result, 'is_warmup', False))
-            pub_sev = 0 if is_warmup else rule_severity
-            pub_label = "NORMAL" if is_warmup else rule_label
-            source = "WARMUP" if is_warmup else "RULE_FALLBACK"
+            pub_sev = rule_severity
+            pub_label = rule_label
+            source = "RULE_FALLBACK"
 
             logger.info(f"[Arbitrator] ML result unavailable ({getattr(ml_result, 'label', 'None')}, warmup={is_warmup}). Source={source}, severity={pub_sev}.")
             return ArbitrationResult(

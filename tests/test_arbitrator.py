@@ -50,23 +50,23 @@ def test_arbitrator_ml_mode_available():
     assert res.is_fallback is False
 
 def test_arbitrator_ml_mode_fallback_on_warmup():
-    """When ML is in warm-up (is_warmup=True), suppresses buzzer by holding published_severity at 0 (NORMAL) with WARMUP source."""
+    """When ML is in warm-up (is_warmup=True), falls back to rule_severity with RULE_FALLBACK."""
     ml_res = MLInferenceResult(
         label="NO_DATA",
         raw_severity=None,
         is_warmup=True
     )
     res = arbitrate(
-        rule_severity=1,
+        rule_severity=2,
         rule_label="ANOMALY",
         ml_result=ml_res,
         mode="ML"
     )
     assert res.decision_mode == "ML"
-    assert res.decision_source == "WARMUP"
-    assert res.published_severity == 0
-    assert res.published_label == "NORMAL"
-    assert res.rule_severity == 1
+    assert res.decision_source == "RULE_FALLBACK"
+    assert res.published_severity == 2
+    assert res.published_label == "ANOMALY"
+    assert res.rule_severity == 2
     assert res.ml_severity is None
     assert res.is_fallback is True
 
