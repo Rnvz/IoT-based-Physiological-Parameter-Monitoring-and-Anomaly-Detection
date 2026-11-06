@@ -79,22 +79,32 @@ class DevicePersistentEvaluator:
     def __init__(self, debounce_count: int = settings.persistent_anomaly_count):
         self.debounce_count = debounce_count
         self.consecutive_count: int = 0
+        self.consecutive_crit: int = 0
         self.last_severity: int = 0
 
     def evaluate(self, raw_severity: int) -> int:
         if raw_severity == 0:
             self.consecutive_count = 0
+            self.consecutive_crit = 0
             self.last_severity = 0
             return 0
 
         self.consecutive_count += 1
+        if raw_severity >= 2:
+            self.consecutive_crit += 1
+        else:
+            self.consecutive_crit = 0
+
         self.last_severity = raw_severity
 
-        if self.consecutive_count >= self.debounce_count:
-            return raw_severity
+        if self.consecutive_crit >= self.debounce_count:
+            return 2
+        elif self.consecutive_count >= self.debounce_count:
+            return 1
         else:
-            return 1 if raw_severity >= 1 else 0
+            return 0
 
     def reset(self):
         self.consecutive_count = 0
+        self.consecutive_crit = 0
         self.last_severity = 0

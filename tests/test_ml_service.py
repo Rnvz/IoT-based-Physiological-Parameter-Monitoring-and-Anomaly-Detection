@@ -21,21 +21,40 @@ def test_threshold_evaluator_sign_convention_and_mapping():
 def test_device_persistent_evaluator_debounce_and_strict_reset():
     evaluator = DevicePersistentEvaluator(debounce_count=3)
     
+    # Critical sequence (2): suppressed for samples 1 and 2, triggers on sample 3
     sev1 = evaluator.evaluate(raw_severity=2)
-    assert sev1 == 1
+    assert sev1 == 0, f"Expected 0 for 1st consecutive anomaly, got {sev1}"
     assert evaluator.consecutive_count == 1
 
     sev2 = evaluator.evaluate(raw_severity=2)
-    assert sev2 == 1
+    assert sev2 == 0, f"Expected 0 for 2nd consecutive anomaly, got {sev2}"
     assert evaluator.consecutive_count == 2
 
     sev3 = evaluator.evaluate(raw_severity=2)
-    assert sev3 == 2
+    assert sev3 == 2, f"Expected 2 on 3rd consecutive anomaly, got {sev3}"
     assert evaluator.consecutive_count == 3
 
     sev_norm = evaluator.evaluate(raw_severity=0)
     assert sev_norm == 0
     assert evaluator.consecutive_count == 0
+
+def test_device_persistent_evaluator_single_spike_suppressed():
+    evaluator = DevicePersistentEvaluator(debounce_count=3)
+
+    # 1-sample spike in warning zone (severity 1) must be suppressed
+    sev = evaluator.evaluate(raw_severity=1)
+    assert sev == 0, f"Expected single spike to be suppressed (0), got {sev}"
+    assert evaluator.consecutive_count == 1
+
+    # Returns to normal -> resets
+    assert evaluator.evaluate(raw_severity=0) == 0
+    assert evaluator.consecutive_count == 0
+
+    # 3 consecutive warning anomalies -> triggers 1 on 3rd
+    assert evaluator.evaluate(raw_severity=1) == 0
+    assert evaluator.evaluate(raw_severity=1) == 0
+    assert evaluator.evaluate(raw_severity=1) == 1
+
 
 def test_ml_service_warmup_returns_no_data():
     """During warmup (< 15 samples), MLService must return NO_DATA, never NORMAL."""
