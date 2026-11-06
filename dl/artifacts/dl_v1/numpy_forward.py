@@ -3,6 +3,8 @@ Self-contained NumPy forward pass for ae_v1 (v2).
 Requires only NumPy and SciPy (for exact GELU erf).
 """
 
+import os
+from typing import Optional
 import numpy as np
 from scipy.special import erf
 
@@ -22,7 +24,14 @@ def layer_norm_np(x: np.ndarray, weight: np.ndarray, bias: np.ndarray, eps: floa
     return ((x - mean) / np.sqrt(var + eps)) * weight + bias
 
 class EdgeAutoencoderInference:
-    def __init__(self, weights_path: str = "ml/artifacts/dl_v1/model_weights.npz"):
+    def __init__(self, weights_path: Optional[str] = None):
+        if weights_path is None:
+            candidates = [
+                os.path.join(os.path.dirname(__file__), "model_weights.npz"),
+                "dl/artifacts/dl_v1/model_weights.npz",
+                "ml/artifacts/dl_v1/model_weights.npz",
+            ]
+            weights_path = next((p for p in candidates if os.path.exists(p)), "dl/artifacts/dl_v1/model_weights.npz")
         data = np.load(weights_path)
         self.w = {k: data[k] for k in data.files}
         self.consecutive_warn = 0

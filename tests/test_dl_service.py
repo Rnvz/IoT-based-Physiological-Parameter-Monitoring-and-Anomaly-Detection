@@ -3,7 +3,11 @@ import numpy as np
 from unittest.mock import MagicMock, patch
 
 from app.ml.dl_service import DLService, DeviceDLState, DLInferenceResult
-from ml.artifacts.dl_v1.numpy_forward import EdgeAutoencoderInference
+
+try:
+    from dl.artifacts.dl_v1.numpy_forward import EdgeAutoencoderInference
+except ImportError:
+    from ml.artifacts.dl_v1.numpy_forward import EdgeAutoencoderInference
 
 def test_dl_service_matches_numpy_forward_on_fixed_samples():
     service = DLService()

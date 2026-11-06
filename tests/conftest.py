@@ -2,7 +2,12 @@ import sys
 import os
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend')))
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+backend_dir = os.path.join(repo_root, 'backend')
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 
 @pytest.fixture
 def sample_normal_telemetry():
