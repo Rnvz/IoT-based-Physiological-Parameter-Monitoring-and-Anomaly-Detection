@@ -68,6 +68,11 @@ class MQTTService:
             self.ml_service = get_dl_service()
         else:
             self.ml_service = get_ml_service()
+
+        if hasattr(self.ml_service, "is_loaded") and self.ml_service.is_loaded:
+            logger.info(f"[ML Startup] {settings.model_kind.upper()} service initialized successfully with model artifacts loaded.")
+        else:
+            logger.warning(f"[ML Startup] {settings.model_kind.upper()} service started WITHOUT model artifacts loaded. Fallback to rule engine will occur when required.")
         self.repo = get_repository()
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):

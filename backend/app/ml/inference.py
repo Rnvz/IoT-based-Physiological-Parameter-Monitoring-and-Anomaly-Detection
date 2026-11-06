@@ -69,6 +69,10 @@ class MLService:
         else:
             logger.warning("[MLService] ML artifacts not found. Model inference will be unavailable.")
 
+    @property
+    def is_loaded(self) -> bool:
+        return self.model is not None and self.scaler is not None
+
     def _get_evaluator(self, device_id: str) -> DevicePersistentEvaluator:
         if device_id not in self.evaluators:
             self.evaluators[device_id] = DevicePersistentEvaluator(

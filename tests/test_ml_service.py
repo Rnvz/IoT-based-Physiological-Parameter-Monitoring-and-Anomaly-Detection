@@ -80,3 +80,15 @@ def test_ml_service_finger_false_resets_window():
     res_next = service.process_reading(device_id=dev, hr=75.0, spo2=98.0, temp=36.5, finger=True, timestamp=30.0)
     assert res_next.label == "NO_DATA"
     assert res_next.is_warmup is True
+
+
+def test_default_artifact_paths_exist():
+    import os
+    from app.config import settings
+
+    assert os.path.exists(settings.model_path), f"Default model_path does not exist: {settings.model_path}"
+    assert os.path.exists(settings.scaler_path), f"Default scaler_path does not exist: {settings.scaler_path}"
+    assert os.path.exists(settings.thresholds_path), f"Default thresholds_path does not exist: {settings.thresholds_path}"
+    assert os.path.exists(settings.model_dir), f"Default model_dir does not exist: {settings.model_dir}"
+    assert os.path.exists(os.path.join(settings.model_dir, "metadata.json")), f"metadata.json missing in {settings.model_dir}"
+

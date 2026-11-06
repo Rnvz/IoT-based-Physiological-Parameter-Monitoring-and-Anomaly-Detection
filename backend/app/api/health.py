@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter
 from app.config import settings
 
@@ -12,12 +13,28 @@ def health():
 def health_details():
     from app.main import mqtt_service
     is_connected = bool(mqtt_service and mqtt_service.client.is_connected())
-    model_loaded = bool(mqtt_service and mqtt_service.ml_service and mqtt_service.ml_service.model is not None)
+    
+    model_loaded = False
+    fallback_reason: Optional[str] = None
+
+    if mqtt_service and mqtt_service.ml_service:
+        svc = mqtt_service.ml_service
+        if hasattr(svc, "is_loaded"):
+            model_loaded = bool(svc.is_loaded)
+        elif hasattr(svc, "model"):
+            model_loaded = bool(svc.model is not None)
+        elif hasattr(svc, "ort_session") or hasattr(svc, "numpy_model"):
+            model_loaded = bool(svc.ort_session is not None or svc.numpy_model is not None)
+
+    if not model_loaded:
+        fallback_reason = "Model artifacts not loaded or ML service uninitialized"
+
     return {
         "status": "ok",
         "mqtt_connected": is_connected,
         "decision_mode": settings.decision_mode,
         "model_loaded": model_loaded,
+        "fallback_reason": fallback_reason,
         "model_version": settings.model_version,
         "db_backend": settings.db_backend,
     }

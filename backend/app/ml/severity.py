@@ -28,6 +28,12 @@ class ThresholdEvaluator:
     def load_thresholds(self):
         paths_to_try = [
             self.thresholds_path,
+            os.path.join(os.path.dirname(__file__), "../../../ml/models/thresholds.joblib"),
+            "ml/models/thresholds.joblib",
+            "../ml/models/thresholds.joblib",
+            os.path.join(os.path.dirname(__file__), "../../../ml/models/physio_synthetic/thresholds.joblib"),
+            "ml/models/physio_synthetic/thresholds.joblib",
+            "../ml/models/physio_synthetic/thresholds.joblib",
             os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/physio_synthetic/thresholds.joblib"),
             os.path.join(os.path.dirname(__file__), "../../../models/physio_synthetic/thresholds.joblib"),
             "ml_pipeline/models/physio_synthetic/thresholds.joblib",
@@ -56,6 +62,8 @@ class ThresholdEvaluator:
                 logger.info(f"[ThresholdEvaluator] Loaded thresholds from {resolved}: thr_warn={self.thr_013}, thr_crit={self.thr_005}")
             except Exception as e:
                 logger.error(f"[ThresholdEvaluator] Error loading thresholds from {resolved}: {e}")
+        else:
+            logger.warning("[ThresholdEvaluator] Threshold artifacts not found. Fallback thresholds active.")
 
     def score_to_raw_severity(self, score: float) -> Tuple[int, str]:
         if score >= self.thr_013:

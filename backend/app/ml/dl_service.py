@@ -136,12 +136,23 @@ class DLService:
 
         self.load_artifacts()
 
+    @property
+    def model(self):
+        return self.ort_session or self.numpy_model
+
+    @property
+    def is_loaded(self) -> bool:
+        return self.ort_session is not None or self.numpy_model is not None
+
     def _resolve_path(self, filename: str) -> Optional[str]:
         candidates = [
             os.path.join(self.model_dir, filename),
             os.path.join(os.path.dirname(__file__), "../../../dl/artifacts/dl_v1", filename),
             os.path.join("dl/artifacts/dl_v1", filename),
             os.path.join("../dl/artifacts/dl_v1", filename),
+            os.path.join(os.path.dirname(__file__), "../../../ml/artifacts/dl_v1", filename),
+            os.path.join("ml/artifacts/dl_v1", filename),
+            os.path.join("../ml/artifacts/dl_v1", filename),
         ]
         return next((p for p in candidates if os.path.exists(p)), None)
 
@@ -179,6 +190,9 @@ class DLService:
                 logger.info(f"[DLService] Loaded NumPy weights fallback from {weights_path}")
             except Exception as e:
                 logger.warning(f"[DLService] Failed loading NumPy weights from {weights_path}: {e}")
+
+        if not self.is_loaded:
+            logger.warning("[DLService] Neither ONNX nor NumPy fallback models could be loaded. DL inference unavailable.")
 
     def _get_state(self, device_id: str) -> DeviceDLState:
         if device_id not in self.device_states:
