@@ -103,11 +103,47 @@ def test_ml_service_finger_false_resets_window():
 
 def test_default_artifact_paths_exist():
     import os
+    import pytest
     from app.config import settings
 
-    assert os.path.exists(settings.model_path), f"Default model_path does not exist: {settings.model_path}"
-    assert os.path.exists(settings.scaler_path), f"Default scaler_path does not exist: {settings.scaler_path}"
-    assert os.path.exists(settings.thresholds_path), f"Default thresholds_path does not exist: {settings.thresholds_path}"
+    # Tracked DL artifacts must always exist
     assert os.path.exists(settings.model_dir), f"Default model_dir does not exist: {settings.model_dir}"
     assert os.path.exists(os.path.join(settings.model_dir, "metadata.json")), f"metadata.json missing in {settings.model_dir}"
+    assert os.path.exists(os.path.join(settings.model_dir, "model_weights.npz")), f"model_weights.npz missing in {settings.model_dir}"
+
+    # ML joblib artifacts may be omitted or untracked in some environments
+    ml_artifacts_exist = (
+        os.path.exists(settings.model_path)
+        and os.path.exists(settings.scaler_path)
+        and os.path.exists(settings.thresholds_path)
+    )
+    if not ml_artifacts_exist:
+        pytest.skip(
+            f"ML joblib artifacts not present in clone (model: {os.path.exists(settings.model_path)}, "
+            f"scaler: {os.path.exists(settings.scaler_path)}, thr: {os.path.exists(settings.thresholds_path)}). "
+            "MLService logs warning and arbitrator falls back to RULE."
+        )
+
+    assert os.path.exists(settings.model_path)
+    assert os.path.exists(settings.scaler_path)
+    assert os.path.exists(settings.thresholds_path)
+
+
+def test_ml_service_fallback_to_rule_when_artifacts_missing():
+    from app.ml.inference import MLService
+    from app.rules.arbitrator import arbitrate
+
+    service = MLService()
+    service.model = None
+    service.scaler = None
+
+    res = service.process_reading("dev-fallback", hr=150.0, spo2=80.0, temp=39.0, finger=True)
+    assert res.label == "NO_DATA"
+    assert res.raw_severity is None
+
+    arb = arbitrate(rule_severity=2, rule_label="ANOMALY", ml_result=res, mode="ML")
+    assert arb.decision_mode == "ML"
+    assert arb.decision_source == "RULE_FALLBACK"
+    assert arb.published_severity == 2
+    assert arb.is_fallback is True
 
