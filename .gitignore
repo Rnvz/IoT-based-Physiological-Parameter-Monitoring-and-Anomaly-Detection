@@ -93,6 +93,7 @@ ml/models/*
 # Track DL artifacts
 !dl/artifacts/
 !dl/artifacts/**
+dl/artifacts/**/__pycache__/
 
 # Legacy model path
 !ml_pipeline/models/
