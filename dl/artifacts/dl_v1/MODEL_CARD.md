@@ -16,7 +16,7 @@
 ## Public Training Data & Limitations
 1. **Multi-Source Composition**:
    - `nasirayub2` (cross-sectional, 200,020 rows): Synthetic/heuristic multi-risk dataset. Labels derived from hypertension criteria (systolic/diastolic blood pressure) and BMI, NOT vitals.
-   - `engrarri21` (longitudinal, 21,523 rows): Single-subject ICU streaming recording with high exact duplicate fraction (86.0%).
+   - `engrarri21` (longitudinal, 21,523 rows): Single-subject ICU streaming recording with high exact duplicate fraction (86.0%). Untuk interpretasi metrik uji PR-AUC tanpa bias duplikasi, lihat subset `engrarri21_unique` pada `docs/AOL_TEST_REPORT.md`.
    - `gourangomandal` (cross-sectional, 60,000 rows): Extreme label circularity (95.5% agreement with simple threshold rules).
 2. **Core vs. Skin Temperature Discrepancy**:
    - Public datasets record **core/oral body temperature** (~36.5–37.5 °C).

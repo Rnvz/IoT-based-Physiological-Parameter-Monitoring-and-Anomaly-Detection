@@ -88,6 +88,9 @@ Untuk skor bertingkat, algoritma kini memilih ambang batas valid tertinggi yang 
 
 Dihitung ulang dengan `scripts/aol_verify.py` pada seluruh 56.188 sampel test set publik:
 
+> [!NOTE]
+> Untuk angka PR-AUC dan metrik evaluasi pada baris `engrarri21` mentah (yang mengandung ~86% duplikasi baris dalam aliran streaming subjek tunggal), selalu bandingkan dengan baris varian tanpa duplikasi (*lihat `engrarri21_unique`*).
+
 | Model | Sumber | Prevalensi | PR-AUC | PR - Prev | ROC-AUC | Rec@5%FPR | F1 Score |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Rule Engine (v3)** | POOLED | 0.5970 | 0.8871 | +0.2900 | 0.7327 | **0.3228** | 0.6405 |
