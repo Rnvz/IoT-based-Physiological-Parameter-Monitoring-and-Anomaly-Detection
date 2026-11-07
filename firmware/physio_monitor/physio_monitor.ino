@@ -11,18 +11,12 @@
 #include <DHT.h>
 #include <ArduinoJson.h>
 
-<<<<<<< HEAD
-
 // ============================================================
 // WIFI
 // ============================================================
 
 const char* WIFI_SSID = "iQOO 12";
 const char* WIFI_PASS = "Password123";
-=======
-const char* WIFI_SSID = "iQOO 15R";
-const char* WIFI_PASS = "password";
->>>>>>> af17c59 (refactor: reorganize ML and DL into separate folders and clean source code comments)
 
 const char* MQTT_BROKER = "broker.hivemq.com";
 const int MQTT_PORT = 1883;

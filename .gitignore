@@ -168,6 +168,25 @@ temp/
 tmp/
 *.pdf
 *.docx
+*.backup
+*.user_latest
+docs/
+scripts/apply_*.py
+scripts/build_*.py
+scripts/dump_*.py
+scripts/finalize_*.py
+scripts/fix_*.py
+scripts/generate_threshold_visualization.py
+scripts/inspect_*.py
+scripts/prepare_*.py
+scripts/print_*.py
+scripts/replace_*.py
+scripts/scan_*.py
+scripts/test_*.py
+scripts/translate_*.py
+scripts/update_*.py
+dl/artifacts/DL_METRICS_REPORT.md
+reports/figures/fig_ml_*.png
 
 # ------------------------------------------------------------------------------
 # 8. IDE & Operating System

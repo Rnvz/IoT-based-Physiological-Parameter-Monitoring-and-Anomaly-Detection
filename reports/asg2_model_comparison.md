@@ -91,7 +91,7 @@ Evaluasi pada domain stasioner IoMT (`gourangomandal`) dan domain dinamis contin
 Pilihlah model **Isolation Forest** apabila:
 1. **Arsitektur Sistem Bersifat Server-Centric**: Seluruh data sensor dikirimkan ke server terpusat via MQTT/HTTP untuk diproses oleh backend FastAPI yang memiliki sumber daya komputasi dan memori yang melimpah.
 2. **Kebutuhan Regulasi & Eksplanabilitas Tradisional**: Diperlukan model *ensemble* statistik konvensional yang tidak melibatkan optimasi bobot gradien *neural network*.
-3. **Pipeline Produksi Saat Ini**: Model Isolation Forest sudah terpasang stabil di [`inference.py`](file:///c:/KULIAH/smt%207/Iot/Research/backend/app/ml/inference.py) dengan integrasi threshold teruji (`thr_warn = +0.080050` dan `thr_crit = -0.084044`).
+3. **Pipeline Produksi Saat Ini**: Model Isolation Forest sudah terpasang stabil di [`inference.py`](../backend/app/ml/inference.py) dengan integrasi threshold teruji (`thr_warn = +0.080050` dan `thr_crit = -0.084044`).
 
 ### 5.2 Kapan Harus Memilih Dense Autoencoder?
 Pilihlah model **Dense Autoencoder** apabila:

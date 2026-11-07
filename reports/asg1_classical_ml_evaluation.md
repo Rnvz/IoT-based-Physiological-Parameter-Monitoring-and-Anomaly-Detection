@@ -15,20 +15,20 @@ Model deteksi anomali classical machine learning menggunakan algoritma **Isolati
 * **Dimensi Input**: 13 fitur fisiologis murni yang diekstraksi dari sinyal vital tri-aksial (*Heart Rate*, $\text{SpO}_2$, dan *Body Temperature*).
 
 ### 1.2 Ukuran Artefak & Dependensi Komputasi
-* **Ukuran Berkas Model**: ~1,26 MB ([`isolation_forest_model.joblib`](file:///c:/KULIAH/smt%207/Iot/Research/ml/models/isolation_forest_model.joblib)).
+* **Ukuran Berkas Model**: ~1,26 MB ([`isolation_forest_model.joblib`](../ml/models/isolation_forest_model.joblib)).
 * **Dependensi Library**: `scikit-learn` (>= 1.4.0), `joblib`, `numpy`, `pandas`.
 * **Kebutuhan Memori Runtime**: ~45–60 MB RAM pada environment runtime Python/FastAPI.
 
 ### 1.3 Metodologi Pelatihan & Kurasi Data
 * **Data Training Murni Normal (*One-Class Baseline*)**:
-  Model dilatih **HANYA menggunakan 14.313 sampel berlabel Normal (`OUTPUT == 0`)** dari partisi Training Set gabungan ([`features_train.csv`](file:///c:/KULIAH/smt%207/Iot/Research/ml/data/features_train.csv)). Metodologi ini memastikan manifold pembelajaran merefleksikan batas fisiologis sehat tanpa kontaminasi pola anomali.
+  Model dilatih **HANYA menggunakan 14.313 sampel berlabel Normal (`OUTPUT == 0`)** dari partisi Training Set gabungan ([`features_train.csv`](../ml/data/features_train.csv)). Metodologi ini memastikan manifold pembelajaran merefleksikan batas fisiologis sehat tanpa kontaminasi pola anomali.
 * **Eksklusi Dataset Nasirayub2 (*Clinical Label Noise*)**:
   Dataset `nasirayub2` (Maternal Health Risk) memiliki label anomali bawaan berbasis risiko kehamilan (*High Risk*), bukan anomali tanda vital instan. Hasil investigasi klinis menunjukkan bahwa 96,6% sampel berlabel *High Risk* memiliki tanda vital yang sepenuhnya berada dalam batas normal (HR 70–85 BPM, $\text{SpO}_2$ 98%, Suhu 36,6–37,0 °C). Memasukkan dataset ini merusak manifold normal; oleh karena itu, `nasirayub2` dieksklusikan secara permanen dari pipeline pelatihan.
 * **Transformasi Fitur (*Bounded Physiological Scaler*)**:
   Menggantikan `RobustScaler` global yang sebelumnya mendistorsi sinyal dinamis. Digunakan `MinMaxScaler` berbasis batas domain fisik klinis tetap:
   * *Heart Rate*: $[40,0, 160,0]$ BPM
   * $\text{SpO}_2$: $[70,0, 100,0]$ %
-  * *Temperature*: $[30,0, 43,0]$ °C
+  * *Temperature*: $[25,0, 43,0]$ °C
   * *Turunan Temporal*: $\Delta \text{HR} \in [-40, 40]$, $\Delta \text{SpO}_2 \in [-15, 15]$, $\Delta \text{Temp} \in [-4, 4]$, *Rate of Change* $\in [0, 50]$.
 
 ---
@@ -53,6 +53,8 @@ Eksperimen kalibrasi dilakukan pada Validation Set ($N = 16.305$: 6.023 normal, 
 ### 2.2 Justifikasi Pemilihan Youden's J Index ($\tau = +0.080050$)
 1. **Kegagalan Threshold Default & Fixed Quantile**: Threshold default $\tau = 0.0$ dan kuantil tetap menghasilkan kondisi *severe under-detection* (Recall hanya 1,52% – 31,56%). Skor normal pada data tabular yang sangat padat menggeser distribusi skor normal ke area positif tinggi ($+0.13$), sehingga threshold negatif gagal menjaring anomali nyata.
 2. **Keseimbangan Sensitivitas-Spesifisitas**: Kriteria Youden's J memaksimalkan $J = \text{Sensitivity} + \text{Specificity} - 1 = \text{TPR} - \text{FPR}$. Pada Validation Set, kriteria ini menghasilkan titik belok kurva ROC terbaik ($J = 0.4920$), yang terbukti memberikan generalisasi optimal saat diuji pada Test Set.
+
+![Visualisasi Kalibrasi Decision Threshold](figures/fig5_threshold_calibration.png)
 
 ---
 
@@ -119,7 +121,7 @@ Test set terdiri dari dua sumber data dengan karakteristik sensor yang berbeda s
 
 ## 5. Integrasi Backend & Production Readiness
 
-Model Isolation Forest telah terintegrasi penuh ke dalam microservice backend FastAPI ([`inference.py`](file:///c:/KULIAH/smt%207/Iot/Research/backend/app/ml/inference.py) & [`severity.py`](file:///c:/KULIAH/smt%207/Iot/Research/backend/app/ml/severity.py)).
+Model Isolation Forest telah terintegrasi penuh ke dalam microservice backend FastAPI ([`inference.py`](../backend/app/ml/inference.py) & [`severity.py`](../backend/app/ml/severity.py)).
 
 ### 5.1 Skema Klasifikasi Keparahan Tiga Tingkat (Severity Schema)
 Nilai raw score dari `decision_function` dipetakan ke dalam status klinis berjenjang:

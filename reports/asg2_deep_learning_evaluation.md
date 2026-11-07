@@ -27,9 +27,9 @@ Input (13)
 * **Total Parameter Terlatih**: **2.289 parameter** (bobot dan bias).
 * **Ukuran Bobot Komputasi**:
   * Bobot murni Float32: $2.289 \times 4\text{ byte} = 9.156\text{ byte}$ (~9,15 KB).
-  * Format PyTorch checkpoint ([`dense_autoencoder_kaggle.pt`](file:///c:/KULIAH/smt%207/Iot/Research/dl/artifacts/dl_v1/dense_autoencoder_kaggle.pt)): ~16,9 KB.
-  * Format Numpy array terkompresi ([`model_weights.npz`](file:///c:/KULIAH/smt%207/Iot/Research/dl/artifacts/dl_v1/model_weights.npz)): **14,4 KB**.
-  * Format ONNX ([`model.onnx`](file:///c:/KULIAH/smt%207/Iot/Research/dl/artifacts/dl_v1/model.onnx)): ~5,8 KB.
+  * Format PyTorch checkpoint ([`dense_autoencoder_kaggle.pt`](../dl/artifacts/dl_v1/dense_autoencoder_kaggle.pt)): ~16,9 KB.
+  * Format Numpy array terkompresi ([`model_weights.npz`](../dl/artifacts/dl_v1/model_weights.npz)): **14,4 KB**.
+  * Format ONNX ([`model.onnx`](../dl/artifacts/dl_v1/model.onnx)): ~5,8 KB.
 * **Latensi Inferensi**: **~0,78 ms per sampel** pada CPU server (dan ~1,2 ms menggunakan runtime *pure NumPy forward-pass* tanpa overhead PyTorch).
 
 ---
