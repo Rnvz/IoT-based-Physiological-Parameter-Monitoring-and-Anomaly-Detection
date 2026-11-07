@@ -391,7 +391,8 @@ def main(train_path: str, val_path: str, test_path: str, model_path: str,
         }, f, indent=2)
     logging.info(f"Laporan evaluasi JSON disimpan di {json_report_path}")
 
-    print("\n" + report_text)
+# Alias for backwards compatibility
+train_and_evaluate = main
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Isolation Forest & Calibrate Threshold")

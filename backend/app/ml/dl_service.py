@@ -205,8 +205,17 @@ class DLService:
         if onnx_path:
             try:
                 import onnxruntime as ort
-                self.ort_session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
-                logger.info(f"[DLService] Loaded ONNX model from {onnx_path}")
+                sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
+                in_shape = sess.get_inputs()[0].shape
+                if len(in_shape) >= 2 and in_shape[-1] not in (None, "None", len(self.feature_order)):
+                    logger.warning(
+                        f"[DLService] ONNX model input dim {in_shape[-1]} != feature count {len(self.feature_order)}. "
+                        "Using NumPy forward pass fallback."
+                    )
+                    self.ort_session = None
+                else:
+                    self.ort_session = sess
+                    logger.info(f"[DLService] Loaded ONNX model from {onnx_path}")
             except Exception as e:
                 logger.info(f"[DLService] ONNX runtime skipped ({e}). Using NumPy forward pass.")
                 self.ort_session = None

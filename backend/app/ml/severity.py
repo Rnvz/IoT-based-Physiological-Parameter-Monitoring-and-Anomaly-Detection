@@ -90,7 +90,7 @@ class DevicePersistentEvaluator:
         if self.consecutive_count >= self.debounce_count:
             return raw_severity
         else:
-            return 1 if raw_severity >= 1 else 0
+            return 0
 
     def reset(self):
         self.consecutive_count = 0

@@ -342,7 +342,7 @@
               fill: false
             },
             {
-              label: "Warn Thresh (0.013571)",
+              label: "Warn Thresh (+0.080050)",
               data: [],
               borderColor: "#f59e0b",
               borderDash: [5, 5],
@@ -351,7 +351,7 @@
               fill: false
             },
             {
-              label: "Crit Thresh (0.024805)",
+              label: "Crit Thresh (-0.084044)",
               data: [],
               borderColor: "#ef4444",
               borderDash: [5, 5],
@@ -377,8 +377,8 @@
               grid: { display: false }
             },
             y: {
-              suggestedMin: 0.0,
-              suggestedMax: 0.035,
+              suggestedMin: -0.20,
+              suggestedMax: 0.20,
               ticks: { font: { size: 10 } },
               grid: { color: "rgba(150, 150, 150, 0.15)" }
             }
@@ -396,14 +396,46 @@
 
     const sorted = [...items].sort((a, b) => new Date(a.ts) - new Date(b.ts));
     const labels = sorted.map((p) => new Date(p.ts).toLocaleTimeString());
-    const scoreData = sorted.map((p) => (p.dl_score != null ? p.dl_score : p.score));
-    const warnData = sorted.map(() => 0.013571);
-    const critData = sorted.map(() => 0.024805);
+
+    const lastItem = sorted[sorted.length - 1];
+    const isDL = lastItem && (lastItem.dl_score != null || (lastItem.model_version && lastItem.model_version.includes("ae")));
+
+    const scoreTitle = $("score-chart-title");
+    const threshPill = $("score-threshold-pill");
+
+    let warnThreshVal = 0.080050;
+    let critThreshVal = -0.084044;
+    let warnLabel = "Warn Thresh (+0.080050)";
+    let critLabel = "Crit Thresh (-0.084044)";
+    let sMin = -0.20;
+    let sMax = 0.20;
+
+    if (isDL) {
+      warnThreshVal = 0.006000;
+      critThreshVal = 0.010400;
+      warnLabel = "Warn Thresh (0.006000)";
+      critLabel = "Crit Thresh (0.010400)";
+      sMin = 0.0;
+      sMax = 0.035;
+      if (scoreTitle) scoreTitle.textContent = "DL Anomaly Score (Dense Autoencoder)";
+      if (threshPill) threshPill.textContent = "Warn: 0.006000 | Crit: 0.010400";
+    } else {
+      if (scoreTitle) scoreTitle.textContent = "ML Anomaly Score (Isolation Forest)";
+      if (threshPill) threshPill.textContent = "Warn: +0.080050 | Crit: -0.084044";
+    }
+
+    const scoreData = sorted.map((p) => (isDL && p.dl_score != null ? p.dl_score : (p.score != null ? p.score : p.dl_score)));
+    const warnData = sorted.map(() => warnThreshVal);
+    const critData = sorted.map(() => critThreshVal);
 
     if (charts.score) {
+      charts.score.options.scales.y.suggestedMin = sMin;
+      charts.score.options.scales.y.suggestedMax = sMax;
       charts.score.data.labels = labels;
       charts.score.data.datasets[0].data = scoreData;
+      charts.score.data.datasets[1].label = warnLabel;
       charts.score.data.datasets[1].data = warnData;
+      charts.score.data.datasets[2].label = critLabel;
       charts.score.data.datasets[2].data = critData;
       charts.score.update("none");
     }

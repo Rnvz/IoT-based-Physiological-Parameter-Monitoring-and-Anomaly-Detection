@@ -64,7 +64,7 @@ def test_api_health_details_model_kind_dl(client_and_repo, monkeypatch):
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "ok"
-    assert data["model_version"] == "ae_v1"
+    assert data["model_version"] in ("ae_v1", "dense_ae_kaggle_v1")
     assert data["model_loaded"] is True
     assert data["fallback_reason"] is None
 

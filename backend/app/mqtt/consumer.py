@@ -2,6 +2,7 @@ import json
 import logging
 import uuid
 import asyncio
+import time
 from datetime import datetime, timezone
 from typing import Optional
 import paho.mqtt.client as mqtt
@@ -174,7 +175,8 @@ class MQTTService:
                 hr=telemetry.hr,
                 spo2=telemetry.spo2,
                 temp=telemetry.temp,
-                finger=telemetry.finger
+                finger=telemetry.finger,
+                timestamp=telemetry.timestamp or time.time()
             )
         except Exception as e:
             logger.error(f"[MQTT] ML inference threw exception (continuing safely): {e}")

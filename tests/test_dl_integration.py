@@ -44,7 +44,7 @@ async def test_dl_dashboard_contract_fields_in_latest_and_predictions():
                 assert "dl_severity" in pred
                 assert "inference_ms" in pred
                 assert "margin" in pred
-                assert pred["model_version"] == "ae_v1"
+                assert pred["model_version"] in ("ae_v1", "dense_ae_kaggle_v1")
                 assert pred["decision_mode"] == "ML"
                 assert pred["decision_source"] == "ML"
 

@@ -75,6 +75,16 @@ async def get_latest(
                     prediction_dict["margin"] = round(float(np.clip((prediction.dl_score - 0.013571) / denom, -1.0, 2.0)), 4)
                 else:
                     prediction_dict["margin"] = None
+            elif prediction.ml_score is not None:
+                prediction_dict["model_version"] = prediction.model_version
+                prediction_dict["decision_mode"] = prediction.decision_mode
+                prediction_dict["decision_source"] = prediction.decision_source
+                prediction_dict["rule_severity"] = prediction.rule_severity
+                prediction_dict["ml_severity"] = prediction.ml_severity
+                if getattr(prediction, "margin", None) is not None:
+                    prediction_dict["margin"] = prediction.margin
+                else:
+                    prediction_dict["margin"] = round(float(prediction.ml_score - 0.080050), 4)
 
     return {
         "reading": reading_dict,
