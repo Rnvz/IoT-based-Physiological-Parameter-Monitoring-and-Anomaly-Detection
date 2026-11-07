@@ -1,0 +1,121 @@
+{
+  "roc_auc_val": 0.789820963813002,
+  "pr_auc_val": 0.8386956644180205,
+  "roc_auc_test": 0.9418303139761665,
+  "pr_auc_test": 0.9752029134876607,
+  "optimal_thresholds": {
+    "youden_j": 0.00013872302952222526,
+    "best_f1": 7.61787305236794e-05,
+    "fixed_quantile_10": 0.002979668090119958
+  },
+  "test_evaluations": {
+    "youden_j": {
+      "strategy_name": "Youden's J Index (Optimal)",
+      "description": "Memaksimalkan (Sensitivity + Specificity - 1) pada Val",
+      "threshold": 0.00013872302952222526,
+      "tp": 11026,
+      "fp": 321,
+      "tn": 3580,
+      "fn": 1378,
+      "actual_fpr": 0.08228659318123559,
+      "recall": 0.8889068042566914,
+      "specificity": 0.9177134068187645,
+      "precision": 0.9717105842954085,
+      "f1": 0.9284661698454801,
+      "accuracy": 0.8957988347132781,
+      "balanced_accuracy": 0.903310105537728,
+      "breakdown": {
+        "engrarri21": {
+          "total": 4305,
+          "normal": 196,
+          "anomaly": 4109,
+          "fpr": 0.9897959183673469,
+          "recall": 0.9871014845461182,
+          "precision": 0.9543529411764706,
+          "f1": 0.9704510108864697
+        },
+        "gourangomandal": {
+          "total": 12000,
+          "normal": 3705,
+          "anomaly": 8295,
+          "fpr": 0.03427800269905533,
+          "recall": 0.8402652200120555,
+          "precision": 0.9821051148372552,
+          "f1": 0.9056652806652806
+        }
+      }
+    },
+    "best_f1": {
+      "strategy_name": "Best F1-Score (Optimal)",
+      "description": "Memaksimalkan Harmonic Mean Precision-Recall pada Val",
+      "threshold": 7.61787305236794e-05,
+      "tp": 11646,
+      "fp": 720,
+      "tn": 3181,
+      "fn": 758,
+      "actual_fpr": 0.18456805947193028,
+      "recall": 0.9388906804256691,
+      "specificity": 0.8154319405280698,
+      "precision": 0.9417758369723436,
+      "f1": 0.9403310456197013,
+      "accuracy": 0.9093529592149647,
+      "balanced_accuracy": 0.8771613104768694,
+      "breakdown": {
+        "engrarri21": {
+          "total": 4305,
+          "normal": 196,
+          "anomaly": 4109,
+          "fpr": 1.0,
+          "recall": 0.9956193721100024,
+          "precision": 0.9542803825519011,
+          "f1": 0.974511672224869
+        },
+        "gourangomandal": {
+          "total": 12000,
+          "normal": 3705,
+          "anomaly": 8295,
+          "fpr": 0.14143049932523616,
+          "recall": 0.9107896323086196,
+          "precision": 0.9351404876841193,
+          "f1": 0.9228044460730427
+        }
+      }
+    },
+    "fixed_quantile_10": {
+      "strategy_name": "Fixed Quantile 10% (Reference)",
+      "description": "Persentil 90% Validation Normal murni",
+      "threshold": 0.002979668090119958,
+      "tp": 3856,
+      "fp": 50,
+      "tn": 3851,
+      "fn": 8548,
+      "actual_fpr": 0.01281722635221738,
+      "recall": 0.3108674621089971,
+      "specificity": 0.9871827736477826,
+      "precision": 0.9871991807475679,
+      "f1": 0.47283874923359903,
+      "accuracy": 0.47267709291628335,
+      "balanced_accuracy": 0.6490251178783899,
+      "breakdown": {
+        "engrarri21": {
+          "total": 4305,
+          "normal": 196,
+          "anomaly": 4109,
+          "fpr": 0.25510204081632654,
+          "recall": 0.3319542467753711,
+          "precision": 0.9646393210749646,
+          "f1": 0.4939344559116422
+        },
+        "gourangomandal": {
+          "total": 12000,
+          "normal": 3705,
+          "anomaly": 8295,
+          "fpr": 0.0,
+          "recall": 0.30042194092827,
+          "precision": 1.0,
+          "f1": 0.46203763789746916
+        }
+      }
+    }
+  }
+}

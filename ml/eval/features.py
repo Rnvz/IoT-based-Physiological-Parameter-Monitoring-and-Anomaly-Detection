@@ -13,7 +13,8 @@ Feature Sets:
 - Feature Set 1 (CORE): 12 features (hr, spo2, temp, plus rolling mean, var, delta of each).
   NOTE: Feature Set 1 is the primary set DIRECTLY COMPARABLE to the Rule-Based Baseline,
   as the clinical rule engine operates solely on HR, SpO2, and skin temperature.
-- Feature Set 2 (EXTENDED): 24 features (Core 12 + room_temp, hum, temp_sub_room, plus their rolling stats).
+- Feature Set 2 (EXTENDED - Contextual Only): 24 features (Core 12 + room_temp, hum, temp_sub_room, plus their rolling stats).
+  NOTE: Parameter lingkungan (humidity & room_temp) dialokasikan sebagai data pendukung/kontekstual dan tidak digunakan untuk melatih model fisiologis utama.
 """
 
 from collections import deque

@@ -19,8 +19,8 @@ from app.mqtt.publisher import MQTTPublisher
 
 logger = logging.getLogger(__name__)
 
-TABLE_SEP = "+----------+----------+--------+-------+--------+--------+------------+----------------------------------+"
-TABLE_HDR = "| Waktu    | Device   |   HR   | SpO2  |  Suhu  |  Jari  | Status FW  | Evaluasi / Aksi                  |"
+TABLE_SEP = "+----------+----------+--------+-------+--------+--------+------------------+------------+----------------------------------+"
+TABLE_HDR = "| Waktu    | Device   |   HR   | SpO2  |  Suhu  |  Jari  | Pendukung(RT/H)  | Status FW  | Evaluasi / Aksi                  |"
 
 def _print_table_header():
     print(TABLE_SEP, flush=True)
@@ -148,6 +148,9 @@ class MQTTService:
         hr_str = f"{telemetry.hr:4.1f}" if telemetry.hr is not None else "--"
         spo2_str = f"{int(telemetry.spo2)}%" if telemetry.spo2 is not None else "--"
         temp_str = f"{telemetry.temp:4.1f}C" if telemetry.temp is not None else "--"
+        hum_str = f"{int(telemetry.hum)}%" if telemetry.hum is not None else "--"
+        rt_str = f"{telemetry.room_temp:4.1f}C" if telemetry.room_temp is not None else "--"
+        env_str = f"{rt_str}/{hum_str}"
         finger_str = "ADA" if telemetry.finger else "LEPAS"
         fw_status = (telemetry.status or "NORMAL")[:10]
 
@@ -157,7 +160,7 @@ class MQTTService:
             if self._row_count % 20 == 0:
                 _print_table_header()
             self._row_count += 1
-            row = f"| {ts_now:<8} | {dev:<8} | {hr_str:^6} | {spo2_str:^5} | {temp_str:^6} | {finger_str:^6} | {fw_status:<10} | {eval_desc[:32]:<32} |"
+            row = f"| {ts_now:<8} | {dev:<8} | {hr_str:^6} | {spo2_str:^5} | {temp_str:^6} | {finger_str:^6} | {env_str:^16} | {fw_status:<10} | {eval_desc[:32]:<32} |"
             print(row, flush=True)
             logger.debug(f"[MQTT] Device {device_id}: finger={telemetry.finger}, vitals_valid={telemetry.has_valid_vitals}. /result omitted.")
             return
@@ -216,7 +219,7 @@ class MQTTService:
             _print_table_header()
         self._row_count += 1
         eval_desc = f"{arb.published_label} (Sev {arb.published_severity}, {arb.decision_source}) -> /result"
-        row = f"| {ts_now:<8} | {dev:<8} | {hr_str:^6} | {spo2_str:^5} | {temp_str:^6} | {finger_str:^6} | {fw_status:<10} | {eval_desc[:32]:<32} |"
+        row = f"| {ts_now:<8} | {dev:<8} | {hr_str:^6} | {spo2_str:^5} | {temp_str:^6} | {finger_str:^6} | {env_str:^16} | {fw_status:<10} | {eval_desc[:32]:<32} |"
         print(row, flush=True)
 
     async def _handle_actuator_message(self, data: dict, raw_str: str):

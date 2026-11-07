@@ -126,9 +126,12 @@ def run_data_consistency():
 
     print("\n--- VERBATIM QUOTE FROM docs/KNOWN_LIMITATIONS.md (LINES 28-35) ---")
     lim_path = os.path.join(PROJECT_ROOT, "docs/KNOWN_LIMITATIONS.md")
-    with open(lim_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-    print("".join(lines[26:36]))
+    if os.path.exists(lim_path):
+        with open(lim_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        print("".join(lines[26:36]))
+    else:
+        print("[Notice] docs/KNOWN_LIMITATIONS.md cleaned up.")
 
     print("--- EXPLANATION OF '896' VS 5,654 + 58 (5,712) ---")
     print("Total normal rows for engrarri21 in harmonized_vitals.csv = 5,712 (OUTPUT=0).")

@@ -68,7 +68,9 @@ async def get_latest(
                 prediction_dict["decision_source"] = prediction.decision_source
                 prediction_dict["rule_severity"] = prediction.rule_severity
                 prediction_dict["ml_severity"] = prediction.ml_severity
-                if prediction.dl_score is not None:
+                if getattr(prediction, "margin", None) is not None:
+                    prediction_dict["margin"] = prediction.margin
+                elif prediction.dl_score is not None:
                     denom = max(1e-9, 0.024805 - 0.013571)
                     prediction_dict["margin"] = round(float(np.clip((prediction.dl_score - 0.013571) / denom, -1.0, 2.0)), 4)
                 else:
@@ -138,7 +140,9 @@ async def get_predictions(
             item["dl_score"] = p.dl_score
             item["dl_severity"] = p.dl_severity
             item["inference_ms"] = p.inference_ms
-            if p.dl_score is not None:
+            if getattr(p, "margin", None) is not None:
+                item["margin"] = p.margin
+            elif p.dl_score is not None:
                 denom = max(1e-9, 0.024805 - 0.013571)
                 item["margin"] = round(float(np.clip((p.dl_score - 0.013571) / denom, -1.0, 2.0)), 4)
             else:

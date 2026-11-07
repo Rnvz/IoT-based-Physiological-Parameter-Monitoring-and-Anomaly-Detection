@@ -86,6 +86,7 @@ htmlcov/
 ml/models/*
 !ml/models/.gitkeep
 !ml/models/*.joblib
+!ml/models/*.json
 !ml/models/evaluation_report.txt
 !ml/models/physio_synthetic/
 !ml/models/physio_synthetic/**

@@ -3,11 +3,7 @@ import numpy as np
 from unittest.mock import MagicMock, patch
 
 from app.ml.dl_service import DLService, DeviceDLState, DLInferenceResult
-
-try:
-    from dl.artifacts.dl_v1.numpy_forward import EdgeAutoencoderInference
-except ImportError:
-    from ml.artifacts.dl_v1.numpy_forward import EdgeAutoencoderInference
+from dl.artifacts.dl_v1.numpy_forward import EdgeAutoencoderInference
 
 def test_dl_service_matches_numpy_forward_on_fixed_samples():
     service = DLService()
@@ -108,7 +104,9 @@ def test_dl_service_fallback_on_exception():
     service.reset_device(dev)
 
     # Simulate ONNX session raising an error
-    with patch.object(service.ort_session, "run", side_effect=RuntimeError("Simulated ONNX error")):
+    target_obj = service.ort_session if service.ort_session is not None else service.numpy_model
+    method_name = "run" if service.ort_session is not None else "forward"
+    with patch.object(target_obj, method_name, side_effect=RuntimeError("Simulated error")):
         res = service.process_reading(dev, hr=75.0, spo2=98.0, finger=True)
         assert res.label == "SENSOR_ERROR"
         assert res.raw_severity is None

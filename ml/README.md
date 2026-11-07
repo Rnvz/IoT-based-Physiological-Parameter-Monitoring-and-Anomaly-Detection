@@ -17,3 +17,7 @@ Direktori ini berisi seluruh komponen algoritma **Machine Learning (Classical ML
   - `physio_records_trained/`
 - `eval/`: Modul metrik, evaluasi baseline, injeksi anomali, dan splitting dataset.
 - `requirements.txt`: Dependensi spesifik modul machine learning.
+
+
+## Catatan Dimensi Fitur & Sensor Lingkungan
+Model ML dilatih secara eksklusif menggunakan 13 fitur temporal fisiologis pasien (Heart_Rate, SpO2, Temperature beserta delta, MA, varians, dan rate of change). Parameter sensor lingkungan (humidity dan room_temp) secara tegas **tidak digunakan** sebagai input pelatihan model fisiologis dan diperlakukan murni sebagai data pendukung/kontekstual yang ditampilkan pada output logging backend.

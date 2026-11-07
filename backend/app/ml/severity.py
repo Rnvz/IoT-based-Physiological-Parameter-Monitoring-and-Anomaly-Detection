@@ -20,8 +20,8 @@ class ThresholdEvaluator:
 
     def __init__(self, thresholds_path: str = settings.thresholds_path):
         self.thresholds_path = thresholds_path
-        self.thr_013: float = 0.048891
-        self.thr_005: float = -0.016385
+        self.thr_013: float = 0.080050
+        self.thr_005: float = -0.084044
         self.thresholds: Dict = {}
         self.load_thresholds()
 
@@ -30,10 +30,6 @@ class ThresholdEvaluator:
             self.thresholds_path,
             os.path.join(os.path.dirname(__file__), "../../../ml/models/thresholds.joblib"),
             "ml/models/thresholds.joblib",
-            "../ml/models/thresholds.joblib",
-            os.path.join(os.path.dirname(__file__), "../../../ml/models/physio_synthetic/thresholds.joblib"),
-            "ml/models/physio_synthetic/thresholds.joblib",
-            "../ml/models/physio_synthetic/thresholds.joblib",
             os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/physio_synthetic/thresholds.joblib"),
             os.path.join(os.path.dirname(__file__), "../../../models/physio_synthetic/thresholds.joblib"),
             "ml_pipeline/models/physio_synthetic/thresholds.joblib",
@@ -49,21 +45,22 @@ class ThresholdEvaluator:
             try:
                 self.thresholds = joblib.load(resolved)
                 self.thr_013 = float(
-                    self.thresholds.get("fpr_10pct")
+                    self.thresholds.get("optimal_decision_threshold")
+                    or self.thresholds.get("youden_j")
+                    or self.thresholds.get("fpr_10pct")
                     or self.thresholds.get("fpr_13pct")
                     or self.thresholds.get(0.13)
-                    or 0.048891
+                    or 0.080050
                 )
                 self.thr_005 = float(
-                    self.thresholds.get("fpr_05pct")
+                    self.thresholds.get("critical_threshold")
+                    or self.thresholds.get("fpr_05pct")
                     or self.thresholds.get(0.05)
-                    or -0.016385
+                    or -0.084044
                 )
                 logger.info(f"[ThresholdEvaluator] Loaded thresholds from {resolved}: thr_warn={self.thr_013}, thr_crit={self.thr_005}")
             except Exception as e:
                 logger.error(f"[ThresholdEvaluator] Error loading thresholds from {resolved}: {e}")
-        else:
-            logger.warning("[ThresholdEvaluator] Threshold artifacts not found. Fallback thresholds active.")
 
     def score_to_raw_severity(self, score: float) -> Tuple[int, str]:
         if score >= self.thr_013:
@@ -79,32 +76,22 @@ class DevicePersistentEvaluator:
     def __init__(self, debounce_count: int = settings.persistent_anomaly_count):
         self.debounce_count = debounce_count
         self.consecutive_count: int = 0
-        self.consecutive_crit: int = 0
         self.last_severity: int = 0
 
     def evaluate(self, raw_severity: int) -> int:
         if raw_severity == 0:
             self.consecutive_count = 0
-            self.consecutive_crit = 0
             self.last_severity = 0
             return 0
 
         self.consecutive_count += 1
-        if raw_severity >= 2:
-            self.consecutive_crit += 1
-        else:
-            self.consecutive_crit = 0
-
         self.last_severity = raw_severity
 
-        if self.consecutive_crit >= self.debounce_count:
-            return 2
-        elif self.consecutive_count >= self.debounce_count:
-            return 1
+        if self.consecutive_count >= self.debounce_count:
+            return raw_severity
         else:
-            return 0
+            return 1 if raw_severity >= 1 else 0
 
     def reset(self):
         self.consecutive_count = 0
-        self.consecutive_crit = 0
         self.last_severity = 0

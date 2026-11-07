@@ -1,53 +1,59 @@
 {
-  "model_version": "ae_v1",
-  "variant": "v2",
+  "model_version": "dense_ae_kaggle_v1",
+  "architecture": "FlexibleDenseAutoencoder",
+  "input_dim": 13,
+  "bottleneck_dim": 4,
+  "hidden_dim": 32,
   "feature_order": [
     "Heart_Rate",
-    "SpO2"
+    "SpO2",
+    "Temperature",
+    "Heart_Rate_Delta",
+    "SpO2_Delta",
+    "Temperature_Delta",
+    "MA_Heart_Rate",
+    "MA_SpO2",
+    "MA_Temperature",
+    "Var_Heart_Rate",
+    "Var_SpO2",
+    "Var_Temperature",
+    "Rate_of_Change"
   ],
   "scaler": {
-    "mean": [
-      76.17215172123677,
-      97.45148557669606
-    ],
-    "scale": [
-      9.768103813500051,
-      1.4986419025808964
-    ]
+    "type": "bounded_minmax",
+    "min_bounds": [40.0, 70.0, 25.0, -40.0, -15.0, -15.0, 40.0, 70.0, 25.0, 0.0, 0.0, 0.0, 0.0],
+    "max_bounds": [160.0, 100.0, 43.0, 40.0, 15.0, 15.0, 160.0, 100.0, 43.0, 500.0, 50.0, 70.0, 1.0]
   },
   "thresholds": {
-    "warning_p95": 0.013570531643927092,
-    "critical_p99": 0.02480475604534149
+    "warning_p95": 0.000200,
+    "critical_p99": 0.001000,
+    "iot_stream_warn": 0.006000,
+    "iot_stream_crit": 0.010400,
+    "youden_j_global": 0.000139,
+    "best_f1_global": 0.000076,
+    "val_normal_p95": 0.004743,
+    "val_normal_p99": 0.010412
+  },
+  "recommended_runtime_thresholds": {
+    "iot_realtime_stream": {
+      "warn_threshold": 0.0060,
+      "crit_threshold": 0.0104,
+      "target_fpr": "<= 10%",
+      "description": "Ambang batas optimal operasional stream sensor IoT dinamis (FPR actual 9.69% - 11.22%, precision > 96%)"
+    },
+    "clinical_screening": {
+      "warn_threshold": 0.000200,
+      "crit_threshold": 0.001000,
+      "description": "Ambang batas Youden's J Index untuk skrining klinis sensitivitas tinggi (Recall 88.89%, F1 0.9285)"
+    }
   },
   "persistence_N": 3,
-  "split_sha256": "15a424ff1118cac8dfe3cbd20d80f028863b46edc235db24a2dd50adef6d1635",
-  "seeds": [
-    42,
-    43,
-    44,
-    45,
-    46
-  ],
+  "max_gap_seconds": 5.0,
   "training_sources": [
-    "nasirayub2",
     "engrarri21",
     "gourangomandal"
   ],
-  "date": "2026-10-31T07:04:20.470196+00:00",
-  "environment": {
-    "python": "3.14.8",
-    "torch": "2.15.0+cpu",
-    "onnx": "1.23.2",
-    "onnxruntime": "1.31.1",
-    "scikit_learn": "1.9.1",
-    "numpy": "2.5.4"
-  },
-  "parity_tolerances": {
-    "onnx_vs_numpy_max_abs_diff_scores_le_10": 4.77e-06,
-    "onnx_vs_numpy_max_rel_diff_all": 4.19e-04,
-    "onnx_vs_numpy_threshold_region_0_005_to_0_05": {
-      "max_abs_diff": 4.43e-07,
-      "max_rel_diff": 2.18e-05
-    }
-  }
+  "excluded_sources": [
+    "nasirayub2"
+  ]
 }

@@ -26,19 +26,10 @@ except ImportError:
     torch = None
     nn = None
 
-try:
-    from ml.eval.public_split import split_public_dataset
-except ImportError:
-    from ml_eval.public_split import split_public_dataset
-
+from ml.eval.public_split import split_public_dataset
 from dl.src.models import DenseAutoencoder, DenseVAE, NumPyAutoencoderForward
 from dl.src.train import fit_scaler, train_autoencoder
-
-try:
-    from dl.src.evaluate import compute_metrics, patient_group_bootstrap
-except ImportError:
-    from ml.dl.evaluate import compute_metrics, patient_group_bootstrap
-
+from dl.src.evaluate import compute_metrics, patient_group_bootstrap
 from dl.src.export import export_dl_model
 
 

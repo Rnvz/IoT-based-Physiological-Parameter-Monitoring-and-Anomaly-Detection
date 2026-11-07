@@ -71,6 +71,53 @@ class DenseAutoencoder(_Module):
             mse = torch.mean((x - x_rec) ** 2, dim=-1)
         return mse
 
+class FlexibleDenseAutoencoder(_Module):
+    """
+    Flexible Dense Autoencoder architecture for high-dimensional IoT physiological features (e.g. 13 features).
+    Encoder: input_dim -> hidden_dim (32) -> 16 -> bottleneck_dim (4)
+    Decoder: bottleneck_dim (4) -> 16 -> hidden_dim (32) -> input_dim
+    """
+    def __init__(self, input_dim: int = 13, bottleneck_dim: int = 4, hidden_dim: int = 32, dropout: float = 0.05):
+        super().__init__()
+        self.input_dim = input_dim
+        self.bottleneck_dim = bottleneck_dim
+        self.hidden_dim = hidden_dim
+
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, 16),
+            nn.LayerNorm(16),
+            nn.GELU(),
+            nn.Linear(16, bottleneck_dim)
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(bottleneck_dim, 16),
+            nn.LayerNorm(16),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(16, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, input_dim)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.decoder(self.encoder(x))
+
+    def get_latent(self, x: torch.Tensor) -> torch.Tensor:
+        return self.encoder(x)
+
+    def compute_anomaly_score(self, x: torch.Tensor) -> torch.Tensor:
+        self.eval()
+        with torch.no_grad():
+            x_rec = self.forward(x)
+            mse = torch.mean((x - x_rec) ** 2, dim=-1)
+        return mse
+
+
 class DenseVAE(_Module):
     """
     Compact Variational Autoencoder:

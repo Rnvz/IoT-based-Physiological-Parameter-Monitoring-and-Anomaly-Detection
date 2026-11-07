@@ -38,7 +38,9 @@ class MLService:
         candidate_model_paths = [
             settings.model_path,
             os.path.join(os.path.dirname(__file__), "../../../ml/models/isolation_forest_model.joblib"),
+            os.path.join(os.path.dirname(__file__), "../../../ml/models/isolation_forest.joblib"),
             "ml/models/isolation_forest_model.joblib",
+            "ml/models/isolation_forest.joblib",
             os.path.join(os.path.dirname(__file__), "../../../ml/models/physio_synthetic/isolation_forest_model.joblib"),
             "ml/models/physio_synthetic/isolation_forest_model.joblib",
             os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/isolation_forest_model.joblib"),
