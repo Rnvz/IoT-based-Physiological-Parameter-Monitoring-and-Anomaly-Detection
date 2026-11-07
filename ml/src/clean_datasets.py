@@ -64,7 +64,15 @@ def process_engrarri21(file_path: str) -> Optional[pd.DataFrame]:
         return None
 
 def process_nasirayub2(file_path: str) -> Optional[pd.DataFrame]:
-    """Memproses dataset nasirayub2 (human_vital_signs_dataset_2024.csv)."""
+    """
+    Memproses dataset nasirayub2 (human_vital_signs_dataset_2024.csv).
+    Menerapkan aturan klinis objektif untuk menentukan ground truth fisiologis:
+    - Anomali (label = 1) jika:
+        * Heart_Rate < 50 atau Heart_Rate > 100
+        * SpO2 < 95
+        * Temperature < 36.0 atau Temperature > 37.8
+    - Normal (label = 0) jika seluruh parameter berada dalam batas normal di atas.
+    """
     try:
         df = pd.read_csv(file_path, encoding='latin1')
         df.columns = df.columns.str.strip()
@@ -73,8 +81,12 @@ def process_nasirayub2(file_path: str) -> Optional[pd.DataFrame]:
         spo2 = pd.to_numeric(df['Oxygen Saturation'], errors='coerce')
         temp = pd.to_numeric(df['Body Temperature'], errors='coerce')
 
-        risk = df['Risk Category'].astype(str).str.strip().str.lower()
-        output_binary = np.where(risk == 'low risk', 0, 1)
+        is_anomaly = (
+            (hr < 50) | (hr > 100) |
+            (spo2 < 95) |
+            (temp < 36.0) | (temp > 37.8)
+        )
+        output_binary = np.where(is_anomaly, 1, 0)
 
         patient_id = df['Patient ID'].astype(str) if 'Patient ID' in df.columns else df.index.astype(str)
         result = pd.DataFrame({
@@ -86,7 +98,8 @@ def process_nasirayub2(file_path: str) -> Optional[pd.DataFrame]:
             'Source': 'nasirayub2',
             'Metadata': df['Risk Category'].astype(str)
         })
-        logging.info(f"nasirayub2 selesai diproses: {len(result):,} baris")
+        n_anom = int(output_binary.sum())
+        logging.info(f"nasirayub2 selesai diproses: {len(result):,} baris. Anomali klinis valid: {n_anom:,}")
         return result
     except Exception as e:
         logging.error(f"Gagal memproses nasirayub2 ({file_path}): {e}")
@@ -183,6 +196,14 @@ def main(input_dir: str, output_path: str):
         elif 'human_vital_signs_dataset_2024' in fname_lower or 'nasirayub' in fname_lower:
             logging.info(f"Mendeteksi nasirayub2: {file}")
             df = process_nasirayub2(file)
+            if df is not None:
+                anom_count = int((df['OUTPUT'] == 1).sum())
+                if anom_count == 0:
+                    logging.warning(
+                        f"Dataset nasirayub2 dikecualikan (dropped): 0 sampel anomali fisiologis valid "
+                        f"dan data murni statis tanpa variasi dinamis, agar tidak membiaskan manifold normal IoT."
+                    )
+                    df = None
         elif 'qt_dataset' in fname_lower or 'rishan' in fname_lower:
             logging.warning(f"Melewati {file}: dataset tidak digunakan untuk pemodelan tanda vital normal.")
             continue

@@ -20,14 +20,16 @@ class ThresholdEvaluator:
 
     def __init__(self, thresholds_path: str = settings.thresholds_path):
         self.thresholds_path = thresholds_path
-        self.thr_013: float = 0.048891
-        self.thr_005: float = -0.016385
+        self.thr_013: float = 0.080050
+        self.thr_005: float = -0.084044
         self.thresholds: Dict = {}
         self.load_thresholds()
 
     def load_thresholds(self):
         paths_to_try = [
             self.thresholds_path,
+            os.path.join(os.path.dirname(__file__), "../../../ml/models/thresholds.joblib"),
+            "ml/models/thresholds.joblib",
             os.path.join(os.path.dirname(__file__), "../../../ml_pipeline/models/physio_synthetic/thresholds.joblib"),
             os.path.join(os.path.dirname(__file__), "../../../models/physio_synthetic/thresholds.joblib"),
             "ml_pipeline/models/physio_synthetic/thresholds.joblib",
@@ -43,15 +45,18 @@ class ThresholdEvaluator:
             try:
                 self.thresholds = joblib.load(resolved)
                 self.thr_013 = float(
-                    self.thresholds.get("fpr_10pct")
+                    self.thresholds.get("optimal_decision_threshold")
+                    or self.thresholds.get("youden_j")
+                    or self.thresholds.get("fpr_10pct")
                     or self.thresholds.get("fpr_13pct")
                     or self.thresholds.get(0.13)
-                    or 0.048891
+                    or 0.080050
                 )
                 self.thr_005 = float(
-                    self.thresholds.get("fpr_05pct")
+                    self.thresholds.get("critical_threshold")
+                    or self.thresholds.get("fpr_05pct")
                     or self.thresholds.get(0.05)
-                    or -0.016385
+                    or -0.084044
                 )
                 logger.info(f"[ThresholdEvaluator] Loaded thresholds from {resolved}: thr_warn={self.thr_013}, thr_crit={self.thr_005}")
             except Exception as e:

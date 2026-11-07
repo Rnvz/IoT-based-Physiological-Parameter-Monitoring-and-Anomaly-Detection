@@ -427,7 +427,7 @@
       const dlVal = p.dl_severity != null ? p.dl_severity : p.ml_severity;
       const dlSevBadge = dlVal != null
         ? `<span class="sev-badge sev-${dlVal}">Sev ${dlVal}</span>`
-        : `<span class="muted">- (DL off)</span>`;
+        : `<span class="muted">- (off)</span>`;
 
       const pubSevBadge = `<span class="sev-badge sev-${p.severity}">Sev ${p.severity}</span>`;
       const sourceStr = p.decision_source || p.decision_mode || "--";

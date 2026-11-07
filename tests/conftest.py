@@ -30,9 +30,16 @@ def sample_anomaly_telemetry():
 def mock_model(mocker):
     return mocker.patch('joblib.load')
 
+@pytest.fixture
+def anyio_backend():
+    return 'asyncio'
+
 @pytest.fixture(autouse=True)
 def configure_test_settings(monkeypatch):
     from app.config import settings
     monkeypatch.setattr(settings, "api_key", "test_secret_key")
     monkeypatch.setattr(settings, "topic_prefix", "physiomonitor/test")
+    from app.mqtt.consumer import MQTTService
+    monkeypatch.setattr(MQTTService, "start", lambda self: None)
+    monkeypatch.setattr(MQTTService, "stop", lambda self: None)
 

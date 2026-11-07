@@ -1,0 +1,13 @@
+{
+  "model_version": "dense_ae_kaggle_v1",
+  "input_dim": 13,
+  "weights_file": "dense_autoencoder_kaggle.pt",
+  "weights_npz": "model_weights.npz",
+  "operational_thresholds": {
+    "warn_threshold": 0.0060,
+    "crit_threshold": 0.0104,
+    "target_dynamic_fpr": "<= 10%"
+  },
+  "persistence_N": 3,
+  "window_size": 15
+}

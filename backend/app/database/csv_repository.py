@@ -37,7 +37,7 @@ class CSVRepository(BaseRepository):
         self.actuator_file = os.path.join(self.csv_dir, "actuator_events.csv")
         self.scenario_file = os.path.join(self.csv_dir, "scenario_events.csv")
 
-        self._lock = asyncio.Lock()
+        self._lock_obj = None
         self._seen_readings: Set[Tuple[str, str]] = set()
         self._seen_predictions: Set[Tuple[str, str]] = set()
 
@@ -47,6 +47,12 @@ class CSVRepository(BaseRepository):
         self._current_scenario: Optional[ScenarioEventRecord] = None
 
         self._init_files()
+
+    @property
+    def _lock(self):
+        if self._lock_obj is None:
+            self._lock_obj = asyncio.Lock()
+        return self._lock_obj
 
     def _init_files(self):
         if not os.path.exists(self.readings_file):

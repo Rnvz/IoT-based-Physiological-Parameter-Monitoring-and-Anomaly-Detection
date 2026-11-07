@@ -7,8 +7,20 @@ import numpy as np
 
 from app.config import settings
 from app.ml.inference import MLInferenceResult
+from app.ml.device_window import DeviceWindowManager
 
 logger = logging.getLogger(__name__)
+
+FEATURE_ORDER_13 = [
+    "Heart_Rate", "SpO2", "Temperature",
+    "Heart_Rate_Delta", "SpO2_Delta", "Temperature_Delta",
+    "MA_Heart_Rate", "MA_SpO2", "MA_Temperature",
+    "Var_Heart_Rate", "Var_SpO2", "Var_Temperature",
+    "Rate_of_Change"
+]
+
+DEFAULT_MIN_BOUNDS = np.array([40.0, 70.0, 25.0, -40.0, -15.0, -15.0, 40.0, 70.0, 25.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+DEFAULT_MAX_BOUNDS = np.array([160.0, 100.0, 43.0, 40.0, 15.0, 15.0, 160.0, 100.0, 43.0, 500.0, 50.0, 70.0, 1.0], dtype=np.float32)
 
 def gelu_np(x: np.ndarray) -> np.ndarray:
     """Exact GELU using erf."""
@@ -22,7 +34,7 @@ def layer_norm_np(x: np.ndarray, weight: np.ndarray, bias: np.ndarray, eps: floa
     return ((x - mean) / np.sqrt(var + eps)) * weight + bias
 
 class NumPyAutoencoderForward:
-    """Self-contained NumPy forward pass from model_weights.npz."""
+    """Self-contained NumPy forward pass for FlexibleDenseAutoencoder from model_weights.npz."""
     def __init__(self, weights_path: str):
         data = np.load(weights_path)
         self.w = {k: data[k] for k in data.files}
@@ -111,10 +123,9 @@ class DLInferenceResult(MLInferenceResult):
 
 class DLService:
     """
-    Deep Learning Anomaly Detection Service wrapping DenseAE v2.
-    Loads ONNX model with automatic fallback to NumPy forward pass.
-    Features: Heart_Rate and SpO2 only (Temperature is excluded per pre-registration).
-    All thresholds, scaler parameters, and persistence counts are read dynamically from metadata.json.
+    Deep Learning Anomaly Detection Service wrapping FlexibleDenseAutoencoder.
+    Supports 13-feature physiological anomaly scoring with Bounded Physiological Scaling.
+    Loads ONNX model with automatic fallback to high-precision NumPy forward pass.
     """
 
     def __init__(self, model_dir: Optional[str] = None):
@@ -122,16 +133,25 @@ class DLService:
         self.ort_session = None
         self.numpy_model = None
 
-        self.model_version: str = "ae_v1"
-        self.feature_order = ["Heart_Rate", "SpO2"]
-        self.scaler_mean = np.array([76.17215, 97.45148], dtype=np.float32)
-        self.scaler_scale = np.array([9.76810, 1.49864], dtype=np.float32)
-        self.thr_warn: float = 0.013571
-        self.thr_crit: float = 0.024805
+        self.model_version: str = "dense_ae_kaggle_v1"
+        self.feature_order = FEATURE_ORDER_13
+        self.min_bounds = DEFAULT_MIN_BOUNDS
+        self.max_bounds = DEFAULT_MAX_BOUNDS
+        self.scaler_range = self.max_bounds - self.min_bounds
+
+        # Default thresholds
+        self.thr_warn: float = 0.000200
+        self.thr_crit: float = 0.001000
+        self.iot_stream_warn: float = 0.006000
+        self.iot_stream_crit: float = 0.010400
         self.persistence_n: int = 3
         self.max_gap_seconds: float = getattr(settings, "dl_max_gap_seconds", 5.0)
 
         self.device_states: Dict[str, DeviceDLState] = {}
+        self.window_manager = DeviceWindowManager(
+            window_size=getattr(settings, "window_size", 15),
+            max_gap_seconds=self.max_gap_seconds
+        )
         self._last_error_log_time: float = 0.0
 
         self.load_artifacts()
@@ -151,14 +171,22 @@ class DLService:
             try:
                 with open(metadata_path, "r", encoding="utf-8") as f:
                     meta = json.load(f)
-                self.model_version = str(meta.get("model_version", "ae_v1"))
-                self.feature_order = meta.get("feature_order", ["Heart_Rate", "SpO2"])
-                self.scaler_mean = np.array(meta["scaler"]["mean"], dtype=np.float32)
-                self.scaler_scale = np.array(meta["scaler"]["scale"], dtype=np.float32)
-                self.thr_warn = float(meta["thresholds"]["warning_p95"])
-                self.thr_crit = float(meta["thresholds"]["critical_p99"])
+                self.model_version = str(meta.get("model_version", "dense_ae_kaggle_v1"))
+                self.feature_order = meta.get("feature_order", FEATURE_ORDER_13)
+
+                if "scaler" in meta and "min_bounds" in meta["scaler"]:
+                    self.min_bounds = np.array(meta["scaler"]["min_bounds"], dtype=np.float32)
+                    self.max_bounds = np.array(meta["scaler"]["max_bounds"], dtype=np.float32)
+                    self.scaler_range = np.maximum(1e-6, self.max_bounds - self.min_bounds)
+
+                thresholds = meta.get("thresholds", {})
+                self.thr_warn = float(thresholds.get("warning_p95", 0.000200))
+                self.thr_crit = float(thresholds.get("critical_p99", 0.001000))
+                self.iot_stream_warn = float(thresholds.get("iot_stream_warn", 0.006000))
+                self.iot_stream_crit = float(thresholds.get("iot_stream_crit", 0.010400))
                 self.persistence_n = int(meta.get("persistence_N", 3))
-                logger.info(f"[DLService] Loaded metadata from {metadata_path} (version: {self.model_version}, N={self.persistence_n})")
+
+                logger.info(f"[DLService] Loaded metadata from {metadata_path} (version: {self.model_version}, thr_warn: {self.thr_warn})")
             except Exception as e:
                 logger.error(f"[DLService] Error parsing metadata.json: {e}")
 
@@ -169,14 +197,14 @@ class DLService:
                 self.ort_session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
                 logger.info(f"[DLService] Loaded ONNX model from {onnx_path}")
             except Exception as e:
-                logger.warning(f"[DLService] Failed loading ONNX runtime ({e}). Will attempt NumPy fallback.")
+                logger.info(f"[DLService] ONNX runtime skipped ({e}). Using NumPy forward pass.")
                 self.ort_session = None
 
         weights_path = self._resolve_path("model_weights.npz")
         if weights_path:
             try:
                 self.numpy_model = NumPyAutoencoderForward(weights_path)
-                logger.info(f"[DLService] Loaded NumPy weights fallback from {weights_path}")
+                logger.info(f"[DLService] Loaded NumPy weights from {weights_path}")
             except Exception as e:
                 logger.warning(f"[DLService] Failed loading NumPy weights from {weights_path}: {e}")
 
@@ -191,6 +219,7 @@ class DLService:
     def reset_device(self, device_id: str):
         if device_id in self.device_states:
             self.device_states[device_id].reset()
+        self.window_manager.reset_device(device_id)
 
     def _log_error_rate_limited(self, msg: str):
         now = time.time()
@@ -205,12 +234,12 @@ class DLService:
         spo2: Optional[float],
         temp: Optional[float] = None,
         finger: bool = False,
-        timestamp: Optional[float] = None
+        timestamp: Optional[float] = None,
+        features_13: Optional[np.ndarray] = None
     ) -> DLInferenceResult:
         """
-        Processes a reading for Deep Learning anomaly detection.
-        Per-row scoring without rolling window warm-up.
-        Resets persistence if finger=False, vitals missing, or gap > max_gap_seconds.
+        Processes vital signs for Deep Learning anomaly detection.
+        Supports both direct 13-feature inference and real-time streaming (HR, SpO2, Temp).
         """
         if not finger or hr is None or spo2 is None:
             self.reset_device(device_id)
@@ -232,8 +261,29 @@ class DLService:
 
         t_start = time.perf_counter()
         try:
-            raw_features = np.array([[float(hr), float(spo2)]], dtype=np.float32)
-            norm = (raw_features - self.scaler_mean) / self.scaler_scale
+            temp_val = float(temp) if temp is not None else 36.5
+
+            if features_13 is not None:
+                raw_vec = np.atleast_2d(features_13).astype(np.float32)
+            else:
+                # Update device rolling window buffer
+                stream_feats = self.window_manager.get_window(device_id).push(
+                    float(hr), float(spo2), temp_val, timestamp=timestamp
+                )
+                if stream_feats is not None:
+                    raw_vec = stream_feats.reshape(1, -1).astype(np.float32)
+                else:
+                    # Initial / single-row baseline representation
+                    raw_vec = np.array([[
+                        float(hr), float(spo2), temp_val,
+                        0.0, 0.0, 0.0,
+                        float(hr), float(spo2), temp_val,
+                        0.0, 0.0, 0.0,
+                        0.0
+                    ]], dtype=np.float32)
+
+            # Bounded Physiological Scaling: scale to [0, 1]
+            norm = (raw_vec - self.min_bounds) / self.scaler_range
 
             if self.ort_session is not None:
                 rec = self.ort_session.run(None, {"input": norm})[0]

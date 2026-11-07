@@ -1,0 +1,139 @@
+{
+  "model_name": "IsolationForest",
+  "n_estimators": 150,
+  "max_samples": "auto",
+  "random_state": 42,
+  "contamination": "auto",
+  "training_scope": "Normal data only (OUTPUT == 0)",
+  "num_train_samples": 14313,
+  "num_features": 13,
+  "features": [
+    "Heart_Rate",
+    "SpO2",
+    "Temperature",
+    "Heart_Rate_Delta",
+    "SpO2_Delta",
+    "Temperature_Delta",
+    "MA_Heart_Rate",
+    "MA_SpO2",
+    "MA_Temperature",
+    "Var_Heart_Rate",
+    "Var_SpO2",
+    "Var_Temperature",
+    "Rate_of_Change"
+  ],
+  "scaling": {
+    "type": "BoundedPhysiologicalMinMaxScaler",
+    "scaler_file": "ml/models/scaler.joblib",
+    "fixed_bounds": {
+      "Heart_Rate": [
+        40.0,
+        160.0
+      ],
+      "SpO2": [
+        70.0,
+        100.0
+      ],
+      "Temperature": [
+        30.0,
+        43.0
+      ],
+      "Heart_Rate_Delta": [
+        -40.0,
+        40.0
+      ],
+      "SpO2_Delta": [
+        -15.0,
+        15.0
+      ],
+      "Temperature_Delta": [
+        -4.0,
+        4.0
+      ],
+      "Rate_of_Change": [
+        0.0,
+        50.0
+      ]
+    }
+  },
+  "calibrated_thresholds": {
+    "youden_j": 0.08005018346862497,
+    "best_f1": 0.10008374926724128,
+    "target_fpr_05pct": -0.08404351724739302,
+    "target_fpr_10pct": -0.05648084959900035,
+    "default_0_0": 0.0
+  },
+  "test_metrics_summary": {
+    "roc_auc": 0.9451132660896697,
+    "pr_auc": 0.9624646062011997,
+    "youden_j_test": {
+      "FPR": 0.08690079466803384,
+      "Specificity": 0.9130992053319662,
+      "Precision": 0.9698049345328227,
+      "Recall": 0.8777813608513383,
+      "F1": 0.9215014176293851,
+      "Accuracy": 0.88623121741797,
+      "Balanced_Accuracy": 0.8954402830916522,
+      "TN": 3562,
+      "FP": 339,
+      "FN": 1516,
+      "TP": 10888,
+      "CM": [
+        [
+          3562,
+          339
+        ],
+        [
+          1516,
+          10888
+        ]
+      ]
+    },
+    "best_f1_test": {
+      "FPR": 0.17431427839015637,
+      "Specificity": 0.8256857216098437,
+      "Precision": 0.9450016175994823,
+      "Recall": 0.9419542083198968,
+      "F1": 0.9434754521963824,
+      "Accuracy": 0.9141367678626189,
+      "Balanced_Accuracy": 0.8838199649648703,
+      "TN": 3221,
+      "FP": 680,
+      "FN": 720,
+      "TP": 11684,
+      "CM": [
+        [
+          3221,
+          680
+        ],
+        [
+          720,
+          11684
+        ]
+      ]
+    },
+    "default_test": {
+      "FPR": 0.03024865419123302,
+      "Specificity": 0.969751345808767,
+      "Precision": 0.975026455026455,
+      "Recall": 0.37141244759754916,
+      "F1": 0.5379181505049916,
+      "Accuracy": 0.5145660840233057,
+      "Balanced_Accuracy": 0.670581896703158,
+      "TN": 3783,
+      "FP": 118,
+      "FN": 7797,
+      "TP": 4607,
+      "CM": [
+        [
+          3783,
+          118
+        ],
+        [
+          7797,
+          4607
+        ]
+      ]
+    }
+  }
+}

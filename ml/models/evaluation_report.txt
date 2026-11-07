@@ -1,26 +1,91 @@
-======================================================================
-LAPORAN PELATIHAN & EVALUASI ISOLATION FOREST
-Dataset: physio_monitor_synthetic_dataset (1)
-======================================================================
-Jumlah Fitur: 13 (Heart_Rate, SpO2, Temperature, ...)
-ROC-AUC (Val / Test):  0.9918 / 0.9852
-PR-AUC  (Val / Test):  0.8151 / 0.7444
-----------------------------------------------------------------------
-KALIBRASI AMBANG BATAS & PERFORMA TEST SET:
-Target FPR   | Threshold  | Test FPR  | Test Prec  | Test Rec   | Test F1 
-----------------------------------------------------------------------
- 1.0%        |  -0.07685 |  1.20%    |    0.7519  |    0.7117  | 0.7313
- 2.0%        |  -0.05935 |  2.24%    |    0.6583  |    0.8434  | 0.7395
- 3.0%        |  -0.04573 |  3.31%    |    0.5797  |    0.8932  | 0.7031
- 5.0%        |  -0.01638 |  6.49%    |    0.4233  |    0.9324  | 0.5822
-10.0%        |  +0.04889 | 12.28%    |    0.2910  |    0.9858  | 0.4493
-----------------------------------------------------------------------
-PERFORMA PER SKENARIO PADA TEST SET (Threshold 3% FPR):
-Skenario         | Normal (FP / FPR)      | Anomali (Recall)    
-----------------------------------------------------------------------
-DHT_UNPLUGGED    | 881 (FP: 2, 0.2%)      | N/A                 
-FINGER_SHIFT     | 697 (FP: 44, 6.3%)     | 83 (98.8%)          
-MOTION           | 681 (FP: 131, 19.2%)   | 198 (85.4%)         
-REST             | 2361 (FP: 3, 0.1%)     | N/A                 
-TYPING           | 878 (FP: 2, 0.2%)      | N/A                 
-======================================================================
+================================================================================
+LAPORAN EVALUASI MODEL ISOLATION FOREST — THRESHOLD CALIBRATION
+================================================================================
+
+1. METODOLOGI & ARSITEKTUR PELATIHAN:
+  - Dataset Bersih: features_train.csv (tanpa nasirayub2, bounded physiological scaling)
+  - Scope Pelatihan: HANYA Data Normal (OUTPUT == 0) -> One-Class Baseline
+  - Jumlah Sampel Training: 14,313 normal
+  - Parameter Model: n_estimators=150, max_samples='auto', random_state=42
+  - Validation Set: 16,305 sampel (Normal: 6,023, Anomaly: 10,282)
+  - Test Set (Unseen): 16,305 sampel (Normal: 3,901, Anomaly: 12,404)
+  - Test Discriminative Power: ROC-AUC = 0.9451 | PR-AUC = 0.9625
+
+--------------------------------------------------------------------------------
+2. KALIBRASI THRESHOLD PADA VALIDATION SET
+--------------------------------------------------------------------------------
+Strategy            Threshold  FPR      Recall   Precision  F1       Accuracy  Balanced_Acc
+Youden_J (Optimal)  0.080050  0.399801 0.891753 0.792001   0.838922 0.784054  0.745976     
+ Best_F1 (Optimal)  0.100084  0.475843 0.950399 0.773224   0.852705 0.792947  0.737278     
+     Target_FPR_5% -0.084044  0.050141 0.015172 0.340611   0.029050 0.360442  0.482516     
+    Target_FPR_10% -0.056481  0.100116 0.037250 0.388438   0.067980 0.355903  0.468567     
+       Default_0.0  0.000000  0.220322 0.315600 0.709755   0.436919 0.487029  0.547639     
+     Target_FPR_1% -0.126148  0.010128 0.003209 0.351064   0.006361 0.367679  0.496541     
+     Target_FPR_3% -0.099204  0.030051 0.008850 0.334559   0.017245 0.363876  0.489399     
+    Target_FPR_13% -0.044011  0.130002 0.060300 0.441910   0.106119 0.359399  0.465149     
+    Target_FPR_15% -0.034058  0.150091 0.086559 0.496098   0.147400 0.368537  0.468234     
+    Target_FPR_20% -0.010119  0.200066 0.223400 0.655911   0.333285 0.436369  0.511667     
+
+--------------------------------------------------------------------------------
+3. EVALUASI FINAL PADA TEST SET (16,305 SAMPEL UNSEEN)
+--------------------------------------------------------------------------------
+Strategy            Threshold  Actual_FPR  Recall   Precision  F1       Accuracy  Balanced_Acc  TN   FP  FN    TP  
+Youden_J (Optimal)  0.080050  0.086901    0.877781 0.969805   0.921501 0.886231  0.895440      3562 339  1516 10888
+ Best_F1 (Optimal)  0.100084  0.174314    0.941954 0.945002   0.943475 0.914137  0.883820      3221 680   720 11684
+     Target_FPR_5% -0.084044  0.009997    0.026685 0.894595   0.051824 0.257160  0.508344      3862  39 12073   331
+    Target_FPR_10% -0.056481  0.017175    0.064495 0.922722   0.120564 0.284207  0.523660      3834  67 11604   800
+       Default_0.0  0.000000  0.030249    0.371412 0.975026   0.537918 0.514566  0.670582      3783 118  7797  4607
+     Target_FPR_1% -0.126148  0.005896    0.012496 0.870787   0.024638 0.247347  0.503300      3878  23 12249   155
+     Target_FPR_3% -0.099204  0.008716    0.018623 0.871698   0.036467 0.251334  0.504954      3867  34 12173   231
+    Target_FPR_13% -0.044011  0.019226    0.103354 0.944731   0.186324 0.313278  0.542064      3826  75 11122  1282
+    Target_FPR_15% -0.034058  0.020251    0.140761 0.956712   0.245414 0.341490  0.560255      3822  79 10658  1746
+    Target_FPR_20% -0.010119  0.025891    0.285231 0.972245   0.441065 0.450046  0.629670      3800 101  8866  3538
+
+--------------------------------------------------------------------------------
+4. CONFUSION MATRIX & DETAIL PADA STRATEGI THRESHOLD UTAMA (TEST SET)
+--------------------------------------------------------------------------------
+
+[Strategi: Youden_J (Optimal) | Threshold tau = +0.080050]
+  Confusion Matrix : [TN=3,562, FP=339, FN=1,516, TP=10,888]
+  Actual FPR       : 8.69% (FP=339 dari 3,901 normal)
+  Recall (Sens)    : 87.78% (TP=10,888 dari 12,404 anomali)
+  Precision        : 96.98%
+  F1-Score         : 92.15%
+  Accuracy         : 88.62%
+  Balanced Acc     : 89.54%
+
+[Strategi: Best_F1 (Optimal) | Threshold tau = +0.100084]
+  Confusion Matrix : [TN=3,221, FP=680, FN=720, TP=11,684]
+  Actual FPR       : 17.43% (FP=680 dari 3,901 normal)
+  Recall (Sens)    : 94.20% (TP=11,684 dari 12,404 anomali)
+  Precision        : 94.50%
+  F1-Score         : 94.35%
+  Accuracy         : 91.41%
+  Balanced Acc     : 88.38%
+
+[Strategi: Default_0.0 | Threshold tau = +0.000000]
+  Confusion Matrix : [TN=3,783, FP=118, FN=7,797, TP=4,607]
+  Actual FPR       : 3.02% (FP=118 dari 3,901 normal)
+  Recall (Sens)    : 37.14% (TP=4,607 dari 12,404 anomali)
+  Precision        : 97.50%
+  F1-Score         : 53.79%
+  Accuracy         : 51.46%
+  Balanced Acc     : 67.06%
+
+--------------------------------------------------------------------------------
+5. BREAKDOWN PER SUMBER DATA (engrarri21 vs gourangomandal) PADA TEST SET
+--------------------------------------------------------------------------------
+
+Strategi: Youden_J (Optimal) (tau = +0.080050)
+  engrarri21      : N=4,305 (Norm=196, Abn=4,109) | FPR=99.49% | Recall=89.02% | Precision=94.94% | F1=91.89% | CM=[TN=1, FP=195, FN=451, TP=3658]
+  gourangomandal  : N=12,000 (Norm=3,705, Abn=8,295) | FPR= 3.89% | Recall=87.16% | Precision=98.05% | F1=92.28% | CM=[TN=3561, FP=144, FN=1065, TP=7230]
+
+Strategi: Best_F1 (Optimal) (tau = +0.100084)
+  engrarri21      : N=4,305 (Norm=196, Abn=4,109) | FPR=100.00% | Recall=94.84% | Precision=95.21% | F1=95.03% | CM=[TN=0, FP=196, FN=212, TP=3897]
+  gourangomandal  : N=12,000 (Norm=3,705, Abn=8,295) | FPR=13.06% | Recall=93.88% | Precision=94.15% | F1=94.01% | CM=[TN=3221, FP=484, FN=508, TP=7787]
+
+Strategi: Default_0.0 (tau = +0.000000)
+  engrarri21      : N=4,305 (Norm=196, Abn=4,109) | FPR=60.20% | Recall=58.77% | Precision=95.34% | F1=72.72% | CM=[TN=78, FP=118, FN=1694, TP=2415]
+  gourangomandal  : N=12,000 (Norm=3,705, Abn=8,295) | FPR= 0.00% | Recall=26.43% | Precision=100.00% | F1=41.80% | CM=[TN=3705, FP=0, FN=6103, TP=2192]
+
+================================================================================
